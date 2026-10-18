@@ -67,15 +67,27 @@ def test_console_draft_has_four_languages_and_keeps_names():
         ),
     }
     texts = {}
+    upgrade_only = {}
+    nothing_action = {"choice": "do_nothing", "sku": "", "why": "quiet"}
+    calm = {**account, "bill_increase_pct": 0.0}
     for code, _label in LANGUAGES:
         texts[code] = draft({**account, "language": code}, action, moment)["text"]
         assert texts[code]
         assert _CENTS.search(texts[code]) is None
         assert "$25.00" in texts[code]
-        assert "Galaxy S23" in texts[code]
-        assert "Trade in any phone, any condition." in texts[code]
-        assert "$120.00" in texts[code]
-        assert "$40.00" in texts[code]
+        # One message, one action: no upgrade pitch next to a retention offer.
+        assert "Galaxy S23" not in texts[code]
+        assert len(texts[code]) <= 300
+        upgrade_only[code] = draft({**calm, "language": code}, nothing_action, moment)["text"]
+        assert "Galaxy S23" in upgrade_only[code]
+        assert "Trade in any phone, any condition." in upgrade_only[code]
+        assert "$120.00" in upgrade_only[code]
+        assert "$80.00" in upgrade_only[code]
+        assert "sandbox" not in upgrade_only[code].lower()
+        assert "battery" not in upgrade_only[code].lower()
+        assert len(upgrade_only[code]) <= 300
+    # A bill jump blocks the upgrade pitch too.
+    assert draft({**account, "language": "en"}, nothing_action, moment)["text"] is None
     assert _devanagari(texts["hi"])
     assert _cjk(texts["zh"])
     assert "केयर क्रेडिट" in texts["hi"]

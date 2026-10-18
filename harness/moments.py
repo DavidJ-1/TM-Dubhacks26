@@ -77,9 +77,8 @@ def _timing(line: dict, curves: dict) -> dict:
         "tradein_value_in_6_cents": value_in_6,
         "battery_pct": battery,
         "battery_note": (
-            f"Estimated battery health is {battery}%. The sandbox has no battery reading; "
-            f"this assumes about {BATTERY_DROP_PER_MONTH} points lost per month of phone age, "
-            f"with a floor of {BATTERY_FLOOR}%."
+            f"Estimated battery health about {battery}% (modeled from phone age: "
+            f"{BATTERY_DROP_PER_MONTH} points a month, floor {BATTERY_FLOOR}%)."
         ),
         "condition_note": "The trade-in curve is good condition. Fair and poor are not assumed.",
     }

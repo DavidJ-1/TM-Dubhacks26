@@ -52,6 +52,11 @@ def dollars(cents: int | None) -> str:
     return f"${cents / 100:,.2f}"
 
 
+def bubble_html(text) -> str:
+    """Escape a draft for the phone bubble. `$` becomes an entity so markdown never renders math."""
+    return html.escape(str(text)).replace("$", "&#36;")
+
+
 def show(text) -> str:
     """Streamlit markdown treats a pair of $ signs as code. Keep amounts as text."""
     if text is None:
@@ -410,7 +415,7 @@ def text_we_would_send(
     st.markdown(
         "<div class='phone'><div class='phone-bar'></div>"
         f"<div class='quiet'>{html.escape(choice)}</div>"
-        f"<div class='bubble'>{html.escape(body) if body else '—'}</div>"
+        f"<div class='bubble'>{bubble_html(body) if body else '—'}</div>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -477,7 +482,7 @@ def action_page(console) -> None:
 
     left, right = st.columns([1.15, 0.85])
     with left:
-        st.subheader(outbound_title(action, moment))
+        st.subheader(outbound_title(action, moment, detail))
         st.write(show(action["why"]))
         st.caption(show(action["formula"]))
         considered = pd.DataFrame(action["considered"])
@@ -518,7 +523,7 @@ def action_page(console) -> None:
                         f"Good-condition trade-in {dollars(moment.get('tradein_value_cents'))}. "
                         f"Balance charged today {dollars(moment.get('balance_cents'))}. "
                         f"Net after we subtract the promo {dollars(moment.get('net_cents'))}. "
-                        "The sandbox cart total does not subtract promo savings."
+                        "Net subtracts the promo."
                     )
                 )
             elif moment.get("when") == "now":
@@ -752,8 +757,8 @@ def targeting_page(console) -> None:
     st.markdown("**Draft**")
     st.markdown(
         "<div class='phone'><div class='phone-bar'></div>"
-        f"<div class='quiet'>English</div><div class='bubble'>{html.escape(english)}</div>"
-        f"<div class='quiet'>Español</div><div class='bubble'>{html.escape(spanish)}</div>"
+        f"<div class='quiet'>English</div><div class='bubble'>{bubble_html(english)}</div>"
+        f"<div class='quiet'>Español</div><div class='bubble'>{bubble_html(spanish)}</div>"
         "<div class='quiet'>On-screen mockup. Nothing is sent from this phone.</div></div>",
         unsafe_allow_html=True,
     )

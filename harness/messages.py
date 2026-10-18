@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import html
-import re
 
 
 def _dollars(cents: int | None) -> str:
@@ -12,11 +11,14 @@ def _dollars(cents: int | None) -> str:
     return f"${cents / 100:,.2f}"
 
 
-def outbound_title(action: dict, moment: dict | None) -> str:
-    """Heading for the message we would actually send. A paid-off upgrade is not 'do nothing'."""
+def outbound_title(action: dict, moment: dict | None, account: dict | None = None) -> str:
+    """Heading for the message we would actually send. A paid-off upgrade is not 'do nothing'.
+
+    One message, one action: a retention offer is never paired with an upgrade pitch.
+    """
     upgrading = bool(moment and moment.get("when") == "now" and moment.get("device_name"))
-    if action.get("choice") == "offer" and upgrading:
-        return f"{action['name']} · upgrade {moment['device_name']}"
+    if account is not None and upgrading:
+        upgrading = upgrade_allowed(action, account, moment)
     if action.get("choice") == "offer":
         return action["name"]
     if upgrading:
@@ -27,17 +29,29 @@ def outbound_title(action: dict, moment: dict | None) -> str:
     return "Do nothing"
 
 
+BILL_SHOCK_PCT = 0.05  # same 5% line the console uses for "bill up"
+
+
+def upgrade_allowed(action: dict, account: dict, moment: dict | None) -> bool:
+    """One message, one action: no upgrade pitch next to a retention offer or after a bill jump."""
+    if not (moment and moment.get("when") == "now" and moment.get("device_name")):
+        return False
+    if action.get("choice") == "offer":
+        return False
+    return float(account.get("bill_increase_pct") or 0) <= BILL_SHOCK_PCT
+
+
 def draft(account: dict, action: dict, moment: dict | None) -> dict:
     language = account["language"] if account["language"] in {"en", "es", "hi", "zh"} else "en"
     channel = account["contact_preference"]
     parts: list[str] = []
     purpose = "none"
     if action["choice"] == "offer":
-        parts.append(_retention(language, account, action))
+        parts.append(_fit([_retention(language, account, action)], language))
         purpose = "retention"
-    if moment and moment.get("when") == "now" and moment.get("device_name"):
+    if upgrade_allowed(action, account, moment):
         parts.append(_upgrade(language, moment))
-        purpose = "both" if purpose == "retention" else "upgrade"
+        purpose = "upgrade"
     text = "\n\n".join(parts) if parts else None
     return {
         "language": language,
@@ -107,129 +121,70 @@ def _retention(language: str, account: dict, action: dict) -> str:
     return "A student credit of $20.00 per line per month is available on this account, up to 2 lines."
 
 
-def _promo_sentence(language: str, promo: dict | None) -> str:
-    if not promo:
-        return {
-            "en": "No device promotion is eligible on a one-phone trade-in cart.",
-            "es": "No device promotion is eligible on a one-phone trade-in cart.",
-            "hi": "एक फ़ोन के ट्रेड-इन पर कोई डिवाइस प्रोमो लागू नहीं है।",
-            "zh": "一部手机的以旧换新没有可用的设备优惠。",
-        }[language]
-    amount = _dollars(promo["savings_cents"])
-    name = promo["name"]
-    return {
-        "en": (
-            f"One device promo applies: {name} ({amount}). "
-            "A second device promo cannot be stacked. "
-            "The sandbox cart total does not subtract this; the net below does."
-        ),
-        "es": (
-            f"One device promo applies: {name} ({amount}). "
-            "A second device promo cannot be stacked. "
-            "The sandbox cart total does not subtract this; the net below does."
-        ),
-        "hi": (
-            f"एक डिवाइस प्रोमो लागू है: {name} ({amount})। "
-            "दूसरा डिवाइस प्रोमो साथ नहीं जोड़ा जा सकता। "
-            "सैंडबॉक्स कार्ट का कुल इसे नहीं घटाता; नीचे दिया नेट घटाता है।"
-        ),
-        "zh": (
-            f"适用一项设备优惠：{name}（{amount}）。"
-            "不能叠加第二项设备优惠。"
-            "沙盒购物车总额没有减去这笔优惠；下面的净额已经减去。"
-        ),
-    }[language]
+MAX_SMS_CHARS = 300
+
+_OPT_OUT = {
+    "en": "Reply STOP to opt out.",
+    "es": "Responde STOP para no recibir más.",
+    "hi": "बंद करने के लिए STOP लिखें।",
+    "zh": "回复STOP退订。",
+}
 
 
-def _net_sentence(language: str, net: int | None) -> str:
-    if net is None:
-        return ""
-    amount = _dollars(net)
-    return {
-        "en": f" Net after the payoff and that promo: {amount}.",
-        "es": f" Net after the payoff and that promo: {amount}.",
-        "hi": f" पेऑफ और उस प्रोमो के बाद नेट: {amount}।",
-        "zh": f"还清余额并减去该优惠后的净额：{amount}。",
-    }[language]
+def _fit(parts: list[str], language: str) -> str:
+    """Join sentences, dropping optional ones from the end until the text fits one SMS screen.
 
-
-def _battery_sentence(language: str, note: str) -> str:
-    if language in {"en", "es"}:
-        return note
-    match = re.search(
-        r"Estimated battery health is (\d+)%\. The sandbox has no battery reading; "
-        r"this assumes about ([0-9.]+) points lost per month of phone age, "
-        r"with a floor of (\d+)%\.",
-        note or "",
-    )
-    if not match:
-        return ""
-    pct, drop, floor = match.groups()
-    if language == "hi":
-        return (
-            f"अनुमानित बैटरी सेहत {pct}% है। सैंडबॉक्स में बैटरी की रीडिंग नहीं है; "
-            f"यह मानता है कि फ़ोन की उम्र के हर महीने लगभग {drop} अंक घटते हैं, "
-            f"और न्यूनतम {floor}% है।"
-        )
-    return (
-        f"估计电池健康度为{pct}%。沙盒没有电池读数；"
-        f"这里假设手机每使用一个月大约下降{drop}个百分点，最低为{floor}%。"
-    )
+    parts[0] is required. The opt-out line is always kept.
+    """
+    tail = _OPT_OUT.get(language, _OPT_OUT["en"])
+    joiner = "" if language == "zh" else " "
+    keep = [p for p in parts if p]
+    while keep:
+        text = joiner.join([*keep, tail])
+        if len(text) <= MAX_SMS_CHARS or len(keep) == 1:
+            return text[:MAX_SMS_CHARS]
+        keep.pop()
+    return tail
 
 
 def _upgrade(language: str, moment: dict) -> str:
+    """Short, customer-facing upgrade nudge. Modeling notes stay on screen, never in the text."""
     language = language if language in {"en", "es", "hi", "zh"} else "en"
-    promo = moment.get("promo")
-    promo_sentence = _promo_sentence(language, promo if isinstance(promo, dict) else None)
-    net_sentence = _net_sentence(language, moment.get("net_cents"))
-    battery = _battery_sentence(language, moment.get("battery_note", ""))
-    balance = int(moment["balance_cents"])
+    promo = moment.get("promo") if isinstance(moment.get("promo"), dict) else None
+    balance = int(moment.get("balance_cents") or 0)
     owed = _dollars(balance)
-    trade = _dollars(moment.get("tradein_value_cents"))
+    trade = _dollars(moment.get("tradein_value_cents")) if moment.get("tradein_value_cents") is not None else None
     device = moment["device_name"]
     age = moment["age_months"]
+    promo_text = f"{promo['name']} ({_dollars(promo['savings_cents'])})" if promo else ""
     if language == "es":
-        payoff = (
-            "No queda saldo, así que el canje no cobra un payoff hoy."
-            if balance == 0
-            else f"Aún debe {owed}. Si lo entregas hoy, ese saldo se cobra hoy."
-        )
-        return (
-            f"{device} tiene {age} meses. {payoff} "
-            f"El canje en condición buena es {trade}. "
-            f"{promo_sentence}{net_sentence} {battery}"
-        )
+        head = f"Tu {device} tiene {age} meses" + (" y ya está pagado." if balance == 0 else f". Aún debes {owed}.")
+        return _fit([
+            head,
+            f"Valor de canje en buena condición: {trade}." if trade else "",
+            f"Promo disponible: {promo_text}." if promo else "",
+            "Responde UPGRADE para ver opciones.",
+        ], language)
     if language == "hi":
-        payoff = (
-            "यह चुकाया जा चुका है, इसलिए ट्रेड-इन पर आज कोई पेऑफ नहीं लगता।"
-            if balance == 0
-            else f"इस पर अभी {owed} बकाया है। बिना चुकाए फ़ोन को ट्रेड-इन करने पर वह शेष राशि आज चार्ज होती है।"
-        )
-        return (
-            f"{device} {age} महीने पुराना है। {payoff} "
-            f"अच्छी स्थिति में ट्रेड-इन मूल्य {trade} है। "
-            f"{promo_sentence}{net_sentence} {battery}"
-        )
+        head = f"आपका {device} {age} महीने पुराना है" + (", और पूरा चुका दिया गया है।" if balance == 0 else f"। अभी {owed} बकाया है।")
+        return _fit([
+            head,
+            f"अच्छी स्थिति में ट्रेड-इन मूल्य: {trade}।" if trade else "",
+            f"उपलब्ध प्रोमो: {promo_text}।" if promo else "",
+            "विकल्प देखने के लिए UPGRADE लिखें।",
+        ], language)
     if language == "zh":
-        payoff = (
-            "已经还清，所以今天以旧换新不会收取剩余余额。"
-            if balance == 0
-            else f"还剩{owed}未还清。用尚未还清的手机以旧换新，今天会收取这笔剩余余额。"
-        )
-        return (
-            f"{device}已使用{age}个月。{payoff}"
-            f"良好成色的以旧换新价值为{trade}。"
-            f"{promo_sentence}{net_sentence} {battery}"
-        )
-    if balance == 0:
-        payoff = "It is paid off, so a trade-in does not charge a payoff today."
-    else:
-        payoff = (
-            f"It still has {owed} outstanding. "
-            "Trading in an unpaid phone charges that remaining balance today."
-        )
-    return (
-        f"{device} is {age} months old. {payoff} "
-        f"Good-condition trade-in value is {trade}. "
-        f"{promo_sentence}{net_sentence} {battery}"
-    )
+        head = f"您的{device}已使用{age}个月" + ("，并已还清。" if balance == 0 else f"，还剩{owed}未还清。")
+        return _fit([
+            head,
+            f"良好成色的以旧换新价值：{trade}。" if trade else "",
+            f"可用优惠：{promo_text}。" if promo else "",
+            "回复UPGRADE查看选项。",
+        ], language)
+    head = f"Your {device} is {age} months old" + (" and paid off." if balance == 0 else f". {owed} is still owed on it.")
+    return _fit([
+        head,
+        f"Good-condition trade-in value: {trade}." if trade else "",
+        f"Available promo: {promo_text}." if promo else "",
+        "Reply UPGRADE to see options.",
+    ], language)
