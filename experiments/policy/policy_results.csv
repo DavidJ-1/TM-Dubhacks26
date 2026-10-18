@@ -1,0 +1,25 @@
+setting,policy,contacts,upsell_contacts,net_true,per_contact,net_model_believed,nominal_offer_cost,uses_port_out_or_competitor
+budget 500,engine (current offers.csv),500,96,65531.0,131.06,66758.0,13709.0,1
+budget 500,teammates' playbook,500,0,17430.0,34.86,17155.0,14390.0,17
+budget 500,risk-only (top p_churn),500,0,56876.0,113.75,57506.0,14071.0,5
+budget 500,value-weighted (p_churn x bill),500,0,58265.0,116.53,58864.0,14233.0,4
+budget 500,EV-optimal,500,83,66887.0,133.77,68404.0,12808.0,1
+budget 500,EV + guardrails (support>=3),500,77,66462.0,132.92,67664.0,12898.0,1
+budget 500,EV + guardrails (support>=5),500,82,66822.0,133.64,68311.0,12823.0,1
+budget 500,"EV + guardrails, compliant",500,76,65688.0,131.38,66010.0,12406.0,0
+unconstrained,engine (current offers.csv),1299,99,36591.0,28.17,37646.0,51062.0,104
+unconstrained,teammates' playbook,918,0,6915.0,7.53,6690.0,28375.0,27
+unconstrained,risk-only (top p_churn),505,0,56868.0,112.61,57498.0,14133.0,6
+unconstrained,value-weighted (p_churn x bill),505,0,58291.0,115.43,58919.0,14295.0,5
+unconstrained,EV-optimal,883,125,69199.0,78.37,70699.0,23294.0,56
+unconstrained,EV + guardrails (support>=3),876,118,68685.0,78.41,69847.0,23114.0,56
+unconstrained,EV + guardrails (support>=5),882,124,69117.0,78.36,70587.0,23294.0,56
+unconstrained,"EV + guardrails, compliant",835,111,67623.0,80.99,68351.0,21719.0,0
+"unconstrained, customer benefit x0.5 (repo view)",engine (current offers.csv),1299,99,53327.0,41.05,54382.0,51062.0,104
+"unconstrained, customer benefit x0.5 (repo view)",teammates' playbook,918,0,6915.0,7.53,6690.0,28375.0,27
+"unconstrained, customer benefit x0.5 (repo view)",risk-only (top p_churn),505,0,56933.0,112.74,57563.0,14137.0,6
+"unconstrained, customer benefit x0.5 (repo view)",value-weighted (p_churn x bill),505,0,58464.0,115.77,59092.0,14299.0,5
+"unconstrained, customer benefit x0.5 (repo view)",EV-optimal,884,125,69228.0,78.31,70736.0,23325.0,56
+"unconstrained, customer benefit x0.5 (repo view)",EV + guardrails (support>=3),877,118,68714.0,78.35,69885.0,23145.0,56
+"unconstrained, customer benefit x0.5 (repo view)",EV + guardrails (support>=5),883,124,69145.0,78.31,70624.0,23325.0,56
+"unconstrained, customer benefit x0.5 (repo view)","EV + guardrails, compliant",838,111,67644.0,80.72,68381.0,21842.0,0
