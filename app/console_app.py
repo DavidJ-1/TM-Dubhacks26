@@ -22,8 +22,6 @@ from harness.playbook.rules import ASSUMPTION_CREDIT_CENTS, FREQUENCY_CAP_DAYS, 
 from harness.upsell.config import INCLUDE_SYNTHETIC_DEFAULT, SYNTHETIC_BADGE
 from harness.projections import acceptance_curve, project, upgrade_curve
 
-st.set_page_config(page_title="Retention Console", layout="wide")
-
 PINNED = [
     "ACC-PERSONA-04",
     "ACC-PERSONA-24",
@@ -792,6 +790,7 @@ def upgrades_page(console) -> None:
 
 
 def main() -> None:
+    st.set_page_config(page_title="Retention Console", layout="wide")
     apply_css()
     banner()
     try:
@@ -820,4 +819,5 @@ def main() -> None:
         projections(console)
 
 
-main()
+if __name__ == "__main__":
+    main()

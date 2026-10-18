@@ -10,7 +10,7 @@ DubHacks '26, T-Mobile track. A Python console that ranks who is likely to leave
 make run
 ```
 
-That creates a virtualenv, installs the Python dependencies, clones the judge sandbox if it is not already in `vendor/dubhacks`, and starts the Retention Console (`app/console_app.py`) at <http://localhost:8501>.
+That creates a virtualenv, installs the Python dependencies, clones the judge sandbox if it is not already in `vendor/dubhacks`, and starts the judging demo (`app/demo_app.py`) at <http://localhost:8501>. The demo uses the Retention Console for the live sandbox screens. The landing and the model-evidence screen read the saved synthetic run and are labeled as such.
 
 Install the ntfy app, subscribe to the topic, set `NTFY_TOPIC` and `SEND_BACKEND=ntfy`, then click Send.
 
@@ -77,7 +77,8 @@ The sandbox has no observed churn outcomes. Judges score a private model that is
 ## Layout
 
 ```
-app/console_app.py       Retention Console (make run): sandbox.db, Model A, offers, projections, targeting playbook
+app/demo_app.py          Judging demo (make run): console screens, plus the saved landing and model evidence
+app/console_app.py       Retention Console screens: sandbox.db, Model A, offers, projections, targeting playbook
 harness/playbook/        Risk-by-value grid, if-then rules, on-screen draft
 harness/upsell/          Life-moment offers. Tier 2 signals regenerate with make life-signals
 app/streamlit_app.py     Teammate demo UI (make run-ui): insights, at-risk list, customer card, charts
