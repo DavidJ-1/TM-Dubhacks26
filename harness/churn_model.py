@@ -44,6 +44,7 @@ except Exception:  # file not there yet / broken: local fallback
 OUT = HERE / "out"
 PERSONA_PREFIX = "ACC-PERSONA-"
 PERSONAS_HIGH, PERSONAS_LOW = ["04", "21", "22", "27"], ["10", "24"]
+PERSONA_HIGH_PCT = 85.0  # high personas must land in the top 15% (David via tm-data, 2026-10-17); low = below median
 LABEL_CANDIDATES = ["churn_90d", "churned_90d", "churn_label_90d", "churn_label", "churn", "churned", "label", "y"]
 CONTRACT = ["account_id", "p_churn_90d", "risk_rank", "risk_reason_1", "risk_reason_2", "risk_reason_3",
             "stay_reason_1", "stay_reason_2", "stay_reason_3"]
@@ -193,8 +194,8 @@ def find_label(labels: pd.DataFrame, wanted: str | None) -> str:
 
 def persona_report(scores: pd.DataFrame, raw: pd.DataFrame) -> tuple[str, bool]:
     reg = scores[~scores["account_id"].str.startswith(PERSONA_PREFIX)]["p_churn_90d"]
-    hi_cut, lo_cut = reg.quantile(0.90), reg.quantile(0.50)
-    lines, ok = [f"High = top 10% of regular accounts (p >= {hi_cut:.4f}); low = below median (p < {lo_cut:.4f})."], True
+    hi_cut, lo_cut = reg.quantile(PERSONA_HIGH_PCT / 100), reg.quantile(0.50)
+    lines, ok = [f"High = top {100 - PERSONA_HIGH_PCT:g}% of regular accounts (p >= {hi_cut:.4f}); low = below median (p < {lo_cut:.4f})."], True
     lines.append(f"{'persona':<16}{'want':<6}{'p_churn_90d':>12}{'pctile':>8}{'rank':>7}{'vs cutoff':>11}  result  reasons")
     s = scores.set_index("account_id")
     for want, ids in (("high", PERSONAS_HIGH), ("low", PERSONAS_LOW)):
@@ -344,7 +345,7 @@ formula over these same features, so a high AUC and LR ~ p_true_90d are expected
   {'; '.join(f'{k} {v:.3f}' for k, v in extra.items()) or ''}.
   5-fold out-of-fold AUC **{oof_auc:.3f}** (all {len(ytr)} regular accounts; held-out scores in `churn_oof_pred.csv`).
   Label base rate {rate:.4f} per 90 days (~{1 - (1 - rate) ** (1 / 3):.4%}/month); mean scored p (regular) {reg_p.mean():.4f}.
-- Persona check (high = top 10%, low = below median): {'PASS' if ok else 'FAIL'} (provisional; see churn_persona_check.txt).
+- Persona check (high = top {100 - PERSONA_HIGH_PCT:g}%, low = below median): {'PASS' if ok else 'FAIL'} (provisional; see churn_persona_check.txt).
 - Largest standardized coefficients (synthetic): {', '.join(f'{k} {v:+.2f}' for k, v in top.items())}.
 - Limits: no real churn outcomes; sandbox patterns are designed in; full metrics/backtest live in model_harness / bench.
 """
