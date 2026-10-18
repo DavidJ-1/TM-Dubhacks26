@@ -9,7 +9,7 @@ Writes (all numbers SYNTHETIC; counts computed from harness/out/*.csv at run tim
 
 Run:  python app/viz/make_pipeline_viz.py   (from the repo root, with the project venv active)
 Inputs: REPO/harness/out first, falling back to REPO/demo_data (tracked precomputed outputs; .csv or .csv.gz).
-Env:  TM_OUT_DIR (default harness/out), TM_VIZ_ACCOUNT (default ACC-PERSONA-04), SANDBOX_DB.
+Env:  TM_VIZ_OUT_DIR (default app/viz), TM_OUT_DIR (default harness/out), TM_VIZ_ACCOUNT (default ACC-PERSONA-04), SANDBOX_DB.
 """
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 OUT = Path(os.environ.get("TM_OUT_DIR", REPO / "harness" / "out"))
 DEMO = REPO / "demo_data"
+VIZ_OUT = Path(os.environ.get("TM_VIZ_OUT_DIR", HERE))  # where html/png/json are written
 
 
 def find(rel) -> Path:
@@ -356,18 +357,18 @@ def strip_shapes(stats, y0, y1, x0=0.0, x1=1.0, highlight=None, compact=False, p
     cards = [
         ("DATA", "Judge sandbox",
          f"{st['sandbox']['n_tables_used']} sandbox tables · {st['sandbox']['rows_used']:,} rows<br>"
-         f"accounts, lines (incl. {st['sandbox'].get('kid_lines', {}).get('child_lines', 0) + st['sandbox'].get('kid_lines', {}).get('teen_lines', 0):,} kid lines),<br>usage, bills, support, signals, plans, promos<br>"
-         f"household: family plan, kid lines + band,<br>promo / financing months (real tables)"),
+         f"accounts, lines (incl. {st['sandbox'].get('kid_lines', {}).get('child_lines', 0) + st['sandbox'].get('kid_lines', {}).get('teen_lines', 0):,} kid lines),<br>usage, bills, support, signals,<br>plans, promos<br>"
+         f"household: family plan, kid lines,<br>promo / financing months"),
         ("FEATURES", "One row per account",
          f"{st['features']['n_accounts']:,} accounts × {st['features']['n_columns']} features<br>"
          f"support contacts & sentiment, bill shock,<br>promo expiry, plan fit, device age,<br>competitor research, tenure"),
         ("MODEL A", "Churn score + reasons",
          f"p(churn in 90 days) per account<br>top-3 reasons at risk / to stay<br>"
          f"held-out: top 10% catches {st['heldout']['top10_caught']:.0%}<br>"
-         f"of churners (oracle {st['heldout']['oracle_top10']:.0%}, rule {st['heldout']['rule_rank_top10']:.0%}) · AUC {st['heldout']['auc']:.3f}"),
+         f"of churners (oracle {st['heldout']['oracle_top10']:.0%},<br>rule {st['heldout']['rule_rank_top10']:.0%}) · AUC {st['heldout']['auc']:.3f}"),
         ("MODEL B", "Offers vs do nothing",
          f"{st['ev']['n_actions']} options weighed per account<br>vs doing nothing (hover for details)<br>"
-         f"offered = any option worth making,<br>not only flagged · do nothing wins for {st['funnel']['do_nothing']:,}"),
+         f"offered = any option worth making,<br>not only flagged<br>do nothing wins for {st['funnel']['do_nothing']:,}"),
         ("MESSAGE", "Personalized text, EN / ES",
          f"{st['funnel']['messaged']:,} messages drafted + validated<br>amounts re-checked vs sandbox<br>"
          f"no income, job or kid details in text<br>reply STOP to opt out"),
@@ -1079,11 +1080,11 @@ def main():
     parts["slide"] = V4.div(f_slide, "slide", cfg=cfg)
     html = V4.page(parts, sets, cards, stats)
     assert "with autopay" not in html.lower(), "never write 'with AutoPay'"
-    (HERE / "pipeline_flow.html").write_text(html, encoding="utf-8")
+    (VIZ_OUT / "pipeline_flow.html").write_text(html, encoding="utf-8")
 
-    pio.write_image(f_slide, HERE / "pipeline_flow.png", width=1600, height=900, scale=1)
-    pio.write_image(customer_fig(hero, static_step=4), HERE / "pipeline_customer.png", width=1600, height=900, scale=1)
-    (HERE / "pipeline_stats.json").write_text(json.dumps(stats, indent=1, default=str), encoding="utf-8")
+    pio.write_image(f_slide, VIZ_OUT / "pipeline_flow.png", width=1600, height=900, scale=1)
+    pio.write_image(customer_fig(hero, static_step=4), VIZ_OUT / "pipeline_customer.png", width=1600, height=900, scale=1)
+    (VIZ_OUT / "pipeline_stats.json").write_text(json.dumps(stats, indent=1, default=str), encoding="utf-8")
     print(json.dumps({k: stats[k] for k in ("funnel", "happy_pick", "happy_label_audit", "story_mismatches",
                                              "choose_offer_available")}, indent=1, default=str))
     print("html MB", round(len(html) / 1e6, 2))
@@ -1093,6 +1094,7 @@ def slide_fig_v4(nodes, links, stats, hero, side):
     """1600x900 static: strip top, funnel left, three contrast cards, hero phone right."""
     lay = base_layout("[ TM RETENTION PIPELINE ] who we text, what we offer, why we leave most alone "
                       f"<span style='font-size:13px;color:{MUTED}'>(all synthetic)</span>", top=95)
+    lay.margin.b = 92
     lay.title.font.size = 20
     sh, an = strip_shapes(stats, 0.70, 0.99, plot_h=733)
     tr = sankey_trace(nodes, links, N_STAGES - 1, domain=dict(x=[0.0, 0.56], y=[0.0, 0.58]), font_size=9)
@@ -1116,13 +1118,13 @@ def slide_fig_v4(nodes, links, stats, hero, side):
         cards_an.append(dict(xref="paper", yref="paper", x=0.592, y=y1 - 0.012, xanchor="left", yanchor="top", showarrow=False,
                              align="left", font=dict(color=INK, size=10.5, family=FONT),
                              text=f"<b><span style='color:{MAGENTA}'>[ {st['account_id']} ]</span></b><br>"
-                                  f"<b>{st['chosen']}</b><br><span style='color:{MUTED}'>{wrap(why, 38)}</span><br>"
+                                  f"<b>{wrap(st['chosen'], 40)}</b><br><span style='color:{MUTED}'>{wrap(why, 38)}</span><br>"
                                   f"<span style='color:{MUTED}'>p(churn) {st['p']:.2%} · {'flagged' if st['flagged'] else 'not flagged'}</span>"))
     hero_why = hero.get("why") or ""
     cards_an.append(dict(xref="paper", yref="paper", x=0.81, y=0.655, xanchor="left", yanchor="bottom", showarrow=False, align="left",
                          font=dict(color=PINK, size=10.5, family=FONT), text=f"<b>HERO · {hero['chosen']}</b><br>{wrap(hero_why, 40)}"))
     foot = footnote(f"Synthetic. Model A = tm-churn churn_scores.csv; flagged = top 10% (p ≥ {stats['funnel']['flag_cut']:.3f}). Actions = Model B (tm-offers offers.csv). "
-                    "Offered = any action worth making, not only flagged. Message ready = drafted + validated, nothing sent. † stand-in credit.<br>"
+                    "<br>Offered = any action worth making, not only flagged. Message ready = drafted + validated, nothing sent. † judge-provided stand-in credit.<br>"
                     "* other language: English default, no template. Held-out Model A: top 10% catches 62% of churners (oracle 64%, 3+ calls rule 53%), AUC 0.853.")
     lay.update(shapes=sh + ps + cards_sh, annotations=an + pa + heads + cards_an + banner() + [foot])
     return esc_dollars(go.Figure(data=[tr], layout=lay))

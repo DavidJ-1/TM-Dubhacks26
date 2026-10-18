@@ -1,6 +1,6 @@
 {
  "note": "All customers and numbers are synthetic. Counts computed from harness/out CSVs at build time.",
- "built_at": "2026-10-17 20:03:43 America/Los_Angeles",
+ "built_at": "2026-10-17 20:05:32 America/Los_Angeles",
  "inputs": {
   "churn_scores": {
    "path": "/workspace/tmobile/TM-Dubhacks26/harness/out/churn_scores.csv",

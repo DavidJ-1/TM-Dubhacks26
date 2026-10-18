@@ -314,7 +314,10 @@ def compute_toggles(repo: Path, d: dict, accounts: list[str], cut: float):
             for k, v in ed.items():
                 if k in r.index:
                     r[k] = (float(r[k]) + 20) if v == "+20" else v
-            p, risks, _ = score_account(r)
+            try:
+                p, risks, _ = score_account(r)
+            except Exception as e:  # noqa: BLE001  (fresh clone without tm-churn training files)
+                return {"error": f"score_account failed: {e}"}, has_choose
             rows.append(dict(state=name, p=float(p), flagged=bool(p >= cut), top_risk=risks[0] if risks else "",
                              changed=[k for k, v in ed.items() if k in base.index and
                                       (float(base[k]) != ((float(base[k]) + 20) if v == "+20" else float(v)))]))
