@@ -33,7 +33,8 @@ from console_app import (  # noqa: E402
     text_we_would_send,
     upgrades_page,
 )
-from harness.notify import default_topic  # noqa: E402
+from harness.notify import default_topic, load_project_env  # noqa: E402
+from judge_mode import BEATS, PRODUCT, TAGLINE, persona_titles_cached, proof, says_wait, whos_drifting, why_this_customer  # noqa: E402
 from harness.saved_sms import hindi_and_chinese  # noqa: E402
 
 DEFAULT_TOPIC = "tm-dubhacks26-lf3reo19tv"
@@ -46,14 +47,16 @@ CARDS = (
     ("ACC-PERSONA-21", "A check-in, not a discount", "They asked about leaving"),
     ("ACC-PERSONA-24", "Restraint: do nothing", "A happy caller is not an offer"),
 )
-SCREENS = (
-    "1 · Landing",
-    "2 · Who's at risk",
-    "3 · Why this customer",
-    "4 · What we do",
-    "5 · Grow",
-    "6 · Model evidence",
-    "7 · Projections",
+# Judge mode: four beats on the main path; the older screens live in the appendix.
+SCREENS = BEATS
+APPENDIX = (
+    "Sandbox overview and queue (sandbox reference score)",
+    "Live console: any customer",
+    "Targeting playbook",
+    "Upgrades & life moments",
+    "Projections",
+    "Model evidence (synthetic data)",
+    "Saved-run opener (four cards)",
 )
 
 
@@ -200,7 +203,10 @@ def landing_page() -> None:
 
 
 def whos_at_risk(console) -> None:
-    st.caption("Live judge sandbox. Personas stay in the queue. Population charts below use the 5,000 non-persona accounts.")
+    st.caption(
+        "Uses the judges' sandbox reference score (about 14.6% expected 90-day churn), not the calibrated model "
+        "on the main screens. Personas stay in the queue. Charts use the 5,000 non-persona accounts."
+    )
     overview(console)
     st.divider()
     queue(console)
@@ -359,23 +365,45 @@ def send_sidebar() -> None:
     topic_default = default_topic() or DEFAULT_TOPIC
     on = st.sidebar.toggle("Send texts via ntfy", value=default_on)
     topic = st.sidebar.text_input("ntfy topic", value=topic_default).strip() or DEFAULT_TOPIC
-    st.sidebar.caption(f"Install the ntfy app and subscribe to {topic}.")
+    st.sidebar.caption(f"Install the ntfy app and subscribe to {topic}. Nothing sends until you click Send.")
     st.session_state["send_backend"] = "ntfy" if on else "dryrun"
     st.session_state["send_topic"] = topic
 
 
 def main() -> None:
-    st.set_page_config(page_title="Retention demo", layout="wide")
+    load_project_env()
+    st.set_page_config(page_title=f"{PRODUCT} · {TAGLINE}", layout="wide")
     apply_css()
-    st.title("Retention demo")
-    st.caption("DubHacks '26 · T-Mobile track")
-    page = st.sidebar.radio("Screen", SCREENS)
+    st.markdown(
+        f"<div style='display:flex;align-items:baseline;gap:14px;flex-wrap:wrap'>"
+        f"<span style='font-size:2.6rem;font-weight:800;color:#1A1220'>{PRODUCT}</span>"
+        f"<span style='font-size:1.3rem;color:#E20074;font-weight:600'>{TAGLINE}</span></div>",
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "The retention engine that picks one priced action per customer, or none, and says why. "
+        "DubHacks '26 · T-Mobile track · All 5,042 customers are synthetic (the judges' sandbox)."
+    )
+    page = st.sidebar.radio("Demo", SCREENS, key="judge_beat")
+    with st.sidebar.expander("Appendix"):
+        extra = st.selectbox("Open a deeper screen", [None, *APPENDIX], format_func=lambda x: "—" if x is None else x)
     send_sidebar()
-    st.sidebar.caption("Landing and Model evidence use the saved run. Every other screen is the live sandbox.")
-    if page.startswith("1"):
+    titles = persona_titles_cached()
+    if extra is None:
+        if page == SCREENS[0]:
+            whos_drifting(titles)
+        elif page == SCREENS[1]:
+            why_this_customer(titles)
+        elif page == SCREENS[2]:
+            says_wait(titles)
+        else:
+            proof(strategy_figure)
+        return
+    st.info("Appendix screen. Close it in the sidebar to return to the demo.")
+    if extra == "Saved-run opener (four cards)":
         landing_page()
         return
-    if page.startswith("6"):
+    if extra == "Model evidence (synthetic data)":
         evidence_page()
         return
     try:
@@ -383,17 +411,17 @@ def main() -> None:
     except FileNotFoundError as exc:
         st.error(str(exc))
         st.stop()
-    if page.startswith("2"):
+    if extra.startswith("Sandbox overview"):
         whos_at_risk(console)
-    elif page.startswith("3"):
+    elif extra.startswith("Live console"):
+        st.caption("Live console engine. Risk here is our model fit to the sandbox reference score, not the calibrated model on the main screens.")
         action_page(console)
-    elif page.startswith("4"):
+    elif extra == "Targeting playbook":
         targeting_page(console)
-    elif page.startswith("5"):
+    elif extra.startswith("Upgrades"):
         upgrades_page(console)
     else:
         projections(console)
-
 
 if __name__ == "__main__":
     main()

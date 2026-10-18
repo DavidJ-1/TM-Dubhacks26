@@ -52,25 +52,36 @@ def test_make_dry_run_uses_the_port_variables():
     assert "--server.port 8501" not in ui.stdout
 
 
-def test_demo_story_is_seven_screens_and_evidence_is_labeled():
+def test_judge_mode_has_four_beats_and_an_appendix():
     source = _source("demo_app.py")
-    for label in (
-        "1 · Landing",
-        "2 · Who's at risk",
-        "3 · Why this customer",
-        "4 · What we do",
-        "5 · Grow",
-        "6 · Model evidence",
-        "7 · Projections",
-        "Model evidence (synthetic data)",
-    ):
+    judge = _source("judge_mode.py")
+    for label in ("1 · Who's drifting", "2 · Why this customer", "3 · The one that says wait", "4 · Proof"):
+        assert label in judge
+    for label in ("Targeting playbook", "Upgrades & life moments", "Projections", "Model evidence (synthetic data)"):
         assert label in source
+    assert "Bring the one that says wait." in judge
+    assert "Two Cakes" in judge
     evidence = _function("demo_app.py", "evidence_page")
     assert "synthetic" in evidence.lower()
     assert "projections(" not in evidence
     assert "overview(" not in evidence
     landing = _function("demo_app.py", "landing_page")
     assert "get_console" not in landing
+
+
+def test_main_screens_use_plain_words_and_one_number_set():
+    judge = _source("judge_mode.py")
+    for raw in ("Model A", "p_churn_90d\"", "model_p", "risk_label"):
+        assert raw not in "".join(line for line in judge.splitlines() if "st." in line and raw in line)
+    assert "sandbox reference score" in judge
+    whos = _source("demo_app.py").split("def whos_at_risk", 1)[1].split("\ndef ", 1)[0]
+    assert "sandbox reference score" in whos
+
+
+def test_persona_04_risk_is_one_number():
+    offers = pd.read_csv(ROOT / "demo_data" / "offers.csv").set_index("account_id")
+    scores = pd.read_csv(ROOT / "demo_data" / "churn_scores.csv").set_index("account_id")
+    assert abs(offers.loc["ACC-PERSONA-04", "p_churn_90d"] - scores.loc["ACC-PERSONA-04", "p_churn_90d"]) < 1e-9
 
 
 def test_strategy_chart_does_not_zoom_and_keeps_labels():
