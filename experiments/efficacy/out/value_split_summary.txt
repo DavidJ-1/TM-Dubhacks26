@@ -1,8 +1,9 @@
 [SYNTHETIC] Ours minus Top-10% risk, dev chart definition, assumed save rate: $-2,587
-  Ours: retention offers only: contacts 822, business net $60,828, customer savings $6,976, margin given up $0
+  Ours: retention offers only: contacts 822, business net $60,828, customer savings $6,700, margin given up $0
   Ours: cheaper-plan moves (right-size, variant): contacts 389, business net $-32,859, customer savings $68,973, margin given up $68,973
-  Ours: upsells: contacts 103, business net $-311, customer savings $0, margin given up $0
-validation flags: none
+  Ours: upsells: contacts 103, business net $-311, customer savings $22, margin given up $0
+validation flags: 
+  ev_ranked_w1_engine_equivalent: business_net not increasing in save rate
 
 business net by realized save rate (cross-check, picks fixed):
 true_save_rate                                      0.444     0.220     0.150     0.100     0.050

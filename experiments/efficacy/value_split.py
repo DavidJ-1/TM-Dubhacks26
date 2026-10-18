@@ -82,7 +82,10 @@ def build(engine_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     benefit = ch.customer_benefit.fillna(0).values
     is_cf = np.isin(ac, CUSTOMER_FIRST)
     plan_savings = np.where(is_cf, ocost + benefit, 0.0)          # full expected 12-month lost revenue = customer savings
-    credit_paid = np.where(contact & ~is_cf & ~np.isin(ac, UPSELL), ocost, 0.0)
+    # $ actually handed to customers: retention credits + the home-internet bundle discount; a check-in's cost is the
+    # contact itself, not customer money
+    credit_paid = np.where(contact & ~is_cf & (~np.isin(ac, UPSELL) | (ac == "home_internet_bundle")) & (ac != "check_in"),
+                           ocost, 0.0)
     credit_paid = credit_paid - np.where(ac == "care_credit_fix_first", C["FIX_FIRST_CALLBACK_COST"], 0.0)
     credit_paid = credit_paid - np.where(ac == "fix_first", C["FIX_FIRST_CALLBACK_COST"], 0.0)  # callbacks are not $ to customers
     credit_paid = np.clip(credit_paid, 0, None)
