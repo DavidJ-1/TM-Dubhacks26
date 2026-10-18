@@ -1404,41 +1404,64 @@ def render_dashboard(df: pd.DataFrame, economics: dict | None = None, *, typical
     st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
     c1, c2 = st.columns([1.35, 1], gap="large")
     with c1:
-        st.markdown("<div class='o-ch'><span class='o-lbl'>Risk distribution · every customer</span><span class='o-lbl'>magenta = flagged</span></div>", unsafe_allow_html=True)
-        edges = np.logspace(np.log10(0.2), np.log10(80), 44)
+        st.markdown("<div class='o-ch'><span class='o-lbl'>Churn risk · every customer</span><span class='o-lbl'>share of the book</span></div>", unsafe_allow_html=True)
+        pctl = df.p_churn_90d * 100
         cut = float(df.attrs.get("flag_cut", 1.0)) * 100
-        cnt, _ = np.histogram(df.p_churn_90d * 100, bins=edges)
-        mids = np.sqrt(edges[:-1] * edges[1:])
-        f1 = go.Figure(go.Bar(x=mids, y=cnt, width=np.diff(edges) * 0.92, marker=dict(color=[MAG if m >= cut else DOT for m in mids], line=dict(width=0)),
-                              hovertemplate="risk ≈ %{x:.2f}%<br>%{y} customers<extra></extra>"))
-        f1.add_vline(x=cut, line=dict(color=INK, width=1, dash="dash"))
-        f1.add_annotation(x=math.log10(cut), y=max(cnt) * 0.9, text=f"top 10% starts at {pct(cut)}", showarrow=False, xanchor="left", xshift=8,
-                          font=dict(family="SM", size=11, color=INK), bgcolor=BG)
-        _flat2d(f1, 330).update_xaxes(type="log", tickvals=[0.3, 1, 3, 10, 30], ticktext=["0.3%", "1%", "3%", "10%", "30%"],
-                                      title=dict(text="90-day churn risk (log scale)", font=dict(size=11)))
-        f1.update_yaxes(title=dict(text="customers", font=dict(size=11)))
-        st.plotly_chart(f1, width="stretch", theme=None, config={"displayModeBar": False}, key=f"{key}_dist")
+        band_defs = [("Under 1%", pctl < 1, 0.0), ("1% to under 5%", (pctl >= 1) & (pctl < 5), 1.0),
+                     ("5% to under 10%", (pctl >= 5) & (pctl < 10), 5.0), ("10% and higher", pctl >= 10, 10.0)]
+        has_bill = "last_bill_cents" in df.columns
+        band_rows, band_names, band_n, band_colors = [], [], [], []
+        for name, mask, lo in band_defs:
+            n = int(mask.sum())
+            share = (100.0 * n / scored) if scored else 0.0
+            row = {"Risk band": name, "Customers": f"{n:,}", "Share": f"{share:.1f}%"}
+            if has_bill:
+                bills = pd.to_numeric(df.loc[mask, "last_bill_cents"], errors="coerce")
+                row["Median bill"] = f"${float(bills.median()) / 100:,.0f}/mo" if bills.notna().any() else ""
+            band_rows.append(row)
+            band_names.append(name)
+            band_n.append(n)
+            band_colors.append(MAG if lo >= 5 else DOT)
+        st.dataframe(pd.DataFrame(band_rows), hide_index=True, width="stretch", key=f"{key}_bands")
+        f1 = go.Figure(go.Bar(x=band_names, y=band_n, marker=dict(color=band_colors, line=dict(width=0)),
+                              text=[f"{n:,}" for n in band_n], textposition="outside", cliponaxis=False,
+                              textfont=dict(family="SM", size=11),
+                              hovertemplate="%{x}<br>%{y:,} customers<extra></extra>"))
+        _flat2d(f1, 280).update_xaxes(title=None, fixedrange=True)
+        f1.update_yaxes(title=dict(text="Customers", font=dict(size=11)), fixedrange=True, rangemode="tozero")
+        f1.update_layout(margin=dict(l=48, r=12, t=28, b=40), dragmode=False)
+        st.plotly_chart(f1, width="stretch", theme=None, config={"displayModeBar": False, "scrollZoom": False}, key=f"{key}_dist")
+        st.markdown(f"<div class='o-lbl' style='text-transform:none;letter-spacing:0'>Magenta bars are 5% risk and up. "
+                    f"The top 10% starts at {pct(cut)}.</div>", unsafe_allow_html=True)
     with c2:
-        st.markdown("<div class='o-ch'><span class='o-lbl'>Who hears from us, and how</span><span class='o-lbl'>customers</span></div>", unsafe_allow_html=True)
-        order = [k for k in ("in-app", "text", "email", "call") if k in ch.index]
-        ys = order + ["no message"]
-        xs = [int(ch[k]) for k in order] + [scored - messaged]
-        f2 = go.Figure(go.Bar(y=ys[::-1], x=xs[::-1], orientation="h", marker=dict(color=[DOT if y == "no message" else (MAG if y == "text" else INK) for y in ys[::-1]], line=dict(width=0)),
-                              text=[f"{v:,}" for v in xs[::-1]], textposition="outside", cliponaxis=False, textfont=dict(family="SM", size=11),
-                              hovertemplate="%{y}: %{x:,}<extra></extra>"))
-        _flat2d(f2, 330).update_xaxes(type="log", showticklabels=False, ticks="", showline=False)
-        f2.update_yaxes(gridcolor="rgba(0,0,0,0)", showline=False)
-        f2.update_layout(margin=dict(l=110, r=60, t=10, b=10))
-        st.plotly_chart(f2, width="stretch", theme=None, config={"displayModeBar": False}, key=f"{key}_chan")
-        st.markdown("<div class='o-lbl'>log scale: most customers get no message on purpose</div>", unsafe_allow_html=True)
+        st.markdown("<div class='o-ch'><span class='o-lbl'>Who hears from us</span><span class='o-lbl'>this week</span></div>", unsafe_allow_html=True)
+        order = [k for k in ("text", "in-app", "email", "call") if k in ch.index]
+        reach_rows = []
+        for k in order:
+            v = int(ch[k])
+            reach_rows.append({"How we reach them": k, "Customers": f"{v:,}", "Share": f"{(100.0 * v / scored) if scored else 0:.1f}%"})
+        quiet = scored - messaged
+        reach_rows.append({"How we reach them": "no message", "Customers": f"{quiet:,}", "Share": f"{(100.0 * quiet / scored) if scored else 0:.1f}%"})
+        st.dataframe(pd.DataFrame(reach_rows), hide_index=True, width="stretch", key=f"{key}_reach")
+        st.markdown("<div class='o-lbl' style='text-transform:none;letter-spacing:0'>Most customers get no message this week.</div>",
+                    unsafe_allow_html=True)
 
     st.markdown("<div class='o-ch' style='margin-top:18px'><span class='o-lbl'>Riskiest ten this week · click a row to open it</span><span class='o-lbl'></span></div>", unsafe_allow_html=True)
     t = df[~df.is_demo].head(10)
+    bill_col = t["last_bill_cents"] if "last_bill_cents" in t.columns else pd.Series([None] * len(t), index=t.index)
+
+    def _bill_cell(v):
+        if v is None or pd.isna(v):
+            return ""
+        return f"${float(v) / 100:,.0f}"
+
     tab = pd.DataFrame({"Customer": [cid(a) for a in t.account_id], "Risk": [pct(v * 100) for v in t.p_churn_90d],
+                        "Bill": [_bill_cell(v) for v in bill_col],
                         "Top reason": t.get("risk_reason_1", ""), "What we do": t.reason_line.map(_cap),
                         "Channel": t.channel.map(CHANNEL_LABEL).fillna("none")})
     ev = st.dataframe(tab, hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row", key=f"{key}_riskiest",
                       column_config={"Customer": st.column_config.TextColumn(width="small"), "Risk": st.column_config.TextColumn(width="small"),
+                                     "Bill": st.column_config.TextColumn(width="small"),
                                      "Channel": st.column_config.TextColumn(width="small")})
     rows = (ev.selection.rows if ev is not None and hasattr(ev, "selection") else []) or []
     return t.iloc[rows[0]].account_id if rows else None
