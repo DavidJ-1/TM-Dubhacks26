@@ -39,7 +39,7 @@ HH = Path(os.environ.get("HOUSEHOLD_PLAN_CSV", HERE / "data" / "household_plan.c
 TM_RESULTS = TM.parent / "RESULTS.md"
 TM_RECEIPT = TM.parent / "receipt.csv"                     # preferred: tm-models' receipt table (RESULTS.md section 6)
 TM_MOVES = TM.parent / "plan_moves_classified.csv"         # else: their per-move classification, strict rule applied here
-DECIDE = 0.10; SCORED = [0.05, 0.10, 0.22]; HEADLINE = 0.05
+DECIDE = 0.10; SCORED = [0.05, 0.10, 0.22]; HEADLINE = 0.10
 SWITCH = {"base": 0.03, "low": 0.02, "high": 0.13}   # receipt switch rate (assumption; randomized plan-fit trials 1-13%)
 PENDING = "pending"
 HEADLINE_BAR = "ret_10"
@@ -51,7 +51,8 @@ PERK_NOTE = "Perk reminders never pay as texts; shown on the bill/app instead."
 
 # (key, chart label, regex on tm-models policy name, required decide rate or None for rules that don't decide)
 BARS = [
-    ("shipped", "Shipped engine (picks made at its assumed ~44%)", r"^shipped_engine$", "any"),
+    # chart accounting only (retention, no upsell margin); plain shipped_engine adds upsell margin and is Q&A only
+    ("shipped", "Shipped engine, full company dollars, retention only", r"^shipped_engine_chart_accounting$", "any"),
     ("risk_credit", "Top 10% risk: $25 credit to all (old chart rule)", r"^top10_risk_care_credit$", None),
     ("risk_best", "Top 10% risk: best fix for each (fix chosen at each rate)", r"^risk_only_best_fix_top500$", "own"),
     ("ret_fixed44", "Retention-only, picks fixed at 44%", r"^ev_retention_only_unlimited_mismatched$", 0.44),
