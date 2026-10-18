@@ -44,6 +44,12 @@ st.markdown(f"""
 .whatif {{border:1px solid #F3B6D2; border-radius:10px; padding:8px 12px; background:#FFF5FA; font-size:.92rem}}
 .how {{background:#F6F7F9; border-radius:10px; padding:.6rem 1rem; font-size:.95rem; color:#1F2328}}
 .how b {{color:{MAGENTA}}}
+table.opts {{width:100%; border-collapse:collapse; font-size:.86rem; margin-bottom:.6rem}}
+table.opts th {{text-align:left; color:#57606A; font-weight:600; background:#F6F7F9; padding:6px 8px;
+  border-bottom:1px solid #D0D7DE}}
+table.opts td {{padding:6px 8px; border-bottom:1px solid #EEF0F2; vertical-align:top; white-space:normal}}
+table.opts td:nth-child(1) {{width:24%}} table.opts td:nth-child(2) {{width:10%; white-space:nowrap}}
+table.opts td:nth-child(3) {{width:22%}}
 </style>
 """, unsafe_allow_html=True)
 st.info("**All customers are synthetic:** T-Mobile judge sandbox data with simulated scores. Not real customers.", icon="⚠️")
@@ -382,11 +388,9 @@ def card(acc: str, story: str, fits: set, idx: int):
         tbl, tip = options_table(acc)
     opt_hdr.markdown("**Options we considered**" + ("  _(what-if)_" if res is not None else ""), help=tip or None)
     if len(tbl):
-        tbl_ph.dataframe(tbl, hide_index=True, width="stretch", column_config={
-            "Option": st.column_config.TextColumn(width=190),
-            "Cost to T-Mobile": st.column_config.TextColumn("Cost to us", width=80),
-            "Customer": st.column_config.TextColumn("Customer saves / pays", width=190),
-            "Why not": st.column_config.TextColumn(width="large")})
+        # HTML table so long "Why not" text wraps instead of being cut off
+        _t = tbl.rename(columns={"Cost to T-Mobile": "Cost to us", "Customer": "Customer saves / pays"})
+        tbl_ph.markdown(_t.to_html(index=False, escape=True, classes="opts", border=0), unsafe_allow_html=True)
     else:
         tbl_ph.caption("offer_candidates.csv not loaded.")
     with right:
