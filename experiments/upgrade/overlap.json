@@ -1,0 +1,10 @@
+{
+ "model_for_overlap": "LR (C=0.1, std)",
+ "k": 500,
+ "overlap": 19,
+ "overlap_share": 0.038,
+ "expected_if_independent": 50.0,
+ "spearman_upgrade_vs_churn": -0.2709760008840602,
+ "churners_in_upgrade_top10": 5,
+ "upgraders_in_churn_top10": 11
+}
