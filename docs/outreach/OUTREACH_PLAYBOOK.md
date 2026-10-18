@@ -1,72 +1,115 @@
 # Outreach playbook: when we reach out, how, and what we say
 
-**All customers and numbers here are synthetic** (judge sandbox stub data, as_of 2026-10-01). No real T-Mobile customer data. No LLM: every message is a fixed template (`templates.json`) whose slots are filled from sandbox fields or the engine output by `draft_outreach.py`.
+**All customers and numbers here are synthetic** (judge sandbox stub data, as_of 2026-10-01). No real T-Mobile customer data. No LLM: every message is a fixed template (`templates.json`) whose slots are filled from sandbox fields or the engine output by `draft_outreach.py`. Research basis: `RESEARCH.md` §14 (outreach channel, timing and rules; commit 63067b4) and §15 (family plans, multi-line accounts and lock-in; commit f7cce1e).
 
-Brief line references are to `handoff/plan-doc-2026-10-17.txt`.
+**Labels:** "synthetic" stays in internal docs like this one. **No customer message, receipt line or UI card text says "synthetic"** (David's rule). The script fails if one does. Brief line references are to `handoff/plan-doc-2026-10-17.txt`.
+
+**Current run (synthetic):** 184 accounts get a message and 4,858 stay silent. 3,935 accounts get at least one bill/app receipt line (6,339 lines). See `outreach_summary.md`.
 
 ## 1. When we contact, and when we stay silent
-Maps to: customer value incl. "no good recommendation" (L43), the track slogan "the one that says wait" (L47), the on-screen do-nothing outcome (L50), and the judges' hard part, "helpful at the right time without being annoying" (L61).
+Maps to: customer value incl. "no good recommendation" (L43), "the one that says wait" (L47), the on-screen do-nothing outcome (L50), "helpful at the right time without being annoying" (L61).
 
 Silence is the default. Rules run in this order, and the first one that applies decides:
-1. **The engine says do nothing, so we stay silent.** The reason is stored (`happy`, `open_ticket`, `wait_payoff`, ...).
-2. **Only retention actions that pay at a realistic save rate get a message.** The source is the retention-only policy re-picked at a 10% save rate (`picks_retention_10.csv`, 246 accounts; break-even is about 4.5%). Anything else the shipped engine picks, like upsells or Home Internet, is `not_worth_contacting_at_realistic_save_rates`.
-3. **Cheaper-plan moves are never outreach.** They go on the bill or in the app as a single tap-to-confirm line (section 2).
-4. **Backfire guardrail (owned by the efficacy lane).** The 1,412 accounts with a non-`stable` `billing_history.change_reason` and an increase (`change_cents > 0`) in the last 3 bill months (2026-07..09) are contacted only with a credit that offsets the increase. We do *not* use "bill went up in the last 3 months", which flags 4,679 accounts, mostly on cents of noise. The efficacy file (`v2:experiments/efficacy/out/guardrail.csv`) is the authority when present. Two exemptions are applied by the script until the guardrail file applies them itself (`--exemptions-applied`):
-   - **fix-only callbacks:** fixing an open issue isn't an offer.
-   - **increases that are only a new phone installment the customer chose.**
-5. **At most one proactive contact per account per quarter.** The sandbox has no outreach log, so this is a hook: `--contact-log account_id,last_contact_date`. Every run sends at most one message per account.
-6. **Fix first.** If an account has an unresolved support contact in the last 90 days, the only message allowed is a fix message (a callback, optionally with the $25 care credit), never an offer. A picked perk reminder or check-in is replaced by the fix callback. People stay because nothing is going wrong (L89).
-7. **No opt-out or do-not-contact field exists in the sandbox.** Opt-out is honored at the channel (STOP / Settings / unsubscribe) and would be a hard block in production.
+1. **The engine says do nothing, so we stay silent.** The reason is stored (`happy` 1,107, `open_ticket` 1,041, `wait_payoff` 877, ...).
+2. **Only retention actions that pay at a realistic save rate get a message.** These are the retention-only policy re-picked at a 10% save rate with a $1,478 kept-account value: 202 picks, break-even about 4.8% (tm-models, `inputs/guardrail_detail.csv`). Everything else the shipped engine would do is silent: `not_worth_contacting_at_realistic_save_rates` 724, `plan_move_receipt_only` 388.
+3. **Opted out of marketing means no contact.** The sandbox has no opt-out field, so this is a hook (`--opt-out`).
+4. **Backfire guardrail (`inputs/guardrail.csv`, the authority).** Of the 1,412 accounts with a non-`stable` `billing_history.change_reason` and an increase in 2026-07..09, an account is contacted only with a credit that offsets the increase. Two exemptions apply: fix-only callbacks, and increases that come only from a new phone the customer chose. We do not use "bill went up in 3 months" (4,679 accounts). This blocks 18 of the 202 picks (13 perk reminders, 5 check-ins), leaving 184.
+5. **At most one proactive contact per account per quarter.** The sandbox has no outreach log, so this is a hook (`--contact-log`). Each run sends at most one message per account.
+6. **Fix first.** With an unresolved support contact in the last 90 days, the only message allowed is a fix message, never an offer. 25 picked perk reminders become fix callbacks. People stay because nothing is going wrong (L89).
 
-## 2. Channel
-Maps to: signals (L44: commerce + customer + live), feasibility (L46), "help customers get full value of what they have" (L62).
+**How 184 maps to tm-models' "184 retention texts":** the accounts are the same 184 (`contact_ok` True). The difference is only what each message is:
+- **Channel:** each account's stated preference. 64 are actual SMS texts, 74 in-app, 32 email and 14 agent calls.
+- **Message type:** 25 perk reminders are sent as fix callbacks because the account has an open issue.
+- **Swaps:** none at $1,478.
 
-| Message kind | Channel | Why |
-|---|---|---|
-| Retention fix or credit that pays at 10% | the customer's own `accounts.contact_preference` (sms → text, app → in-app, email → email, call → agent callback script) | the only kind of message that interrupts |
-| Perk reminder (streaming already included) | in-app / bill only | a reminder isn't worth an interruption |
-| Cheaper plan, same features | bill / app line, **tap to confirm** | never an "invitation to shop". Proactive plan recommendations raised churn from ~6% to ~10% in a wireless field test (Ascarza, Iyengar & Schleicher 2016, https://doi.org/10.1509/jmr.13.0483) |
-| Cheaper plan that gives something up | bill / app line with an explicit **"but you'd lose X"** (price guarantee, high-speed hotspot, plan perks, 50 GB cap) | honest trade-off, so the customer decides |
-| Watch line, price guarantee, trade-in value | bill / app line | full value of what they already have |
+## 2. Timing
+Maps to: L61, L64.
+- **Payoff and promo-end messages go 10–40 days *before* the date, not after.** Churn rises right after a term or promo ends:
+  - Becker, Spann & Schulze 2015: German DSL, month-25 churn more than 7× the average.
+  - Schweidel, Fader & Bradlow 2008: subscribers drop a service soon after an intro promo ends.
 
-The like-for-like headline is the 394 receipt moves with no trade-off (synthetic, $4,600/mo if all accepted). The 110 trade-off moves include all 44 Experience More → Essentials 4 Line moves and always carry the "you'd lose" line. Student credit is off (likely a generator gap). Old-phone upgrade credits and payoff reminders are not used yet.
+  These are European DSL and 2008 US telecom data, not US wireless. Source: RESEARCH.md §14b.
+- In this sandbox the promo ends already happened (August 2026 bills), so today's messages explain a past increase. In production the same template fires 10–40 days ahead. Payoff-upcoming reminders are not sent yet.
+- **There's no evidence for a bill-date effect, so we don't claim one.**
 
-## 3. Tone and framing by customer type
-Maps to: explainability and trust (L45), fixed en/es templates (L33), fields we use, including `contact_preference` and `language` (L91).
+## 3. Channel
+Maps to: signals (L44), feasibility (L46), "full value of what they have" (L62).
 
-We use real sandbox fields only:
-- **Support pain** (`support_interactions`: unresolved, topic). Lead with an apology naming the topic in plain words ("your coverage", "your bill"), then the fix. A credit is only ever "one-time" so we don't overclaim.
-- **Family vs single** (`lines` count). 3+ lines open with "a note about your N-line account", so the person knows it covers everyone.
-- **Long tenure** (`accounts.tenure_months` ≥ 60). Opener: "thanks for N years with us." It's a fact on their account.
-- **Promo ended** (`billing_history.change_reason = promo_expired`). Give the bill month and the exact $ change, and say the plan price did not change.
-- **Price guarantee** (`plans.price_guarantee_years`). Stated as a fact about their plan.
-- **Trade-in** (paid-off, non-BYOD phones on `tradein_curves` at today's age). "About $X today, no pressure." It sits on the bill/app only.
-- **Language** (`accounts.language`). `es` gets Spanish (usted, natural phrasing, not word-for-word). `en` and the 148 `other` accounts get English, with Spanish included in every row.
-- **Senior / student segment labels.** We never mention a label or an age and never change wording because of it. A label only matters when it makes a real plan eligible (for example 55+ Savings, which carries "after a quick eligibility check").
+**We choose the channel from the customer's own `accounts.contact_preference` (sms → text, app → in-app, email → email, call → agent call), not from a ranking.** We make no claim that one channel works better than another. No telecom study compares them on the same offer (§14a).
 
-We don't vary the pitch to persuade. In the Hillstrom e-mail test, choosing a different message per customer did not beat one good message. So the claim is: **the message matches your account and is easy to act on**, not "tailored to persuade". The efficacy lane owns the push-away guardrail.
+| Message kind | Channel |
+|---|---|
+| Retention fix or credit that pays at 10% | the customer's stated contact preference |
+| Perk reminder (streaming already included) | in-app or on the bill only |
+| Cheaper plan, same features (394 lines) | bill/app line, **tap to confirm**. Never an "invitation to shop": proactive plan recommendations raised churn from ~6% to ~10% in a wireless field test (Ascarza, Iyengar & Schleicher 2016, https://doi.org/10.1509/jmr.13.0483) |
+| Cheaper plan that gives something up (110 lines, incl. all 44 Experience More → 4 Line) | bill/app line with an explicit **"but you'd lose X"** (price guarantee, high-speed hotspot, plan perks, 50 GB cap) |
+| Watch line (66), price guarantee (2,862), trade-in value (2,212), streaming included (695) | bill/app line |
 
-## 4. Non-creepy rules
-Maps to: trust (L45), life events kept as future vision only (L39), no scraping of personal info (L122), avoid pushy copy (L248).
-- We only cite facts the customer would recognize from their own bill or account: open support requests, bill amounts and months, plan name, line count, tenure, phone model.
-- We never cite inferred life events, income, jobs, kids, location, or usage beyond what's on the bill. There's no "we noticed you...". The streaming line says the perk is included, not that they stream a lot.
-- No fake urgency, no countdowns, no "last chance". Trade-in lines say "no pressure".
-- Every direct message has an easy opt-out (Reply STOP / Settings / unsubscribe / agent offers to stop calls).
-- Quiet hours: send only 9 AM–8 PM in the customer's local time. The sandbox has no region field, so this is a send-time rule for production.
-- No codenames, SKUs, account ids, tool names or staff names in any customer text. The script asserts this, together with a forbidden-word check (age, income, job, kids, "we noticed", AI, and their Spanish forms).
+The savings receipt is a customer-first design choice. **It is not proven to retain anyone.** There's no public field evidence for "you're saving $X" receipts (§14d), and the ledger shows it costs T-Mobile money. The student credit is off, and Home Internet is not offered.
 
-## 5. Outputs and checks
-- `outreach_drafts.csv` has one row per account (5,042), with columns `account_id, contact_yes_no, reason, channel, template_id, message_en, message_es, primary_language, facts_used, receipt_lines, receipt_line_en, receipt_line_es, in_bill_change_1412, open_issue_90d, guardrail_block_reason, guardrail_why_line, bill_change_exemption, data_note`.
-- `outreach_receipt_lines.csv` has one row per bill/app line, in long format.
-- `outreach_summary.md` has counts by channel and reason (synthetic).
-- The script exits non-zero if any of these fail:
-  - every slot is filled (no `{` left)
-  - every `$` figure appears in `facts_used`, which is read from the sandbox or engine
-  - plan-move savings recomputed from `plans.line_prices` match the receipt file
-  - trade-in values match the hidden-value file
-  - row count is 5,042
-  - the 1,412 count holds
-  - direct messages are 100–320 characters and carry an opt-out
-  - forbidden words are absent
+**Wording by channel (English and Spanish):**
+- **Text:** starts with "T-Mobile:", ends with "Reply YES …" and "Reply STOP to opt out."
+- **In-app:** "Tap to set up the call / Tap to accept", plus "Turn off these notes anytime in Settings."
+- **Email:** "Use the link below … or reply to this email", plus an unsubscribe line.
+- **Agent call:** a short script ("Hi, this is T-Mobile calling about your account … Ask: … If they'd rather not get calls like this, offer to stop them.").
 
-Run: `python3 docs/outreach/draft_outreach.py [--picks ... --offers ... --receipt ... --hidden ... --guardrail v2:experiments/efficacy/out/guardrail.csv --exemptions-applied auto|yes|no --contact-log ...]`. It's deterministic: the same inputs give byte-identical CSVs.
+Only texts say Reply YES/STOP. The script checks this.
+
+## 4. Rules we follow (not legal advice; RESEARCH.md §14c)
+- **Only offer changes to services the customer already has:** fixes, credits, their plan's perks, cheaper plans, and their own phone's trade-in value. Cross-selling Home Internet would need CPNI approval (opt-out with a 30-day wait, or opt-in), so it is not used.
+- **Skip anyone who opted out of marketing.** A marketing opt-out ends all marketing. Opt-outs are honored within 10 business days. We keep fix messages free of promotions.
+- **Send only 8 a.m.–8 p.m. in the customer's local time.** The sandbox has no time zone, so this is a send-time rule.
+- **Every text carries STOP.** Every channel has its own opt-out.
+- **Messages never use port-out or location data.** No template cites them. Note: the engine's risk score and its port-out contact override do read `port_out_inquiry` (see §8).
+- **We make no claim about pending FCC rule changes.** The only one checked (FCC 26-67) is not yet in force.
+
+## 5. Tone and framing by customer type
+Maps to: explainability and trust (L45), fixed en/es templates (L33), fields used incl. `contact_preference` and `language` (L91).
+- **Support pain** (unresolved contacts, topic). Lead with an apology naming the topic in plain words ("your coverage", "your bill"), then the fix. A credit is always "one-time".
+- **Family vs single** (line count). 3+ lines open with "a note about your N-line account".
+- **Long tenure** (≥ 60 months). "Thanks for N years with us."
+- **Promo ended.** Give the bill month and the exact dollar change, and say the plan price didn't change.
+- **Price guarantee** (`plans.price_guarantee_years`). Stated as a fact.
+- **Trade-in** (paid-off, non-BYOD phones on `tradein_curves`). "About $X today, no pressure." Bill/app only.
+- **Language.** `es` gets Spanish (usted, natural phrasing). `en` and the 148 `other` accounts get English, with Spanish included in every row.
+- **Senior / student segment labels.** We never mention a label or an age and never change wording because of it. A label matters only when it makes a real plan eligible (for example 55+ Savings, "after a quick eligibility check").
+
+We don't vary the pitch to persuade. In the Hillstrom test, choosing a different message per customer did not beat one good message. So the claim is: **the message matches your account and is easy to act on**. The push-away guardrail belongs to tm-models (taken over from tm-efficacy).
+
+## 6. Family accounts, lock-in and the price guarantee (RESEARCH.md §15)
+Maps to: explainability and trust (L45), feasibility (L46).
+- **Over 90% of T-Mobile postpaid phone *lines* are on multi-line accounts.** That's lines, not accounts (TMUS Q4'25 call, §15a). Our sandbox has more single-line accounts, about 17% of lines, so we score and message at the account level. Family messages open with "your N-line account".
+- **We never claim that multi-line accounts churn X% less, or that adding a line lowers churn.** No US carrier publishes the gap, and multi-line customers self-select (§15a, §15c). The −0.15 per extra line in `harness/labels.py` is an assumption in our generator, not a finding. There's no add-a-line message.
+- **A phone upgrade buys lock-in; a plan step-up adds margin but no lock-in** (§15e). The lock-in comes from the device plan and promo credits that are lost on leaving. Step-ups and phone upgrades are not part of outreach today: the retention-only policy picks neither.
+- **The early termination fee is $0. The 5-year price guarantee is a price promise, not a lock-in** (§15b, §15e). Templates state it only as "comes with / keeps its N-year price guarantee". The script rejects any customer text containing lock, locked, contract, contrato or permanencia.
+- **Line departures** (a member leaving the account) are the risky family moment, but the sandbox has no signal for them. The customer-friendly future play is "keep your number at T-Mobile on your own line" (Change of Responsibility), never a hard save (§15d).
+
+## 7. Non-creepy rules
+Maps to: trust (L45), life events as future vision only (L39), no scraping (L122), avoid pushy copy (L248).
+- We only cite facts the customer would recognize from their own bill or account.
+- We never cite inferred life events, income, jobs, kids, location, or usage beyond the bill. There's no "we noticed you…": the streaming line says the perk is included, not that they stream a lot.
+- No fake urgency. Trade-in lines say "no pressure".
+- No codenames, SKUs, account ids, tool names or staff names in customer text.
+- The script checks all of this, plus forbidden words in English and Spanish (age, income, job, kids, "we noticed", AI).
+
+## 8. Outputs, checks, open items
+- **Outputs:**
+  - `outreach_drafts.csv` (5,042 rows): `account_id, contact_yes_no, reason, channel, template_id, message_en, message_es, primary_language, facts_used, receipt_lines, receipt_line_en, receipt_line_es, in_bill_change_1412, open_issue_90d, guardrail_block_reason, guardrail_why_line, bill_change_exemption, data_note`
+  - `outreach_receipt_lines.csv` (one row per bill/app line)
+  - `outreach_summary.md`
+- `outreach_card.csv` (5,042 rows) for tm-ui's customer card, with exactly `account_id, outreach_reason, message_en, message_es`. `outreach_reason` is a short plain-English reason; for silent accounts it's the do-not-contact reason. Messages are blank when silent.
+- **Inputs:** committed under `inputs/` (see `inputs/README.md`). The script defaults to them.
+- **The script exits non-zero if any check fails:**
+  - a slot is left unfilled
+  - a dollar figure is not in `facts_used`
+  - plan savings don't match `plans.line_prices`
+  - trade-in values don't match the hidden-value file
+  - the row count isn't 5,042, or the 1,412 count doesn't hold
+  - a text is over 320 characters (other channels: 420)
+  - a message lacks its channel's opt-out
+  - text-only wording appears outside texts
+  - a forbidden word or label appears (incl. "synthetic" and lock-in wording)
+- **Deterministic:** two runs give byte-identical files.
+- **Open item:** RESEARCH.md §14c says the engine "never uses port-out data", but `harness/offers.py` uses `port_out_inquiry` for risk and the port-out contact override. Messages never cite it. Whether the engine should stop using it is a product call.
+
+Run: `python3 docs/outreach/draft_outreach.py [--exemptions-applied yes] [--picks …] [--guardrail …] [--opt-out …] [--contact-log …]`

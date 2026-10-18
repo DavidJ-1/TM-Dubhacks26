@@ -41,22 +41,73 @@ OFFSETS_BILL_CHANGE = {"care_credit_fix_first", "care_credit", "bill_shock_price
 PLAN_MOVE_CODES = {"right_size", "variant_switch"}
 FORBIDDEN = [r"\bage\b", r"\bages\b", r"\bincome\b", r"\bjob\b", r"\bkids?\b", r"we noticed", r"\bAI\b",
              r"\bedad\b", r"\bingresos\b", r"\btrabajo\b", r"\bhijos?\b", r"notamos", r"\bIA\b",
-             r"STUB", r"PROMO-", r"TMO-", r"\btm-", r"/workspace", r"Grok", r"\.py\b", r"older", r"senior", r"student"]
+             r"STUB", r"PROMO-", r"TMO-", r"\btm-", r"/workspace", r"Grok", r"\.py\b", r"older", r"senior", r"student",
+             r"(?i)synthetic", r"(?i)sint[eé]tic", r"(?i)\block", r"(?i)locked", r"(?i)contract", r"(?i)permanencia",
+             r"(?i)contrato"]
 TEXT_MIN, TEXT_MAX = 100, 320
+# Plain-English reason for tm-ui's customer card (outreach_card.csv). No internal codes, no data labels.
+CARD_REASON = {
+    "fix_first": "Open support issue: we offer a callback to fix it.",
+    "care_credit_fix_first": "Open support issue: we offer a callback to fix it, plus a one-time $25 credit.",
+    "fix_first_override": "An open support issue comes first, so we offer a fix callback instead of a perk reminder.",
+    "care_credit": "Several recent support contacts: a one-time $25 goodwill credit.",
+    "bill_shock_price_lock": "A promo ended and the bill rose: we explain why and add a one-time $25 credit.",
+    "check_in": "Higher risk of leaving: a no-pressure plan check-in with no offer attached.",
+    "fix_recent": "Several recent support contacts: we offer a callback to make sure it's sorted.",
+    "fix_recent_credit": "Several recent support contacts: we offer a callback to make sure it's sorted, plus a one-time $25 credit.",
+    "perk_reminder": "Reminder of a perk already included in their plan.",
+    "engine_do_nothing:happy": "No message: nothing is going wrong on this account, so we leave them alone.",
+    "engine_do_nothing:open_ticket": "No message: support is already working an open ticket, and there's no marketing until it's closed.",
+    "engine_do_nothing:wait_payoff": "No message: a phone is still being paid off, so the honest advice is to wait.",
+    "engine_do_nothing:recent_complaints": "No message: recent complaints are closed, so we keep watching instead of selling.",
+    "engine_do_nothing:low_risk": "No message: low risk of leaving and nothing needs fixing.",
+    "engine_do_nothing:bill_shock_low_risk": "No message: the bill went up recently but risk is low, and a message would only point at the increase.",
+    "engine_do_nothing:usage_need_held": "No message: usage is near the plan limit, but a bigger plan isn't worth pushing now.",
+    "engine_do_nothing:shopping_low_risk": "No message: comparing options at low risk, and a pitch now could backfire.",
+    "engine_do_nothing:nothing_helps": "No message: nothing we could offer would genuinely help right now.",
+    "not_worth_contacting_at_realistic_save_rates": "No message: no offer here pays off at realistic save rates.",
+    "plan_move_receipt_only": "No message: the cheaper plan is shown on the bill and in the app only.",
+    "guardrail:bill_change_no_fix": "No message: the bill just went up and we have nothing that offsets it.",
+    "guardrail:not_worth_contacting": "No message: no offer here pays off at realistic save rates.",
+    "guardrail:receipt_only_plan_move": "No message: the cheaper plan is shown on the bill and in the app only.",
+    "guardrail:contacted_this_quarter": "No message: already contacted this quarter.",
+    "recent_bill_change_backfire": "No message: the bill just went up and we have nothing that offsets it.",
+    "contacted_within_quarter": "No message: already contacted this quarter.",
+    "opted_out_of_marketing": "No message: opted out of marketing.",
+}
+CHANNEL_WORD = {"text": "text", "in_app": "in-app message", "email": "email", "phone_call": "agent call"}
+
+
+def card_reason(reason, channel, care_usd, template_id=""):
+    base = reason.split("|")[0]
+    if template_id.startswith("FIX_CALLBACK_CREDIT_RECENT"):
+        r = CARD_REASON["fix_recent_credit"]
+    elif template_id.startswith("FIX_CALLBACK_RECENT"):
+        r = CARD_REASON["fix_recent"]
+    elif base.startswith("retention_pays_at_10pct:"):
+        r = CARD_REASON[base.split(":", 1)[1]]
+    elif base.startswith("fix_first_override_of_"):
+        r = CARD_REASON["fix_first_override"]
+    else:
+        return CARD_REASON[base]
+    return r.replace("$25", f"${care_usd}") + f" Sent as: {CHANNEL_WORD[channel]}."
 
 
 def args():
     p = argparse.ArgumentParser()
-    T = Path("/workspace/tmobile")
-    p.add_argument("--picks", default=str(T / "scratch_models/chart_check/picks_retention_10.csv"))
-    p.add_argument("--offers", default=str(REPO / "harness/out/offers.csv"))
-    p.add_argument("--receipt", default="/tmp/value_ledger/receipt.csv")
-    p.add_argument("--hidden", default=str(T / "scratch_models/hidden_value/hidden_value_items.csv"))
+    I = HERE / "inputs"                      # committed copies of the other lanes' files (see inputs/README.md)
+    p.add_argument("--picks", default=str(I / "guardrail_detail.csv"),
+                   help="who the retention policy picks: a picks file (picked, action) or a guardrail_detail.csv "
+                        "(policy_selected, policy_action)")
+    p.add_argument("--offers", default=str(I / "offers_min.csv"), help="engine output; needs action_code, do_nothing_reason")
+    p.add_argument("--receipt", default=str(I / "receipt.csv"))
+    p.add_argument("--hidden", default=str(I / "hidden_value_items.csv"))
     p.add_argument("--sandbox", default=str(REPO / "vendor/dubhacks/data/sandbox.db"))
-    p.add_argument("--guardrail", default="v2:experiments/efficacy/out/guardrail.csv")
+    p.add_argument("--guardrail", default=str(I / "guardrail.csv"))
     p.add_argument("--contact-log", default=None)
-    p.add_argument("--exemptions-applied", choices=["auto", "yes", "no"], default="auto",
-                   help="yes = the guardrail file already exempts fix-only callbacks and new-phone (device_installment) "
+    p.add_argument("--opt-out", default=None, help="optional CSV of account_id that opted out of marketing (hard block)")
+    p.add_argument("--exemptions-applied", choices=["auto", "yes", "no"], default="yes",
+                   help="default yes: the committed $1,478 guardrail (inputs/) already exempts fix-only callbacks and new-phone (device_installment) "
                         "increases, so use it as-is; no = apply those two exemptions here; auto = yes only if the file "
                         "has an 'exemptions_applied' column that is true")
     p.add_argument("--templates", default=str(HERE / "templates.json"))
@@ -138,6 +189,9 @@ def main():
     offers = pd.read_csv(a.offers).set_index("account_id")
     if Path(a.picks).exists():
         picks = pd.read_csv(a.picks).set_index("account_id"); picks_src = a.picks
+        if "policy_selected" in picks.columns:   # guardrail_detail.csv: the policy's own picks (before the guardrail)
+            picks = pd.DataFrame({"picked": picks.policy_selected.astype(bool).astype(int),
+                                  "action": picks.policy_action.where(picks.policy_selected.astype(bool), "do_nothing")})
     else:   # fallback: shipped engine picks restricted to retention actions (warn: these were picked at 44%)
         picks = pd.DataFrame({"picked": offers.action_code.isin(BODY).astype(int),
                               "action": offers.action_code.where(offers.action_code.isin(BODY), "do_nothing")})
@@ -154,6 +208,7 @@ def main():
         ex_applied = guard is not None and "exemptions_applied" in guard.columns and bool(guard.exemptions_applied.astype(bool).all())
     else:
         ex_applied = a.exemptions_applied == "yes"
+    optout = set(pd.read_csv(a.opt_out).account_id) if a.opt_out and Path(a.opt_out).exists() else set()
     clog = None
     if a.contact_log and Path(a.contact_log).exists():
         clog = pd.read_csv(a.contact_log, parse_dates=["last_contact_date"]).set_index("account_id").last_contact_date
@@ -221,6 +276,8 @@ def main():
                 reason = "plan_move_receipt_only"
             else:
                 reason = "not_worth_contacting_at_realistic_save_rates"
+        elif aid in optout:
+            reason = "opted_out_of_marketing"
         elif gr is not None:
             reason = f"guardrail:{gr}"
         elif guard is None and aid in bill_change_ids and act not in OFFSETS_BILL_CHANGE and not exempt:
@@ -273,14 +330,25 @@ def main():
                 facts["plans.price_guarantee_years"] = slots["pg_years"]
             pref = A.contact_preference
             facts["accounts.contact_preference"] = pref
+            # channel = the customer's own stated preference (never a channel ranking); perk reminders stay in-app
             if T["bodies"][body]["channel_rule"] == "in_app":
-                channel, cl = "in_app", "CLOSE_APP"
+                channel = "in_app"
             else:
                 channel = {"sms": "text", "app": "in_app", "email": "email", "call": "phone_call"}[pref]
-                cl = {"text": "CLOSE_SMS", "in_app": "CLOSE_APP", "email": "CLOSE_EMAIL", "phone_call": "CLOSE_CALL"}[channel]
-            tid = f"{body}.{op}.{cl}"
-            men = fill(T["openers"][op]["en"], slots) + " " + fill(T["bodies"][body]["en"], slots) + T["closers"][cl]["en"]
-            mes = fill(T["openers"][op]["es"], slots) + " " + fill(T["bodies"][body]["es"], slots) + T["closers"][cl]["es"]
+            ck = T["bodies"][body]["cta"]
+            tid = f"{body}.{op}.{channel}"
+            fr = T["frames"][channel]
+            def compose(l):
+                o = fill(T["openers"][op][l], slots)
+                if fr.get("strip_greeting"):   # call script: the prefix already greets, keep only the opener's substance
+                    o = re.sub(r"^(Hi there\.|Hi[.,]|Hola[.,])\s*", "", o)
+                    o = o[:1].upper() + o[1:]
+                    parts = [fr["prefix"][l]] + ([o] if o else [])
+                else:
+                    parts = [fr["prefix"][l] + o]
+                parts += [fill(T["bodies"][body][l], slots), T["cta"][ck][channel][l], T["closers"][channel][l]]
+                return " ".join(parts)
+            men, mes = compose("en"), compose("es")
 
         # ---------- receipt lines (bill / app, tap-to-confirm; never a text, never counted as a contact)
         rec = []
@@ -360,9 +428,13 @@ def main():
         vals = {v.split("=", 1)[1] for v in r.facts_used.split(";")}
         for col in ("message_en", "message_es"):
             t = getattr(r, col)
-            if not (TEXT_MIN <= len(t) <= TEXT_MAX): problems.append(f"{r.account_id} {col}: length {len(t)}")
-            if "STOP" not in t and "Settings" not in t and "Configuración" not in t and "Unsubscribe" not in t and "baja" not in t and "Guion" not in t and "Agent script" not in t:
-                problems.append(f"{r.account_id} {col}: no opt-out")
+            hi = TEXT_MAX if r.channel == "text" else 420
+            if not (TEXT_MIN <= len(t) <= hi): problems.append(f"{r.account_id} {col}: length {len(t)} on {r.channel}")
+            optout_word = {"text": ("STOP",), "in_app": ("Settings", "Configuración"), "email": ("Unsubscribe", "baja"),
+                           "phone_call": ("stop them", "dejar de llamarle")}[r.channel]
+            if not any(w in t for w in optout_word): problems.append(f"{r.account_id} {col}: no opt-out for {r.channel}")
+            if r.channel != "text" and re.search(r"Reply (YES|STOP)|Responda (SÍ|STOP)", t):
+                problems.append(f"{r.account_id} {col}: text-only wording on {r.channel}")
             for d in re.findall(r"\$(\d+(?:\.\d+)?)", t):
                 if d not in vals: problems.append(f"{r.account_id} {col}: ${d} not in facts_used")
     for r in RL.itertuples():
@@ -378,13 +450,25 @@ def main():
 
     out = Path(a.out_dir)
     D.to_csv(out / "outreach_drafts.csv", index=False)
+    # tm-ui customer card: exactly account_id, outreach_reason, message_en, message_es (blank when silent)
+    C = pd.DataFrame({"account_id": D.account_id,
+                      "outreach_reason": [card_reason(r, c, usd(care_credit_cents), t) for r, c, t in zip(D.reason, D.channel, D.template_id)],
+                      "message_en": D.message_en, "message_es": D.message_es})
+    for col in ("outreach_reason", "message_en", "message_es"):
+        for aid, t in zip(C.account_id, C[col]):
+            if re.search(r"(?i)synthetic|sint[eé]tic|\block|locked", t or ""):
+                problems.append(f"{aid} card {col}: forbidden label")
+    assert len(C) == 5042 and list(C.columns) == ["account_id", "outreach_reason", "message_en", "message_es"]
+    assert ((C.message_en == "") == (D.contact_yes_no == "no")).all()
+    C.to_csv(out / "outreach_card.csv", index=False)
     RL.to_csv(out / "outreach_receipt_lines.csv", index=False)
 
     # ---------- summary (synthetic)
     S = ["# Outreach drafts: summary (ALL NUMBERS SYNTHETIC)", "",
-         f"Generated by `draft_outreach.py` from: picks `{Path(picks_src).name if 'FALLBACK' not in picks_src else picks_src}`, "
-         f"engine `offers.csv`, receipt `receipt.csv`, hidden value `hidden_value_items.csv`, sandbox.db (read-only). "
-         f"Guardrail: {guard_src}; exemptions already applied in file: {ex_applied}.", "",
+         f"Generated by `draft_outreach.py` from (all under `inputs/` unless noted): picks `{Path(picks_src).name if 'FALLBACK' not in picks_src else picks_src}`, "
+         f"engine `{Path(a.offers).name}`, receipt `{Path(a.receipt).name}`, hidden value `{Path(a.hidden).name}`, sandbox.db (read-only). "
+         f"Guardrail: `{Path(guard_src).name if Path(guard_src).exists() else guard_src}`; exemptions already applied in file: {ex_applied}.", "",
+         f"- Card for the customer screen: `outreach_card.csv` (account_id, outreach_reason, message_en, message_es; {len(C):,} rows, messages blank when silent).",
          f"- Accounts: {len(D):,}. Direct contacts: {(D.contact_yes_no=='yes').sum():,}. Silent: {(D.contact_yes_no=='no').sum():,}.",
          f"- Bill-change guardrail field (non-stable reason, change > 0, bill months {last3[0]}..{last3[-1]}): {len(bill_change_ids):,} accounts "
          f"(not the {len(bill_up_ids):,} whose bill simply went up).",
@@ -395,7 +479,8 @@ def main():
          "## Contacts by message language (primary)", "", md(D[D.contact_yes_no=='yes'].primary_language.value_counts(), "accounts"), "",
          "## Receipt lines by type (bill/app, tap-to-confirm, never a text)", "", md(RL.line_type.value_counts(), "lines"), "",
          "## Validation", "", f"- Problems found: {len(problems)}"] + [f"  - {p}" for p in problems[:50]] + [
-         f"- Max direct-message length: EN {D.message_en.str.len().max()} / ES {D.message_es.str.len().max()} characters."]
+         f"- Max text-message length: EN {D[D.channel=='text'].message_en.str.len().max()} / ES {D[D.channel=='text'].message_es.str.len().max()} characters (limit 320); other channels limit 420.",
+         "- Determinism: same inputs give byte-identical CSVs (checked by running twice and comparing md5)."]
     (out / "outreach_summary.md").write_text("\n".join(S) + "\n")
     print("\n".join(S))
     if problems:

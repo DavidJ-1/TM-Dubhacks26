@@ -1,0 +1,44 @@
+Guardrail summary. ALL NUMBERS SYNTHETIC (stub accounts, simulated labels; not T-Mobile customer data).
+RULE=new (new = fix-only and new-phone-only increases exempt), kept value $1,478 (value scale 0.8057)
+Blocking bill-change accounts: 562 of 1,412
+Retention picks passing: 184 of 202 policy picks (incl. 0 swapped to an offsetting credit)
+Accounts: 5,042   as_of 2026-10-01   bill-change window 2026-07..2026-09
+Policy: retention-only, re-picked at 10% save rate (scale 0.2254 = 10% / 0.4437): 202 selected, policy EV $4,142
+Rule 1 swaps: 0 bill-change accounts moved from a non-offsetting action to their best positive-EV offsetting credit (EV after swaps $4,142)
+
+contact_ok True: 184   False: 4,858
+contacted EV kept $4,109 of $4,142 (blocked selected accounts carried $32)
+
+block_reason counts:
+  not_worth_contacting     4,041
+  receipt_only_plan_move   499
+  bill_change_no_fix       318
+  (contact ok)             184
+
+The 1,412 bill-change accounts (non-'stable' reason, increase > 0):
+  contacted 149   blocked 1,263
+    not_worth_contacting     859
+    bill_change_no_fix       318
+    (contact ok)             149
+    receipt_only_plan_move   86
+  by bill-change reason (contacted / total):
+    device_installment     40 / 892
+    installment_ended       1 / 9
+    promo_expired         108 / 511
+
+Selected by the policy but blocked: bill_change_no_fix: 18
+Contacted, by action: fix_first: 126, care_credit_fix_first: 29, perk_reminder: 26, check_in: 2, bill_shock_price_lock: 1
+Contacted accounts that also get a receipt plan line: 5
+Fatigue hook: no proactive-contact log in the data; rule blocks nobody
+why_line length: max 126, mean 82
+
+10 example rows:
+  ACC-00037  ok=True  -                        We'd like to call and get your open billing issue fixed. No sales pitch, no plan change.
+  ACC-00063  ok=True  -                        We'd like to call and get your open coverage issue fixed. No sales pitch, no plan change.
+  ACC-00070  ok=True  -                        We'd like to call and get your open coverage issue fixed. No sales pitch, no plan change.
+  ACC-00002  ok=False bill_change_no_fix       Your bill went up $21 when a promo ended. We have no offer that lowers it right now, so we won't message you about it.
+  ACC-00005  ok=False bill_change_no_fix       Your bill went up $32 when a promo ended. We have no offer that lowers it right now, so we won't message you about it.
+  ACC-00010  ok=False receipt_only_plan_move   A plan with the same features for $10/mo less is on your bill. Switch only if you want to.
+  ACC-00030  ok=False receipt_only_plan_move   A plan with the same features for $10/mo less is on your bill. Switch only if you want to.
+  ACC-00001  ok=False not_worth_contacting     Nothing we'd offer right now beats leaving your account as is. Your open plan change issue stays with support.
+  ACC-00003  ok=False not_worth_contacting     Nothing we'd offer right now beats leaving your account as is.
