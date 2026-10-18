@@ -1,8 +1,9 @@
 """Slide-ready charts for the demo (tm-ui lane). ALL DATA SYNTHETIC.
 
 One command (from repo root):  python app/charts/make_charts.py
-Reads harness/out/*.csv (falls back to app/mock/*.csv through app/data.py) and writes 1600x900 PNGs
-to app/charts/. Charts whose inputs don't exist yet are written as clearly-marked placeholders.
+Reads harness/out/*.csv first, then the tracked demo_data/*.csv (fresh clone), then app/mock/*.csv, and writes
+1600x900 PNGs to app/charts/. Repo-relative paths only. A chart whose input is not in the repo is SKIPPED
+with a printed note (any existing PNG is left as is); TM_OUT_DIR=/path adds a directory in front.
 
 Inputs
   01 quadrant / 01b top-20 : churn_scores.csv (p_churn_90d, risk_rank, risk_reason_1) + offers.csv (action[_code])
@@ -13,7 +14,7 @@ Inputs
   04 Model C uplift/Qini   : harness/model_c_artifacts/uplift_curve.csv (+ uplift_auuc.csv), IPW cum_incremental_saves
   05 Model C policy value  : harness/model_c_artifacts/policy_eval.csv, doubly-robust *_dr columns
                              Both are final by default; TM_MODELC_PLACEHOLDER=1 forces placeholders.
-  06 learning curve        : harness/bench/*.csv or /workspace/tmobile/bench-scratch/*learning*.csv
+  06 learning curve        : harness/bench/out/learning_curve_long.csv (tracked) or harness/bench/*.csv
                              expected columns: model, n_train, metric, value
 """
 from __future__ import annotations
@@ -33,7 +34,20 @@ HERE = Path(__file__).resolve().parent
 APP = HERE.parent
 REPO = APP.parent
 sys.path.insert(0, str(APP))
-from data import load_all, out_dirs  # noqa: E402
+import data as _data  # noqa: E402
+from data import load_all  # noqa: E402
+
+
+def out_dirs() -> list[Path]:
+    """Input search order for charts: TM_OUT_DIR (optional), REPO/harness/out, then tracked REPO/demo_data."""
+    import os
+    if os.environ.get("TM_USE_MOCK") == "1":
+        return []
+    dirs = [Path(os.environ["TM_OUT_DIR"])] if os.environ.get("TM_OUT_DIR") else []
+    return dirs + [REPO / "harness" / "out", REPO / "demo_data"]
+
+
+_data.out_dirs = out_dirs  # load_all()/load_one() resolve out_dirs at call time; app/data.py itself is unchanged
 from messages import action_label, normalize_action  # noqa: E402
 
 MAGENTA, DARK, GREY, LIGHT = "#E20074", "#1F1F1F", "#8A8A8A", "#D9D9D9"
@@ -78,6 +92,24 @@ def placeholder(name, title, waiting, expects):
     ax.text(0.5, 0.32, expects, fontsize=10, color=GREY, ha="center", va="top", transform=ax.transAxes, wrap=True)
     save(f, name, "PLACEHOLDER")
     return {"placeholder": True, "expects": expects, "waiting": waiting}
+
+
+SKIPPED: list[str] = []
+
+
+def skip(name, why):
+    """Input not in the repo: do not crash and do not overwrite an existing PNG with a placeholder."""
+    msg = f"SKIPPED {name}: {why}"
+    print(msg)
+    SKIPPED.append(msg)
+    return {"skipped": True, "why": why}
+
+
+def rel(p) -> str:
+    try:
+        return str(Path(p).resolve().relative_to(REPO))
+    except (ValueError, TypeError):
+        return str(p)
 
 
 def esc(t: str) -> str:
@@ -220,7 +252,7 @@ def gain_curve(y, score, rng=None):
 def chart_gain(df):
     d = df[~df.is_persona].dropna(subset=["churn_90d", "p_churn_90d"])
     if not len(d) or d.churn_90d.sum() == 0:
-        return placeholder("02_cumulative_gain.png", "Cumulative gain", "Waiting on labels.csv", "needs churn_90d")
+        return skip("02_cumulative_gain.png", "labels.csv with churn_90d not found in harness/out or demo_data")
     y = d.churn_90d.values.astype(int)
     rng = np.random.default_rng(42)
     f, ax = fig()
@@ -264,7 +296,7 @@ def chart_gain(df):
 def chart_calibration(df):
     d = df[~df.is_persona].dropna(subset=["churn_90d", "p_churn_90d"]).copy()
     if not len(d):
-        return placeholder("03_calibration.png", "Calibration", "Waiting on labels.csv", "needs churn_90d")
+        return skip("03_calibration.png", "labels.csv with churn_90d not found in harness/out or demo_data")
     d["bucket"] = pd.qcut(d.p_churn_90d.rank(method="first"), 10, labels=False)
     g = d.groupby("bucket").agg(pred=("p_churn_90d", "mean"), obs=("churn_90d", "mean"), n=("churn_90d", "size")).reset_index()
     ece = float((g.n * (g.pred - g.obs).abs()).sum() / g.n.sum())
@@ -338,7 +370,7 @@ def chart_qini():
     if p is not None and MODEL_C_FORCE_PLACEHOLDER:
         return placeholder("04_modelC_qini.png", title, "Placeholder forced", f"TM_MODELC_PLACEHOLDER=1 (input: {p.name}).")
     if p is None:
-        return placeholder("04_modelC_qini.png", title, "Waiting on Model C", expects)
+        return skip("04_modelC_qini.png", "Model C trial output not in repo. " + expects)
     q = pd.read_csv(p)
     xc = _col(q, "frac_targeted", "share_targeted", "fraction_targeted", "share", "frac", "n_targeted", "targeted")
     yc = _col(q, "cum_incremental_saves", "incremental_saves", "qini", "uplift")
@@ -388,7 +420,7 @@ def chart_qini():
     ax.legend(frameon=False, loc="lower right", fontsize=9)
     f.subplots_adjust(left=0.11, right=0.97, top=0.88)
     save(f, "04_modelC_qini.png", esc(f"{CIRC_NOTE} Qini area = IPW, from uplift_auuc.csv. Source: {p.parent.name}/{p.name} (tm-offers)."))
-    return {"file": str(p), "y": yc, "auuc_ipw": auuc, "share_of_oracle_true": share_oracle, "curves": curves}
+    return {"file": rel(p), "y": yc, "auuc_ipw": auuc, "share_of_oracle_true": share_oracle, "curves": curves}
 
 
 def chart_policy():
@@ -398,7 +430,7 @@ def chart_policy():
     if p is not None and MODEL_C_FORCE_PLACEHOLDER:
         return placeholder("05_modelC_policy_value.png", title, "Placeholder forced", f"TM_MODELC_PLACEHOLDER=1 (input: {p.name}).")
     if p is None:
-        return placeholder("05_modelC_policy_value.png", title, "Waiting on Model C", expects)
+        return skip("05_modelC_policy_value.png", "Model C trial output not in repo. " + expects)
     t = pd.read_csv(p)
     need = ["policy", "net_value_no_upsell_dr_usd", "net_value_with_upsell_dr_usd", "churners_saved_dr", "cost_per_save_dr_usd"]
     if not set(need) <= set(t.columns):
@@ -497,7 +529,7 @@ def chart_policy():
          esc(f"{CIRC_NOTE}{close_note} DR estimates with 95% CIs, "
              f"{n_test:,} test accounts x {reps} re-randomized cohorts. "
              f"Oracle uses the hidden simulated effects (reference only). Source: {p.parent.name}/{p.name} (tm-offers)."))
-    return {"file": str(p), "estimator": "doubly_robust", "has_ci": has_ci, "table": rows}
+    return {"file": rel(p), "estimator": "doubly_robust", "has_ci": has_ci, "table": rows}
 
 
 # ------------------------------------------------------------------ 06 learning curve
@@ -533,7 +565,7 @@ def _plot_learning(t: pd.DataFrame, src: str):
                                      "n_max": int(g.n_train.iloc[-1]), "auc_max_n": round(float(g.value.iloc[-1]), 4),
                                      "sd_max_n": round(float(g.sd.iloc[-1]), 4)}
     ceiling = None
-    cp = Path(src).parent / "ceilings.csv" if Path(src).is_absolute() else REPO / "harness" / "bench" / "out" / "ceilings.csv"
+    cp = Path(src).parent / "ceilings.csv"
     if cp.exists():
         c = pd.read_csv(cp)
         c = c[c.target == "churn_90d"]
@@ -566,15 +598,14 @@ def _plot_learning(t: pd.DataFrame, src: str):
          f"Real 5k: trained on n sandbox accounts, scored on a 25% holdout (10 seeds). Synthetic 50k: trained on n of tm-data's "
          f"Gaussian-copula synthetic accounts, scored on all 5,000 sandbox accounts (3-10 seeds). Labels in both come from our "
          f"own simulated recipe, so this is a pipeline check, not real-world accuracy. Points above the ceiling are noise: on the same real rows the oracle scores 0.864 and the model 0.869 (difference +0.005, 95% CI -0.003 to +0.015). Pink band = +/-1 sd for the Model A logistic regression. Source: {Path(src).name} (tm-bench).")
-    return {"file": str(src), "metric": met, "ceiling": ceiling, "series": out}
+    return {"file": rel(src), "metric": met, "ceiling": ceiling, "series": out}
 
 
 def chart_learning():
     expects = ("Expected: harness/bench/out/learning_curve_long.csv\n(target, train_source, model, n_train, metric, value, sd;"
                " filtered to target == churn_90d)\nor harness/bench/*.csv with model, n_train, metric, value")
     long_csv = REPO / "harness" / "bench" / "out" / "learning_curve_long.csv"
-    cands = ([long_csv] if long_csv.exists() else []) + [Path(c) for c in sorted(glob.glob(str(REPO / "harness" / "bench" / "*.csv")))] + \
-        [Path(c) for c in sorted(glob.glob("/workspace/tmobile/bench-scratch/*learning*.csv"))]
+    cands = ([long_csv] if long_csv.exists() else []) + [Path(c) for c in sorted(glob.glob(str(REPO / "harness" / "bench" / "*.csv")))]
     for c in cands:
         try:
             t = pd.read_csv(c)
@@ -589,7 +620,7 @@ def chart_learning():
             t["metric"] = "score"
         if len(t):
             return _plot_learning(t, str(c))
-    return placeholder("06_learning_curve.png", "Benchmark learning curve", "Waiting on tm-bench", expects)
+    return skip("06_learning_curve.png", "no learning-curve CSV in repo. " + expects.replace(chr(10), " "))
 
 
 # ------------------------------------------------------------------ main
@@ -609,7 +640,7 @@ def main():
             SCORE_NOTE = f"Holdout scores: {hold.name}."
     if not SCORE_NOTE:
         SCORE_NOTE = "Scores on all accounts (incl. training rows); see model card for holdout metrics."
-    out = {"sources": {k: (v.source, v.path) for k, v in data.items()}, "score_note": SCORE_NOTE}
+    out = {"sources": {k: (v.source, rel(v.path) if v.path else "") for k, v in data.items()}, "score_note": SCORE_NOTE}
     out["quadrant"] = chart_quadrant(df)
     chart_top20(df)
     out["gain"] = chart_gain(eval_df)
@@ -617,6 +648,7 @@ def main():
     out["qini"] = chart_qini()
     out["policy"] = chart_policy()
     out["learning"] = chart_learning()
+    out["skipped"] = SKIPPED
     import json
     (HERE / "chart_stats.json").write_text(json.dumps(out, indent=1, default=str))
     print(json.dumps({k: v for k, v in out.items() if k != "calibration"}, indent=1, default=str)[:3000])
