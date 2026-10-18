@@ -253,10 +253,69 @@ def _hero_fig(_df: pd.DataFrame, sig: str, log: bool = False) -> go.Figure:
                      tickprefix="$", tickfont=dict(family="SM", size=11, color=MUTED),
                      fixedrange=True, rangemode="tozero", gridcolor="rgba(17,17,17,0.15)",
                      linecolor=INK, linewidth=1, zeroline=False)
+    fig.update_layout(margin=dict(l=64, r=72, t=12, b=56))
     return fig
 
 
-def render_hero(df: pd.DataFrame, *, show_money: bool = True) -> list:
+_MARK_SYMBOLS = ("diamond", "square", "triangle-up", "star")
+
+
+def _mark_customers(base: go.Figure, df: pd.DataFrame, log: bool, marks: list[dict] | None,
+                    selected: str | None) -> go.Figure:
+    """Larger labeled markers for the quick picks, and a different marker for whoever is selected.
+
+    Copies `base` so the cached cloud is left alone. Each marked point keeps the account id in customdata
+    so a click still selects that customer."""
+    fig = go.Figure(base)
+    marks = marks or []
+    by_id = df.set_index("account_id", drop=False)
+    tip = ("Customer %{customdata[1]}<br>Churn risk %{customdata[2]}<br>Monthly bill %{customdata[3]}"
+           "<br>%{customdata[4]}<extra></extra>")
+
+    def xy(acc: str):
+        if acc not in by_id.index:
+            return None
+        row = by_id.loc[acc]
+        if isinstance(row, pd.DataFrame):
+            row = row.iloc[0]
+        rv = float(row.p_churn_90d) * 100
+        bill = row["last_bill_cents"] if "last_bill_cents" in row.index else 0
+        y = 0.0 if pd.isna(bill) else float(bill) / 100
+        return (max(rv, 0.05) if log else rv), y, rv, y
+
+    seen: set[str] = set()
+    for i, m in enumerate(marks):
+        acc = str(m.get("id", ""))
+        pt = xy(acc)
+        if pt is None:
+            continue
+        seen.add(acc)
+        x, y, rv, bill = pt
+        on = acc == selected
+        fig.add_trace(go.Scatter(
+            x=[x], y=[y], mode="markers+text",
+            marker=dict(size=22 if on else 16, symbol=_MARK_SYMBOLS[i % len(_MARK_SYMBOLS)],
+                        color=MAG if on else BG, line=dict(width=2, color=INK)),
+            text=[m.get("text") or cid(acc)], textposition="top right",
+            textfont=dict(family="SM", size=12, color=INK),
+            customdata=[[acc, cid(acc), pct(rv), f"${bill:,.0f}/mo", m.get("hover") or ""]],
+            hovertemplate=tip, showlegend=False))
+    if selected and selected not in seen:
+        pt = xy(str(selected))
+        if pt is not None:
+            x, y, rv, bill = pt
+            fig.add_trace(go.Scatter(
+                x=[x], y=[y], mode="markers+text",
+                marker=dict(size=18, symbol="circle", color=BG, line=dict(width=3, color=MAG)),
+                text=[cid(str(selected))], textposition="top right",
+                textfont=dict(family="SM", size=12, color=MAG),
+                customdata=[[str(selected), cid(str(selected)), pct(rv), f"${bill:,.0f}/mo", "selected"]],
+                hovertemplate=tip, showlegend=False))
+    return fig
+
+
+def render_hero(df: pd.DataFrame, *, show_money: bool = True, selected: str | None = None,
+                marks: list[dict] | None = None) -> list:
     """Clickable risk-vs-bill scatter. Returns the selected plotly points (possibly empty).
 
     show_money: the hero shows no money of ours either way (bills are the customer's own); kept for a uniform API.
@@ -276,7 +335,7 @@ def render_hero(df: pd.DataFrame, *, show_money: bool = True) -> list:
 <div><b>{messaged}</b><span>messaged</span></div>
 <div><b>{texts}</b><span>by text</span></div>
 </div>
-<div class='o-lbl' style='margin-top:12px'>every dot is one customer · magenta = flagged</div></div>""", unsafe_allow_html=True)
+<div class='o-lbl' style='margin-top:12px'>every dot is one customer · magenta = flagged<br>labeled dots are quick picks</div></div>""", unsafe_allow_html=True)
     with right:
         if "risk_axis" not in st.session_state:
             st.session_state["risk_axis"] = "Linear"
@@ -284,10 +343,12 @@ def render_hero(df: pd.DataFrame, *, show_money: bool = True) -> list:
         log = st.session_state.get("risk_axis") == "Log scale"
         sig = f"{scored}-{flagged}-{messaged}-{float(df.p_churn_90d.sum()):.6f}-{'log' if log else 'lin'}"
         gen = int(st.session_state.get("_chart_gen", 0))
-        ev = st.plotly_chart(_hero_fig(df, sig, log), width="stretch", theme=None,
+        fig = _mark_customers(_hero_fig(df, sig, log), df, log, marks, selected)
+        ev = st.plotly_chart(fig, width="stretch", theme=None,
                              config={"displayModeBar": False, "scrollZoom": False, "doubleClick": False},
                              key=f"orbit_hero_{gen}", on_select="rerun", selection_mode="points")
-        st.markdown("<div class='o-hint'>Click a dot to open that customer. The chart does not zoom.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='o-hint'>Click a dot to open that customer. Labeled dots are the quick picks. "
+                    "The chart does not zoom.</div>", unsafe_allow_html=True)
     st.markdown("<div class='o-cue'>↓&nbsp;&nbsp;SCROLL · OPEN ONE CUSTOMER</div>", unsafe_allow_html=True)
     points = []
     if ev is not None and getattr(ev, "selection", None) is not None:

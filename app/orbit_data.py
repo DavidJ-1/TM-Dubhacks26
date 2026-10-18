@@ -87,6 +87,11 @@ def quick_button(q: dict) -> str:
     return f"{customer_cid(q['id'])} · {quick_label(q)}"
 
 
+def quick_marks() -> list[dict]:
+    """Scatter labels: the id beside the dot, and the short reason on hover."""
+    return [{"id": q["id"], "text": customer_cid(q["id"]), "hover": quick_label(q)} for q in QUICK]
+
+
 def customer_cid(account_id: str) -> str:
     """Persona codes stay '38'; everyone else is '#02363'."""
     account_id = str(account_id)

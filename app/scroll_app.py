@@ -42,13 +42,10 @@ def frame():
 
 
 df = frame()
-_hero_points = _call(O.render_hero, df) or []
-dot = D.account_from_point_selection(_hero_points)
-
 dec = D.offer_decisions(df)   # next-version decisions (offers team's decisions.csv; ledger fallback)
 
-# ---- one selected customer. The dropdown, a quick pick, a chart dot, and a table row all write
-# st.session_state["acc"] through D.apply_shared_selection, before the widgets are created.
+# ---- one selected customer. Pending row clicks are applied before the chart so the highlight matches.
+# A new chart click updates the selection and reruns once, before the walk-through and the deal draw.
 _ids = set(df.account_id)
 st.session_state.setdefault("acc", f"{D.PERSONA}38")
 if "customer_pick" not in st.session_state:
@@ -56,20 +53,19 @@ if "customer_pick" not in st.session_state:
 if st.session_state.get("seg") not in D.QUICK_IDS:
     st.session_state["seg"] = st.session_state["acc"] if st.session_state["acc"] in D.QUICK_IDS else None
 pending = st.session_state.pop("_pending_acc", None)
-_seen = st.session_state.get("_seen_dot")
 if pending and pending in _ids:
     D.apply_shared_selection(st.session_state, pending)
-    # Drop a stale dot highlight so it cannot put the previous customer back.
-    if dot and dot != pending:
+    if st.session_state.get("_seen_dot") not in (None, pending):
         st.session_state["_chart_gen"] = int(st.session_state.get("_chart_gen", 0)) + 1
         st.session_state["_seen_dot"] = None
-        st.rerun()
-    st.session_state["_seen_dot"] = None
-elif dot and dot in _ids and dot != _seen:
+
+_hero_points = _call(O.render_hero, df, selected=st.session_state.get("acc"), marks=D.quick_marks()) or []
+dot = D.account_from_point_selection(_hero_points)
+if dot and dot in _ids and dot != st.session_state.get("acc"):
     D.apply_shared_selection(st.session_state, dot)
     st.session_state["_seen_dot"] = dot
-elif not dot:
-    st.session_state["_seen_dot"] = None
+    st.rerun()
+st.session_state["_seen_dot"] = dot or None
 
 _menu_ids = D.customers_by_risk(df)
 _menu_labels = {

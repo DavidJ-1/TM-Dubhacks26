@@ -90,3 +90,12 @@ def test_scatter_is_fixed_and_plainly_labeled():
     assert fig_log.layout.xaxis.title.text == "Churn risk (log scale)"
     assert fig_log.layout.xaxis.type == "log"
     assert fig_log.layout.xaxis.fixedrange is True
+    marked = O._mark_customers(
+        fig, df, False,
+        [{"id": "ACC-00001", "text": "#00001", "hover": "very high risk, fix-first message"}],
+        "ACC-00002",
+    )
+    texts = [t for trace in marked.data if trace.text is not None
+             for t in (trace.text if isinstance(trace.text, (list, tuple)) else [trace.text])]
+    assert "#00001" in texts and "#00002" in texts
+    assert len(marked.data) == len(fig.data) + 2
