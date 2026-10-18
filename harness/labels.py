@@ -211,11 +211,23 @@ def fit(T: pd.DataFrame, coefs, shrink: float, regular: np.ndarray):
     return w, b0, sigmoid(b0 + score)
 
 
-def build(recipe: str = "tuned"):
-    f = pd.read_csv(FEATURES)
+def toy_from_features(f: pd.DataFrame) -> np.ndarray:
+    """Sandbox toy formula (datagen/reference_model.py) applied to features.csv columns (same definitions;
+    differs from the SQL version only by feature rounding, max abs diff ~1e-4). Used for scaled data."""
+    lg = (-3.9 + 0.45 * f["support_90d"] + 0.8 * (-f["avg_sentiment"].fillna(0)).clip(lower=0)
+          + 4.0 * f["bill_increase_pct"].fillna(0) + 2.2 * f["competitor_research_score"]
+          + 1.2 * f["port_out_inquiry"] - 0.01 * f["tenure_months"].clip(upper=60)
+          + 0.7 * f["plan_misfit_share"].fillna(0))
+    return sigmoid(lg.values.astype(float))
+
+
+def label_frame(f: pd.DataFrame, recipe: str = "tuned", toy_p=None, regular=None):
+    """All label columns for a features frame. b0s are re-solved on `regular` rows (default: non-personas).
+    toy_p: array/Series aligned to f (default: toy formula on features)."""
     coefs = RECIPES[recipe]
     T = terms(f)[[c for c, _, _ in coefs]]
-    regular = (f["is_persona"] == 0).values
+    if regular is None:
+        regular = (f["is_persona"] == 0).values
     if recipe == "tuned":
         shrink = SHRINK
         w, b0, h = fit(T, coefs, shrink, regular)
@@ -231,8 +243,7 @@ def build(recipe: str = "tuned"):
         "churn_90d": (uniform(SEED_LABEL, f["account_id"]) < p90).astype(int),
         "p_true_90d": p90.round(6), "monthly_hazard": h.round(6),
     })
-    toy = toy_probabilities()
-    lab["toy_p"] = lab["account_id"].map(toy).round(6)
+    lab["toy_p"] = np.round(np.asarray(toy_from_features(f) if toy_p is None else toy_p, dtype=float), 6)
     lab["toy_churn"] = (uniform(SEED_TOY, lab["account_id"]) < lab["toy_p"]).astype(int)
     # top-3 label drivers per account (largest positive contributions), for sanity/debug
     contrib = T.values * w
@@ -251,8 +262,15 @@ def build(recipe: str = "tuned"):
     lab["p_upgrade_90d"] = pu.round(6)
     for j, col in enumerate(top_drivers(U, wu)):
         lab[f"upgrade_driver_{j + 1}"] = col
-    lab.attrs["b0_upgrade"] = bu
-    return lab, b0, shrink
+    lab.attrs.update(b0=b0, shrink=shrink, b0_upgrade=bu)
+    return lab
+
+
+def build(recipe: str = "tuned"):
+    f = pd.read_csv(FEATURES)
+    toy = toy_probabilities()  # exact sandbox SQL + formula
+    lab = label_frame(f, recipe, toy_p=f["account_id"].map(toy).values)
+    return lab, lab.attrs["b0"], lab.attrs["shrink"]
 
 
 PERSONAS = {"04": "high", "21": "high", "22": "high", "27": "high", "10": "low", "24": "low",
