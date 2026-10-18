@@ -1,13 +1,12 @@
-# Adversarial audit of "money saved" + product ledger (tm-models)
-
+# Adversarial audit of "money saved" + product ledger
 **All numbers are synthetic/simulated:** sandbox stub accounts and simulated churn labels, not T-Mobile customer data.
-Scripts in this folder, run with `OMP_NUM_THREADS=1 /workspace/tmobile/TM-Dubhacks26/.venv/bin/python <script>`:
+Scripts in this folder, run with `OMP_NUM_THREADS=1 .venv/bin/python <script>`:
 `base.py` (reproduces 184 / +$4,109 / break-even 4.80% exactly), `model.py` (knob model), `adversary.py` (parts 1 and 3),
-`falsify.py` (part 2), `ledger.py` (part 4, final tm-design spec), `post_swap.py`. Outputs go to `out/`. All inputs are read-only,
+`falsify.py` (part 2), `ledger.py` (part 4, final design spec), `post_swap.py`. Outputs go to `out/`. All inputs are read-only,
 and sandbox.db is opened with `mode=ro`.
 
 ## FINAL (23:4x): headline policy and costing. **All numbers synthetic.**
-Policy: the same 184, with the open-ticket rule (25 perk reminders become fix-first). Costing per Grok Bot's ruling: every fix-first contact pays $10.75 agent time + $4.25 escalation
+Policy: the same 184, with the open-ticket rule (25 perk reminders become fix-first). Costing per team ruling: every fix-first contact pays $10.75 agent time + $4.25 escalation
 (research14) plus the channel's send cost (text $0.013, in-app $0, email $0.0001). Calls pay the $15 callback only, with no double count. $25 credit and $4 annoyance unchanged.
 Reproduce with `ledger.py` (headline, bootstrap) and `POLICY=final adversary.py / falsify.py` (audits, written to `out_final/`). `stick.py` covers "do saves stick?".
 
@@ -122,7 +121,7 @@ is close to the truth (+$4,109 vs +$4,073) only because the model nearly recover
 | policy | contacts | central (10%) | at 5% | worst A | worst net-effect box | worst reasonable box |
 |---|---|---|---|---|---|---|
 | current 184 | 184 | 4,109 | 161 | 1,367 | −2,822 | −6,490 |
-| drop port-out only (tm-offers default) | 152 | 2,906 | −53 | 949 | −2,297 | −5,217 |
+| drop port-out only (the offer engine default) | 152 | 2,906 | −53 | 949 | −2,297 | −5,217 |
 | **robust A**: never-contact if break-even > 11% using the own-risk-3-months kept value | **160** (24 never-contact) | **3,808** | **303** | **1,495** | −2,255 | −5,578 |
 | robust A, port-out on its own line | 131 | 2,665 | 77 | 1,067 | −1,806 | −4,427 |
 | robust B: break-even > 11% under the stacked net-effect frictions | 28 | 1,683 | 488 | 854 | −300 | −1,234 |
@@ -131,7 +130,7 @@ is close to the truth (+$4,109 vs +$4,073) only because the model nearly recover
 Recommendation: **robust A**. It gives up $301 of central value (−7%), is better at 5% (+$303 vs +$161), break-even drops to 4.57%, and it never loses
 under the value correction. Robust B is the "only sure things" list (28). `never_contact.csv` carries `never_contact_A/B` and per-account break-evens.
 
-## 4. Product ledger (final tm-design spec; see LEDGER_SCHEMA.md)
+## 4. Product ledger (final design spec; see LEDGER_SCHEMA.md)
 `ledger.csv` (5,042 rows, same ids and order as outreach_card.csv) and `events.csv` (2,705 rows, ≤3 per account, newest first), committed on local v2
 `9e4d402` under `experiments/ledger/` (not pushed). Mid +$3,939 over the 184 (asserted), low −$2,759, high +$13,721. 32 already-leaving accounts make up +$1,193 of it,
 and 30 holdout accounts +$458. The text count of 64 is asserted against outreach_card.csv. No forbidden strings (asserted).
@@ -151,5 +150,5 @@ Bootstrap 95% range for the old +$4,109: −$2,805 to +$13,292, P(net>0) 0.82 at
 - Backfire, re-churn and leakage ranges are partly our assumptions (marked above). Value and re-churn overlap, and the adversary stacks both.
 - Channel vs cost: the ledger books the engine's $15 callback for fix-first, but the outreach drafts send some fix-first messages as text, in-app or email. If those really are
   digital, costs are overstated. If a callback follows anyway, they're right.
-- One mismatch flagged for tm-offers: ACC-01607's guardrail line says "We'll call", but outreach_drafts routes it in-app.
+- One mismatch flagged for the offer engine: ACC-01607's guardrail line says "We'll call", but outreach_drafts routes it in-app.
 - The open-ticket rule: we count 25 perk reminders with an open ticket (unresolved contact in 90 days), not 21 + 2. That matches the "open support issue comes first" rows in outreach_card.csv.

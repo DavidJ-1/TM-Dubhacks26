@@ -11,7 +11,7 @@
 | Untuned default sklearn HistGradientBoostingClassifier() | 0.784 | 0.051 | 0.140 | 0.467 | 4.672 |  |  |  |
 | Rule: 3+ support contacts in 90d (binary) | 0.744 | 0.058 | 0.061 | 0.262 | 2.621 | 0.292 | 0.766 | 0.072 |
 | Rule: rank by support_90d contact count | 0.834 | 0.043 | 0.158 | 0.537 | 5.369 |  |  |  |
-| Ours: Model A (tm-churn LR, 22 core features; its OOF) | 0.853 | 0.059 | 0.255 | 0.620 | 6.204 |  |  |  |
+| Ours: Model A (the churn model LR, 22 core features; its OOF) | 0.853 | 0.059 | 0.255 | 0.620 | 6.204 |  |  |  |
 | Oracle ceiling (label-generating probability) | 0.864 | 0.054 | 0.291 | 0.642 | 6.423 |  |  |  |
 
 ## upgrade_90d
@@ -22,7 +22,7 @@
 | HGB + sigmoid calibration (challenger) | 0.747 | 0.026 | 0.172 | 0.307 | 3.075 |  |  |  |
 | Untuned default sklearn GradientBoostingClassifier() | 0.733 | 0.028 | 0.160 | 0.304 | 3.043 |  |  |  |
 | Untuned default sklearn HistGradientBoostingClassifier() | 0.730 | 0.026 | 0.151 | 0.283 | 2.826 |  |  |  |
-| Rule: near or over data cap (binary, tm-harness rule) | 0.544 | 0.008 | 0.081 | 0.177 | 1.766 | 0.039 | 0.121 | 0.198 |
+| Rule: near or over data cap (binary, the harness rule) | 0.544 | 0.008 | 0.081 | 0.177 | 1.766 | 0.039 | 0.121 | 0.198 |
 | Rule: rank by lines over cap + usage/cap | 0.670 | 0.026 | 0.122 | 0.199 | 1.988 |  |  |  |
 | Oracle ceiling (label-generating probability) | 0.808 | 0.018 | 0.266 | 0.376 | 3.758 |  |  |  |
 

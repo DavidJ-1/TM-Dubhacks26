@@ -2,7 +2,7 @@
 
 A plain-English ledger of everything the system accounts for. One line each: **what it is**, how we handle it, and *the file or number behind it*.
 
-**Every account and number here is simulated** (the hackathon sandbox's 5,042 stub accounts plus our simulated churn labels). None of it is real T-Mobile customer data. Numbers were read from the cited files, not retyped from chat; a few were recounted from the committed CSVs (marked "recounted").
+**Every account here is one of the hackathon sandbox's 5,042 stub accounts, and the churn labels are stand-ins we built.** None of it is real T-Mobile customer data. Numbers were read from the cited files, not retyped from chat; a few were recounted from the committed CSVs (marked "recounted").
 
 The app panel reads `docs/considerations.csv` (columns `group, item, how_handled, source`). That file uses the same lines but names sources in plain words, with no file paths, people's names or the word "synthetic", so it can go on screen as is.
 
@@ -18,9 +18,9 @@ Groups 1a-1c are the complete list of inputs the risk model and offer engine rea
 | 3. Offer or do nothing | 10 |
 | 4. Do-not-contact rules and guardrails | 15 |
 | 5. Channel and language | 7 |
-| 6. Money honesty (simulated) | 9 |
+| 6. Money honesty | 9 |
 | 7. Savings line on the bill | 4 |
-| 8. Fairness audit (simulated) | 5 |
+| 8. Fairness audit | 5 |
 | 9. Privacy and compliance | 8 |
 | 10. Left out on purpose | 11 |
 | 11. Known limits | 11 |
@@ -32,7 +32,7 @@ Groups 1a-1c are the complete list of inputs the risk model and offer engine rea
 - **Commerce examples**: Plan, price, phone financing and payoff, device age, trade-in value, promotions, bill changes. *Source: `demo_data/features.csv; harness/offer_detectors.py (plans, promotions, devices, tradein_curves)`*
 - **Customer examples**: Lines on the account, tenure, support history, segment label, contact preference, language. *Source: `demo_data/features.csv; sandbox accounts table`*
 - **Live examples**: Recent support contacts and how they went, app use going quiet, comparing carriers, asking about transferring a number, a promo just ending. Comparing carriers and number-transfer questions come from what the customer tells us; we do not track calls to competitors. *Source: `demo_data/features.csv; docs/strategy/DEVPOST.md`*
-- **Simulated enrichment (job change, income, kid age band)**: Listed for transparency but switched off permanently: no code path reads it for eligibility, value or wording. *Source: `harness/offers.py CONFIG ENRICHMENT_IN_DECISIONS = False`*
+- **Generated enrichment (job change, income, kid age band)**: Listed for transparency but switched off permanently: no code path reads it for eligibility, value or wording. *Source: `harness/offers.py CONFIG ENRICHMENT_IN_DECISIONS = False`*
 - **Kid and teen lines**: Taken from the account's real line roles, never inferred; can shape an offer, but messages say 'your 4 lines', never 'your kids'. *Source: `harness/offers.py (lines.member_role); OFFER_STRATEGY.md`*
 
 ## 1a. Inputs: commerce
@@ -54,7 +54,7 @@ Groups 1a-1c are the complete list of inputs the risk model and offer engine rea
 - **Add-ons and streaming perk**: Add-ons on the account and whether streaming is already included. Used by: offer engine (perk reminder), bill/app lines. *Source: `demo_data/features.csv has_streaming_addon; account_addons; addons`*
 - **Connected lines (watch, tablet)**: Number of non-phone lines. Used by: offer engine (plan moves), bill/app lines. *Source: `demo_data/features.csv n_connected_lines`*
 - **AutoPay**: Whether AutoPay is on. Used by: offer engine (dropped from the risk model: its fitted sign contradicted common sense). *Source: `demo_data/features.csv autopay; harness/out/churn_model_card.md`*
-- **Upgrade score**: A simulated upgrade score from device age; only a gate for upgrade offers (top 15%). Used by: offer engine gate. *Source: `demo_data/upgrade_scores.csv; harness/offers.py UPGRADE_GATE`*
+- **Upgrade score**: An upgrade score we built from device age; only a gate for upgrade offers (top 15%). Used by: offer engine gate. *Source: `demo_data/upgrade_scores.csv; harness/offers.py UPGRADE_GATE`*
 
 ## 1b. Inputs: customer
 
@@ -82,7 +82,7 @@ Groups 1a-1c are the complete list of inputs the risk model and offer engine rea
 ## 2. How a customer is scored and explained
 
 - **Churn score**: A standardized logistic regression scores 90-day churn on 20 inputs; the 42 hand-built demo accounts are scored but never trained on. *Source: `harness/churn_model.py; harness/out/churn_model_card.md`*
-- **How good it is (simulated)**: Out-of-fold AUC 0.853; its riskiest 10% hold about 62% of leavers. This shows the pipeline works, not real accuracy. *Source: `harness/out/churn_model_card.md; docs/strategy/DEVPOST.md`*
+- **How good it is**: Out-of-fold AUC 0.797 against the judges' public example model's churn probabilities, where about 0.825 is the best possible (judges' README). Against our own stand-in labels it's 0.853, with about 62% of leavers in the riskiest 10%; those labels come from the same fields, so that number isn't comparable to the judges'. *Source: `scripts/predict.py` output; `harness/out/churn_model_card.md`*
 - **Who is flagged**: The riskiest 10% of the 5,000 regular accounts: 500 flagged; 505 across all 5,042 once the demo accounts are scored against the same cutoff. *Source: `demo_data/churn_scores.csv (recounted); app funnel (e576627)`*
 - **Why this score**: Each account gets up to 3 reasons to leave and 3 reasons to stay, written from its own fields, e.g. '6 unresolved support contacts in 90 days'. *Source: `demo_data/churn_scores.csv risk_reason_1..3, stay_reason_1..3`*
 - **How reasons are computed**: Each input's push on the score vs an average account, grouped; a reason must move the score by at least 0.05 and a risk-raising value is never shown as a stay reason. *Source: `harness/out/churn_model_card.md (29 reasons blocked by the direction guard)`*
@@ -132,13 +132,13 @@ Groups 1a-1c are the complete list of inputs the risk model and offer engine rea
 - **No claim one channel works better**: No telecom study compares channels on the same offer. *Source: `docs/outreach/OUTREACH_PLAYBOOK.md §3; RESEARCH.md §14a`*
 - **Same text everywhere**: Fixed templates; two runs give byte-identical files. *Source: `docs/outreach/outreach_summary.md; docs/outreach/templates.json`*
 
-## 6. Money honesty (simulated)
+## 6. Money honesty
 
-- **Result at a 10% save rate**: 184 messages come out +$3,938 ahead at our central assumption (simulated). Two rules shape it: customers with an open ticket get a fix-your-issue-first message instead of a perk reminder, and every fix-first contact is charged about $15 of agent time. *Source: `experiments/ledger/ledger_summary.json total_mid (27c2870)`*
+- **Result at a 10% save rate**: 184 messages come out +$3,938 ahead at our central assumption. Two rules shape it: customers with an open ticket get a fix-your-issue-first message instead of a perk reminder, and every fix-first contact is charged about $15 of agent time. *Source: `experiments/ledger/ledger_summary.json total_mid (27c2870)`*
 - **Break-even 5.17%**: Below a 5.17% save rate it loses money; at 5% it comes out ahead only 41% of the time. *Source: `experiments/ledger/ledger_summary.json breakeven_save_rate, p_net_pos_at_5 (27c2870)`*
 - **Measured campaigns run 2% to 11%**: Published retention results run about 2% to 11% relative, so this pays in the stronger campaigns and loses in the weakest. *Source: `docs/strategy/DEVPOST.md`*
 - **Bootstrap**: 2,000 account resamples: an 80% chance of coming out ahead at our central 10% assumption (41% at 5%); mean +$3,817, 95% range -$3,186 to +$13,148. *Source: `experiments/ledger/ledger_summary.json; LEDGER_SCHEMA.md (27c2870)`*
-- **Do saves stick?**: On our 184 contacts, if each saved customer keeps their own risk, they are worth -$1,307 at 10%, only 36 of the 184 are worth contacting, break-even rises to 14.5%, and it is ahead 22% of the time at 10%. A holdout is built in so a rollout can measure saves. *Source: `tm-models rerun on 27c2870 (on our 184 contacts)`*
+- **Do saves stick?**: On our 184 contacts, if each saved customer keeps their own risk, they are worth -$1,307 at 10%, only 36 of the 184 are worth contacting, break-even rises to 14.5%, and it is ahead 22% of the time at 10%. A holdout is built in so a rollout can measure saves. *Source: `model experiments rerun on 27c2870 (on our 184 contacts)`*
 - **The shipped demo engine**: The earlier engine contacts 1,314 accounts and is -$71,838 at a 10% save rate in full dollars. That is why the next version contacts far fewer. *Source: `scratch_models/chart_check/RESULTS.md §3`*
 - **Blanket discount rule**: A $25 credit to the top 10% by risk is -$4,116 at 10%. *Source: `scratch_models/chart_check/RESULTS.md §3`*
 - **Not statistically proven**: At about 5,000 accounts, no 5% result is distinguishable from zero. *Source: `scratch_models/economics/RESULTS.md Circularity`*
@@ -151,9 +151,9 @@ Groups 1a-1c are the complete list of inputs the risk model and offer engine rea
 - **Other bill/app lines**: Price guarantee 2,862, trade-in value 2,212, streaming included 695, watch line 66. *Source: `docs/outreach/outreach_summary.md`*
 - **Not proven to keep anyone**: A customer-first choice with no public field evidence that savings receipts retain; it costs T-Mobile money. *Source: `docs/outreach/OUTREACH_PLAYBOOK.md §3`*
 
-## 8. Fairness audit (simulated)
+## 8. Fairness audit
 
-- **Final wording**: In our test on simulated data, at the same churn risk, accounts labeled senior or student were about 2.7 points less likely to get a retention message, roughly 10 and 16 accounts. Counting the cheaper-plan savings on the bill, they were shown a savings line more often than others, about 8 and 5 points. This is the audit we'd run weekly on real data. *Source: `docs/strategy/DEVPOST.md (a21e433)`*
+- **Final wording**: In our test on the sandbox data, at the same churn risk, accounts labeled senior or student were about 2.7 points less likely to get a retention message, roughly 10 and 16 accounts. Counting the cheaper-plan savings on the bill, they were shown a savings line more often than others, about 8 and 5 points. This is the audit we'd run weekly on real data. *Source: `docs/strategy/DEVPOST.md (a21e433)`*
 - **Method**: 5,000 regular accounts, matched on risk deciles, gap vs everyone else with 1,000 bootstrap resamples. *Source: `scratch_models/economics/fairness184/RESULTS_fairness184.md`*
 - **Small counts**: Only 4 of 370 senior-labeled and 7 of 611 student-labeled accounts get a message. *Source: `scratch_models/economics/fairness184/RESULTS_fairness184.md`*
 - **Labels, not ages**: Segment labels never appear in wording or change it; they matter only to unlock a real plan such as 55+. *Source: `docs/outreach/OUTREACH_PLAYBOOK.md §5`*
@@ -168,7 +168,7 @@ Groups 1a-1c are the complete list of inputs the risk model and offer engine rea
 - **No lock-in language**: No contracts, $0 early termination fee; any text with lock, contract, contrato or permanencia fails the run. *Source: `docs/outreach/OUTREACH_PLAYBOOK.md §6`*
 - **Demo phone send**: Dry run by default: nothing leaves the machine unless the presenter arms it, and the only destination is one private chat set in local config. The app can't pass a number. *Source: `harness/phone_push.py header`*
 - **Judge data is read-only**: The sandbox database is opened read-only. *Source: `harness/offer_detectors.connect_ro (sqlite mode=ro)`*
-- **Simulated data only**: Every account is from the hackathon sandbox; no real T-Mobile customer data. *Source: `docs/strategy/DEVPOST.md`*
+- **Sandbox data only**: Every account is from the hackathon sandbox; no real T-Mobile customer data. *Source: `docs/strategy/DEVPOST.md`*
 
 ## 10. Left out on purpose
 
@@ -186,9 +186,9 @@ Groups 1a-1c are the complete list of inputs the risk model and offer engine rea
 
 ## 11. Known limits
 
-- **No real churn outcomes**: Labels are simulated from a formula we wrote, so the model's accuracy is partly by construction. *Source: `harness/out/churn_model_card.md; scratch_models/economics/RESULTS.md Circularity`*
+- **No real churn outcomes**: Labels are stand-ins generated from a formula we wrote, so the model's accuracy is partly by construction. *Source: `harness/out/churn_model_card.md; scratch_models/economics/RESULTS.md Circularity`*
 - **Save rate unknown**: Every dollar figure rests on an assumed save rate; a holdout is built in so a rollout can measure saves. *Source: `scratch_models/economics/RESULTS.md`*
-- **Saves may not stick**: If a saved customer stays as risky as before, most of the money disappears. That's the first thing a real rollout tests. *Source: `tm-models rerun on 27c2870 (on our 184 contacts)`*
+- **Saves may not stick**: If a saved customer stays as risky as before, most of the money disappears. That's the first thing a real rollout tests. *Source: `model experiments rerun on 27c2870 (on our 184 contacts)`*
 - **Holdout size**: A reliable read needs about 12,800 accounts per group; at our ~5,000 only very large effects show. *Source: `docs/strategy/DEVPOST.md (power estimate)`*
 - **Contacts lean on bill changes**: Only 35 of the 184 have no recent bill change, because bill changes are churn terms in our own generator. *Source: `scratch_models/economics/RESULTS.md GUARDRAIL weak spot`*
 - **No outreach log, opt-out field or time zone**: Quarterly cap, opt-out and send hours are hooks, untested on this data. *Source: `docs/outreach/OUTREACH_PLAYBOOK.md §1, §4`*

@@ -31,7 +31,7 @@ Default: `python harness/uplift.py` is the same as `TM_TRIAL_N=50000 TM_TRIAL_RE
 A run takes about 50 s at the default 50k accounts × 20 cohorts. If `out/churn_scores.csv` changes during the run, the script rebuilds once more.
 `out/offers_pipeline_run.json` records the churn_scores mtime used.
 **Dependency:** the PNGs need `matplotlib`, which is not in the shared `requirements.txt` (that file isn't owned by
-this lane). Add `matplotlib>=3.8` there or `pip install matplotlib` into `.venv`. Without it the script still
+this part). Add `matplotlib>=3.8` there or `pip install matplotlib` into `.venv`. Without it the script still
 writes every CSV and skips the PNGs.
 
 ## Method

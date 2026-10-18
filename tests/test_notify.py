@@ -27,7 +27,9 @@ def test_dryrun_returns_the_message_and_sends_nothing(monkeypatch):
         seen["to"] = to
         return real(body, to)
 
-    monkeypatch.setattr("harness.notify.send_sms", wrapped)
+    # Patch the module this test's send() lives in. Another test can pop harness.notify from sys.modules,
+    # so the dotted path may resolve to a re-imported copy that send() never calls.
+    monkeypatch.setitem(send.__globals__, "send_sms", wrapped)
     result = send("We want to keep you.")
     assert result["backend"] == "dryrun"
     assert result["sent"] is False
@@ -52,13 +54,13 @@ def test_ntfy_posts_plain_text_to_the_topic(monkeypatch):
         return _Response()
 
     monkeypatch.setenv("SEND_BACKEND", "ntfy")
-    monkeypatch.setenv("NTFY_TOPIC", "tm-dubhacks26-lf3reo19tv")
+    monkeypatch.setenv("NTFY_TOPIC", "example-demo-topic")
     monkeypatch.setattr(requests, "post", fake_post)
     result = send("We want to keep you.")
     assert result["ok"] is True
     assert result["backend"] == "ntfy"
     assert result["sent"] is True
-    assert captured["url"] == "https://ntfy.sh/tm-dubhacks26-lf3reo19tv"
+    assert captured["url"] == "https://ntfy.sh/example-demo-topic"
     assert captured["data"] == b"We want to keep you."
     assert captured["headers"]["Content-Type"] == "text/plain; charset=utf-8"
     assert captured["headers"]["Title"] == "Draft"
@@ -90,9 +92,9 @@ def test_ntfy_topic_argument_does_not_need_the_env(monkeypatch):
     monkeypatch.delenv("SEND_BACKEND", raising=False)
     monkeypatch.delenv("NTFY_TOPIC", raising=False)
     monkeypatch.setattr(requests, "post", fake_post)
-    result = send("Draft", backend="ntfy", topic="tm-dubhacks26-lf3reo19tv")
+    result = send("Draft", backend="ntfy", topic="example-demo-topic")
     assert result["sent"] is True
-    assert captured["url"] == "https://ntfy.sh/tm-dubhacks26-lf3reo19tv"
+    assert captured["url"] == "https://ntfy.sh/example-demo-topic"
     assert b"phone" not in captured["data"]
 
 
@@ -174,7 +176,7 @@ def test_ntfy_posts_utf8_and_keeps_headers_ascii(monkeypatch):
     monkeypatch.delenv("SEND_BACKEND", raising=False)
     monkeypatch.setattr(requests, "post", fake_post)
     text = "हिन्दी $10.00 और 中文 $10.00"
-    result = send(text, backend="ntfy", topic="tm-dubhacks26-lf3reo19tv", title="हिन्दी")
+    result = send(text, backend="ntfy", topic="example-demo-topic", title="हिन्दी")
     assert result["sent"] is True
     assert captured["data"] == text.encode("utf-8")
     assert captured["headers"]["Content-Type"] == "text/plain; charset=utf-8"

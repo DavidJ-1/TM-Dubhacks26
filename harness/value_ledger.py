@@ -409,7 +409,7 @@ def build(out: Path, demo: Path = ROOT / "demo_data", hh_csv: Path | None = None
 
 
 def receipt(mv: pd.DataFrame, acct: pd.DataFrame, out: Path, engine_ids: set | None = None) -> pd.DataFrame:
-    """Receipt rows for every optimizer saver. Headline (Grok Bot decision) = the 488 savers the engine also
+    """Receipt rows for every optimizer saver. Headline (team decision) = the 488 savers the engine also
     flags right-size/variant. `no_tradeoff` is the stricter check (nothing in the optimizer's 'gives up' list and
     no unlimited -> 50 GB move); the 'you'd lose X' line is shown whenever there is a trade-off, in or out of headline."""
     r = mv.merge(acct[["account_id", "p_churn_90d"]], on="account_id", how="left")

@@ -1,4 +1,4 @@
-# tm-bench: cheap model candidates for churn + upgrade (ALL NUMBERS SYNTHETIC)
+# Benchmark: cheap model candidates for churn + upgrade (ALL NUMBERS SYNTHETIC)
 
 Every account here is a judge-sandbox stub account or a synthetic copy, and every label is simulated by
 `harness/labels.py`. Nothing below is real-world accuracy: it is a pipeline check against a label recipe we wrote
@@ -23,10 +23,10 @@ Out-of-fold scores (no account is scored by a model that saw its label). Binary-
 - Honest caveat: on these synthetic labels a plain ranking by `support_90d` count is close to the models on AUC
   (0.834 vs Model A 0.853, inside fold noise), although Model A still catches more at every k. The count ranking
   fails persona 24, the happy frequent caller (2/6 personas pass vs 5/6 for the LRs), and it gives no reasons.
-  tm-data is checking whether contact counts are too tied to the label drivers.
+  data prep is checking whether contact counts are too tied to the label drivers.
 
 ### Dollars (not modelled here)
-Dollar figures live in tm-offers' [`harness/model_c_artifacts/policy_eval.csv`](../model_c_artifacts/policy_eval.csv).
+Dollar figures live in the offer engine's [`harness/model_c_artifacts/policy_eval.csv`](../model_c_artifacts/policy_eval.csv).
 They come from the simulated 50k randomized trial, use IPW and doubly-robust estimates, and rest on our own save-rate
 assumptions, which are partly circular. They are simulated, not measured lift, and **may change as offer rules are
 added**, so this README deliberately quotes no dollar values. The bench reports lift and churners caught only, so
@@ -44,7 +44,7 @@ churn_90d, 5-fold stratified OOF (seed 42) on the 5,000 regular accounts:
 
 | row | AUC | fold sd | PR-AUC | top-10% capture | top-10% lift |
 |---|---|---|---|---|---|
-| **Ours: Model A (tm-churn LR, 22 core features; its own OOF, `harness/out/churn_oof_pred.csv`)** | **0.853** | 0.059 | 0.255 | **62.0%** | 6.2x |
+| **Ours: Model A (the churn model LR, 22 core features; its own OOF, `harness/out/churn_oof_pred.csv`)** | **0.853** | 0.059 | 0.255 | **62.0%** | 6.2x |
 | LR on Model A's 22 core features (bench refit, unweighted, uncalibrated) | 0.841 | 0.071 | 0.238 | 57.7% | 5.8x |
 | LR on all 58 prepare() features (unweighted) | 0.822 | 0.052 | 0.216 | 54.0% | 5.4x |
 | HGB + sigmoid calibration (challenger) | 0.824 | 0.030 | 0.188 | 58.4% | 5.8x |
@@ -71,7 +71,7 @@ itself, and the two GitHub sources are not peer reviewed.
 
 ## Learning curve (`out/learning_curve.csv`, `out/learning_curve_long.csv`, `out/learning_curve_check.png`)
 - **real_5k**: train on n sandbox accounts, score a stratified 25% holdout, 10 seeds (holdout and subsample both vary).
-- **synthetic_50k**: train on n of tm-data's 50k Gaussian-copula synthetic accounts
+- **synthetic_50k**: train on n of data prep's 50k Gaussian-copula synthetic accounts
   (`harness/out/scaled/`; enrichment columns dropped so the inputs match Model A), test on **all 5,000 real sandbox
   accounts**. 10 seeds up to 5k, 5 at 10k-25k, 3 at 50k (LR at 50k is deterministic, so sd = 0).
 
@@ -99,7 +99,7 @@ gets 0.8652 (CI [-0.003, +0.006]) and HGB 0.8623. The small excess over the orac
 a leak. Leak checks passed: no synthetic column matches a labels.csv column or the leak pattern, there is no
 account-id overlap, and the 9 enrichment columns (`recent_job_change`, `household_income_usd`, `income_band`,
 `area_median_income_usd`, `income_geo_level`, `next_plan_sku`, `next_plan_price_cents`, `step_up_cost_cents`,
-`step_up_cost_pct_income`) were dropped. tm-data confirms the copula sampled only feature columns, and the labels were
+`step_up_cost_pct_income`) were dropped. data prep confirms the copula sampled only feature columns, and the labels were
 drawn afterwards with the same recipe.
 
 What the curve says: on 5k real accounts the LRs are still climbing at 3,750 (data-limited: ~100 churners in
@@ -120,8 +120,8 @@ oracle is computed on the same 5,000 real rows, and every row carries a paired s
 | upgrade_90d | hgb_sigmoid | 0.747 (sd 0.026) | 0.769 | 0.770 | 0.808 |
 
 - Churn: every point above the ceiling has a CI that spans 0, so it is noise. Churn saturates at the ceiling by 50k,
-  and 250k only cuts variance. This matches tm-churn's Model A scaling run (`harness/out/churn_scaled_eval.csv`,
-  0473c4f: 0.853 / 0.863 / 0.863 at 5k / 50k / 250k) and tm-data's TSTR table (0.820 / 0.860 / 0.863).
+  and 250k only cuts variance. This matches the churn model's Model A scaling run (`harness/out/churn_scaled_eval.csv`,
+  0473c4f: 0.853 / 0.863 / 0.863 at 5k / 50k / 250k) and data prep's TSTR table (0.820 / 0.860 / 0.863).
 - Synthetic-trained churn models rank well but are miscalibrated on the real 5k: mean predicted 3.9% vs actual
   2.74%. A 5-fold CV Platt recalibration fitted on the real 5k fixes it (mean 2.74%, ECE 0.012 -> 0.003; see
   `out/upgrade_best.md`).
@@ -129,8 +129,8 @@ oracle is computed on the same 5,000 real rows, and every row carries a paired s
 - `learning_curve*.csv` now also has `train_source=synthetic_250k` (1k ... 50k subsamples of the 250k set, plus the
   full 250k), with the same schema. Same-rows check: `out/tstr_leak_check_synthetic_250k.json`.
 - **Known data issue:** in the 50k set, ~36% of single-segment accounts have 2+ lines (a segment/line-count
-  mismatch). tm-data fixed it in the 250k set, so prefer the 250k rows.
-- tm-data's upgrade TSTR (0.778 / 0.799 / 0.801) is higher than our features.csv-only 0.765. Our tier b2/c numbers
+  mismatch). data prep fixed it in the 250k set, so prefer the 250k rows.
+- data prep's upgrade TSTR (0.778 / 0.799 / 0.801) is higher than our features.csv-only 0.765. Our tier b2/c numbers
   reproduce it (0.799 / 0.805 at 250k), which suggests their run included the enrichment columns (income).
 
 ## Upgrade improvement (`out/upgrade_improve.md/.csv`, `out/upgrade_improve_check.png`, `out/upgrade_best.md`)
@@ -185,16 +185,16 @@ reaches ~99% of the oracle ceiling OOF, is the most data-efficient at 5k, has ex
 well calibrated without class weights (balanced weights inflate Brier from 0.024 to 0.128; see `out/cv_results.md`).
 That calibration matters because the EV engine multiplies P(churn) by dollars. Keep sigmoid-calibrated HGB as the
 challenger. For upgrade, use all-feature LR (0.740, tied with HGB at 0.747). Calibration check:
-`out/calibration_check.png` (internal; tm-ui owns the presentation gain/calibration charts).
+`out/calibration_check.png` (internal; the UI owns the presentation gain/calibration charts).
 
-## Cross-check vs tm-harness (0e778bf) and notes
-- tm-harness 5-fold: 3+ rule 0.743 / top-10% 26% (ours 0.744 / 26.2%); logreg 0.829 (ours 0.822 all-58, 0.841
+## Cross-check vs the harness (0e778bf) and notes
+- the harness 5-fold: 3+ rule 0.743 / top-10% 26% (ours 0.744 / 26.2%); logreg 0.829 (ours 0.822 all-58, 0.841
   core-22); model_a 0.849 / 61% (Model A's own OOF file gives 0.853 / 62.0%); ceiling 0.863 (ours 0.864 on the full
   5,000, vs harness pooling). Upgrade: near-cap rule 0.544 (same), logreg 0.742 (ours 0.740), hgb 0.73 (our default
   HGB 0.730; our tuned HGB+sigmoid 0.747). The differences are fold seeds and feature subsets, and all are well
   inside fold sd.
 - `harness/model_a.py` (the Retention Console's model) is a separate model trained on toy labels (~14.6% churn).
-  It is **not** what we benchmark. "Model A" here means tm-churn's `harness/churn_model.py`, scored from
+  It is **not** what we benchmark. "Model A" here means the churn model's `harness/churn_model.py`, scored from
   `harness/out/churn_oof_pred.csv`.
 - Feature prep is imported at run time from `harness/churn_features.prepare()` (cleaned version, d9bcd76), never
   copied.

@@ -11,13 +11,13 @@ Maps to: customer value incl. "no good recommendation" (L43), "the one that says
 
 Silence is the default. Rules run in this order, and the first one that applies decides:
 1. **The engine says do nothing, so we stay silent.** The reason is stored (`happy` 1,107, `open_ticket` 1,041, `wait_payoff` 877, ...).
-2. **Only retention actions that pay at a realistic save rate get a message.** These are the retention-only policy re-picked at a 10% save rate with a $1,478 kept-account value: 202 picks, break-even about 4.8% (tm-models, `inputs/guardrail_detail.csv`). Everything else the shipped engine would do is silent: `not_worth_contacting_at_realistic_save_rates` 724, `plan_move_receipt_only` 388.
+2. **Only retention actions that pay at a realistic save rate get a message.** These are the retention-only policy re-picked at a 10% save rate with a $1,478 kept-account value: 202 picks, break-even about 4.8% (model experiments, `inputs/guardrail_detail.csv`). Everything else the shipped engine would do is silent: `not_worth_contacting_at_realistic_save_rates` 724, `plan_move_receipt_only` 388.
 3. **Opted out of marketing means no contact.** The sandbox has no opt-out field, so this is a hook (`--opt-out`).
 4. **Backfire guardrail (`inputs/guardrail.csv`, the authority).** Of the 1,412 accounts with a non-`stable` `billing_history.change_reason` and an increase in 2026-07..09, an account is contacted only with a credit that offsets the increase. Two exemptions apply: fix-only callbacks, and increases that come only from a new phone the customer chose. We do not use "bill went up in 3 months" (4,679 accounts). This blocks 18 of the 202 picks (13 perk reminders, 5 check-ins), leaving 184.
 5. **At most one proactive contact per account per quarter.** The sandbox has no outreach log, so this is a hook (`--contact-log`). Each run sends at most one message per account.
 6. **Fix first.** With an unresolved support contact in the last 90 days, the only message allowed is a fix message, never an offer. 25 picked perk reminders become fix callbacks. People stay because nothing is going wrong (L89).
 
-**How 184 maps to tm-models' "184 retention texts":** the accounts are the same 184 (`contact_ok` True). The difference is only what each message is:
+**How 184 maps to model experiments' "184 retention texts":** the accounts are the same 184 (`contact_ok` True). The difference is only what each message is:
 - **Channel:** each account's stated preference. 64 are actual SMS texts, 74 in-app, 32 email and 14 agent calls.
 - **Message type:** 25 perk reminders are sent as fix callbacks because the account has an open issue.
 - **Swaps:** none at $1,478.
@@ -74,7 +74,7 @@ Maps to: explainability and trust (L45), fixed en/es templates (L33), fields use
 - **Language.** `es` gets Spanish (usted, natural phrasing). `en` and the 148 `other` accounts get English, with Spanish included in every row.
 - **Senior / student segment labels.** We never mention a label or an age and never change wording because of it. A label matters only when it makes a real plan eligible (for example 55+ Savings, "after a quick eligibility check").
 
-We don't vary the pitch to persuade. In the Hillstrom test, choosing a different message per customer did not beat one good message. So the claim is: **the message matches your account and is easy to act on**. The push-away guardrail belongs to tm-models (taken over from tm-efficacy).
+We don't vary the pitch to persuade. In the Hillstrom test, choosing a different message per customer did not beat one good message. So the claim is: **the message matches your account and is easy to act on**. The push-away guardrail belongs to model experiments (taken over from the efficacy check).
 
 ## 6. Family accounts, lock-in and the price guarantee (RESEARCH.md §15)
 Maps to: explainability and trust (L45), feasibility (L46).
@@ -97,7 +97,7 @@ Maps to: trust (L45), life events as future vision only (L39), no scraping (L122
   - `outreach_drafts.csv` (5,042 rows): `account_id, contact_yes_no, reason, channel, template_id, message_en, message_es, primary_language, facts_used, receipt_lines, receipt_line_en, receipt_line_es, in_bill_change_1412, open_issue_90d, guardrail_block_reason, guardrail_why_line, bill_change_exemption, data_note`
   - `outreach_receipt_lines.csv` (one row per bill/app line)
   - `outreach_summary.md`
-- `outreach_card.csv` (5,042 rows) for tm-ui's customer card, with exactly `account_id, outreach_reason, message_en, message_es`. `outreach_reason` is a short plain-English reason; for silent accounts it's the do-not-contact reason. Messages are blank when silent.
+- `outreach_card.csv` (5,042 rows) for the UI's customer card, with exactly `account_id, outreach_reason, message_en, message_es`. `outreach_reason` is a short plain-English reason; for silent accounts it's the do-not-contact reason. Messages are blank when silent.
 - **Inputs:** committed under `inputs/` (see `inputs/README.md`). The script defaults to them.
 - **The script exits non-zero if any check fails:**
   - a slot is left unfilled

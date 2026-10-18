@@ -11,7 +11,7 @@ decisions.csv (one row per account, keyed like docs/outreach/outreach_card.csv),
 options.csv: account_id, option_label (do nothing always first), verdict {picked, not_sent, ruled_out}, reason,
   net_mid_usd (engine expected net at the 10% field save rate; blank when ruled out).
 
-Contact set (Grok Bot's final call): tm-models' 184 policy picks (guardrail contact_ok True). If the account has an
+Contact set (the team's final call): the 184 policy picks (guardrail contact_ok True). If the account has an
 open (unresolved, last 90 days) support contact, the message is fix-first and any perk mention is dropped. Message text:
 the outreach card's channel wording when it already matches the final offer, else our fixed fix-first templates.
 Run: TM_OUT_DIR=<dir> python harness/decisions_out.py
@@ -463,7 +463,7 @@ def build(out: Path):
         assert ((D.guardrail_result == "pass") == (D.decision == "message")).all(), "ledger pass != our message set"
     if "guardrail_note" in D.columns:
         D["guardrail_note"] = D.guardrail_note.map(short_note)
-    if "already_leaving_note" in D.columns:      # Grok Bot's wording for messaged already-leaving accounts with an open issue
+    if "already_leaving_note" in D.columns:      # the team's wording for messaged already-leaving accounts with an open issue
         al = (D.decision == "message") & (D.already_leaving.astype(str) == "True")
         D.loc[al & D.account_id.isin(topic.index), "already_leaving_note"] = AL_NOTE_OPEN
     offer_code = D.pop("_offer")              # popped after the reorder so it stays aligned

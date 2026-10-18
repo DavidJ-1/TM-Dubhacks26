@@ -7,7 +7,7 @@ randomized Hillstrom e-mail test (section 1 of README.md), the customers our upl
 contact (0-0.35%) actually showed positive held-out uplift. So we don't use a model for this.
 
 Run from the repo root: `python experiments/efficacy/guardrail.py` (~2 s). Outputs in `out/`:
-- `guardrail.csv`: `account_id, contact_ok, block_reason, why_line`. One row per account (5,042), so tm-strategy's script can join on `account_id`.
+- `guardrail.csv`: `account_id, contact_ok, block_reason, why_line`. One row per account (5,042), so strategy research's script can join on `account_id`.
 - `guardrail_detail.csv`: the same columns plus the fields behind each decision (bill-change reason and $, policy action and EV, swap, receipt plan move and what it gives up, open-issue topic, risk).
 - `guardrail_summary.txt`: counts and 10 example rows.
 

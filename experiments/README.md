@@ -1,4 +1,4 @@
-# Experiments (tm-models)
+# Experiments
 
 Scratch model experiments vs the LR churn baseline. All data and numbers are synthetic. Not used by the demo.
 

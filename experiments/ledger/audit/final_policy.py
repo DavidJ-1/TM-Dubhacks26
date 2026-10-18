@@ -1,7 +1,7 @@
 """Per-account money ledger (tm-design column spec, final) + events.csv. ALL NUMBERS SYNTHETIC (docs say so;
 no output string says it, per David's rule). Read-only inputs: committed guardrail + detail (v2-efficacy engine_rules/out/demo),
 outreach_card.csv (TM-Dubhacks26 docs/outreach; v2-efficacy has none), events.build_events (sandbox opened mode=ro),
-base.py economics. Open-ticket rule (Grok Bot / tm-design 23:33): a contacted account with an open ticket
+base.py economics. Open-ticket rule (team 23:33): a contacted account with an open ticket
 (unresolved_90d >= 1) whose action is perk_reminder gets the engine's fix-first message instead (cost $15, annoyance $4,
 save rate 0.35 before the 10%/44.4% scaling); fix-first types are unchanged. The total is NOT forced to $4,109."""
 import sys, json, re, numpy as np, pandas as pd
@@ -36,7 +36,7 @@ for i, r in rows:
 after_swap = acct(P, s(0.10)).copy()
 
 # ---------- costing.
-# HEADLINE / conservative (Grok Bot ruling 23:39): every fix-first contact (incl. care credit + fix-first) pays agent time
+# HEADLINE / conservative (team ruling 23:39): every fix-first contact (incl. care credit + fix-first) pays agent time
 # whatever the channel: $10.75 per live contact + $4.25 escalation = $15.00 (research14), plus the channel's own send cost:
 # text $0.013, in-app $0, email $0.0001. Agent CALLS pay the engine's $15 callback ONLY (it is the same agent contact +
 # escalation; adding $10.75+$4.25 on top would count the agent twice). $25 credit and $4 annoyance unchanged.

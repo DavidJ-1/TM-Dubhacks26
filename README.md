@@ -27,7 +27,11 @@ make test
 
 Python 3.11 or newer. The stack is pandas, scikit-learn, and Streamlit. There is no JavaScript frontend.
 
-## Live what-if (this branch)
+## What the app does
+
+For each customer the app estimates the chance they leave in the next 90 days and shows the top reasons they might leave and the top reasons they might stay. A deal engine then lists every move the customer qualifies for under the sandbox's real plan and promotion rules: a cheaper plan with the same features, fixing an open problem first, a care credit, a check-in, and a few more. It prices each move as chance of leaving × chance the move keeps them × what keeping them is worth, minus the move's cost and a small charge for bothering them. Doing nothing is always on the list at $0, and a move has to beat it, so most customers hear nothing. Every pick comes with a plain-language reason and the exact message in English and Spanish.
+
+## Live what-if
 
 Open the scroll page and press **Live what-if** (customer #02363). Each **Next event** press adds one scripted event
 (app login, dropped call with an open coverage chat, carrier-shopping score rising, asked to move their number); **Reset**
@@ -36,6 +40,24 @@ offline by `scripts/live_events.py`: the same Model A rescoring the app uses, th
 and the do-not-contact guardrail rerun over the whole book with only this customer swapped (save-rate scale frozen, so
 no other account moves; the week's 184 messages and dollars stay as they are). Rebuild with
 `DUBHACKS_DB=vendor/dubhacks/data/sandbox.db python3 scripts/live_events.py --write` (sandbox opened read-only).
+
+## Model and score
+
+The sandbox has no churn outcomes, so we built stand-in labels and trained a logistic regression on them. Three AUC numbers get quoted, and only one of them compares with the judges' figures:
+
+| AUC | Measured against | Compare with the judges'? |
+|---|---|---|
+| **0.797** | the churn probabilities from the judges' public example model, using our out-of-fold scores on the 5,000 regular accounts | Yes |
+| about 0.825 | nothing of ours: the judges' README gives this as the best AUC possible. Scoring their example model against its own probabilities the same way gives 0.825 | It's the ceiling |
+| 0.85 | our own stand-in labels | No. It grades the model on labels we built from the same fields |
+
+The 0.797 is measured against the probabilities, not a single yes/no draw: each account counts as a leaver with weight p and as a stayer with weight 1 − p, which is the AUC averaged over every possible draw. Against one seeded draw of those probabilities it comes out at 0.799. The judges' hidden model is built differently from the public one, so our score on their hidden labels will differ.
+
+**Probabilities for judging.** Our stand-in labels average 2.7% churn in 90 days, and the judges' example model averages 14.6% on the same accounts. A small script (command below) shifts our scores by one constant on the log-odds scale so they also average 14.6%. That keeps the ranking identical (Spearman 1.0 with the unshifted scores), so the AUC doesn't move. On out-of-fold scores, measured against the example model's probabilities, log loss drops from 0.494 to 0.331 (best possible 0.312) and the Brier score from 0.033 to 0.006 (best possible 0). It writes one probability per account to a CSV next to the other precomputed results, and also exposes `probability(account_id, features, conn)` in the judges' model-file format. The app still shows the unshifted risks.
+
+```bash
+.venv/bin/python scripts/predict.py
+```
 
 ## Where the data comes from
 
@@ -66,7 +88,7 @@ Rules the code follows:
 
 ## Models
 
-The sandbox has no observed churn outcomes. Judges score a private model that is not in this repository.
+The sandbox has no observed churn outcomes. The judges keep their churn labels private: they come from the judges' own model, which isn't in the sandbox repo or this one, and the sandbox README says submissions are scored against that model's probabilities (log loss, Brier score or Spearman correlation).
 
 - **Sandbox score** on the Overview is the public reference formula shipped in the judge repo (`support_90d`, negative sentiment, bill increase, competitor research, port-out, tenure, plan misfit). Persona accounts are left out of the population rates.
 - **Model A** draws one label per non-persona account from that probability (seed 2026) and fits a standardized logistic regression on those same fields. Holdout AUC is against the draw, not against real churn. Reason codes are the contributions from that fit.

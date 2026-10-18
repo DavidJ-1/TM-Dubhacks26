@@ -1,9 +1,9 @@
 # Prompt-fit audit: DubHacks '26 T-Mobile project (skeptical-judge read)
 
 Audited Sat 10/17/2026 ~7:45 PM PDT. Read-only. All numbers below are **synthetic/simulated** (judge sandbox stub data plus our simulated labels).
-Scope: `strategy/tmobile-brief-summary.md` (authoritative brief), `handoff/plan-doc-2026-10-17.txt`, `handoff/LANES.md`,
-repo `/workspace/tmobile/TM-Dubhacks26` @ `dev` (HEAD bcc5228, plus uncommitted changes to enrichment/uplift files), canonical outputs
-`TM-Dubhacks26/harness/out/*.csv` (`/workspace/tmobile/harness/out/` is empty and deprecated per LANES), `app/streamlit_app.py`,
+Scope: `strategy/tmobile-brief-summary.md` (authoritative brief), `handoff/plan-doc-2026-10-17.txt`, the team plan,
+repo `this repo` @ `dev` (HEAD bcc5228, plus uncommitted changes to enrichment/uplift files), canonical outputs
+`TM-Dubhacks26/harness/out/*.csv` (`../harness/out/` is empty and deprecated per the team plan), `app/streamlit_app.py`,
 sandbox.db schema + `personas` table (opened `mode=ro`).
 
 The test throughout: **does this answer T-Mobile's prompt, judged by T-Mobile's rubric and the sandbox's own personas?** Not "does it match our plan?"
@@ -131,7 +131,7 @@ Also noted: Insights hard-codes plan-doc stats (14.6%, 61%, 346, 553, 240/188/23
    **Fix:** one `make demo` = setup → features → labels → churn_model → offers → `streamlit run app/streamlit_app.py`; delete or move console_app/engine to `legacy/`; rewrite README to the current pipeline; or commit a small precomputed `demo_data/` (plan doc already said "precompute so the demo can't break").
 
 4. **On-screen numbers contradict each other.** Insights headline: "Expected to churn in 90 days: 14.6%" (toy labels, hard-coded from plan doc). Every customer card/model: mean 2.7% per 90 days (0.99%/mo calibration). A judge who asks "so is it 15% or 3%?" undermines trust and the 61%-in-top-20% hook.
-   **Fix:** pick one (LANES says 0.99%/mo calibrated) and compute all Insights stats live from `harness/out/` with "synthetic" labels; or show 14.6% only as "sandbox toy score, ranking only."
+   **Fix:** pick one (the team plan says 0.99%/mo calibrated) and compute all Insights stats live from `harness/out/` with "synthetic" labels; or show 14.6% only as "sandbox toy score, ranking only."
 
 5. **Inferred life details leak into customer texts, and simulated income/job enrichment is a trust liability.** Persona 28's live text: "We noticed you're getting close to finishing school" (from a student+tenure≥36 heuristic) — exactly the "creepy" pattern our own guardrail forbids. Planned boosts on `recent_job_change`/`income_band` (OFFER_STRATEGY §5c) steer offers on per-account random draws: no signal, plus income-based targeting looks like price discrimination to a carrier judge (Explainability & Trust 20%).
    **Fix:** add the blocklist to `validate_messages()` now (school, graduat, job, promot, income, kid, child, competitor, switch, port) and reword 28 to plan-led ("Your student pricing ends soon; here's a plan that keeps your price at $X"). Keep enrichment to carrier-owned facts (kid lines from `member_role`, lines, financing, promo end) and label "from your account"; drop income/job from decisions, or show them only as a clearly separate "future: consented data" slide.
