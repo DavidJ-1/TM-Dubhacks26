@@ -152,11 +152,21 @@ def build_message(f: pd.Series, action: str, res: dict, promos: pd.DataFrame, pl
         v = res["variant_switch"]
         tgt = P.loc[v["plan_sku"]]
         old, new = plan_price_cents(cur, n), plan_price_cents(tgt, n)
-        body = (f"Good news: {lines_en[0].lower() + lines_en[1:]} qualify for {tgt['name']}. Same features, "
-                f"{_money(new)}/month instead of {_money(old)}. Nothing else changes. Reply YES and we'll move you."
+        # a multi-line plan (e.g. Essentials 4 Line Offer 2.0, min_lines 4, no max) for a household whose line
+        # count differs from the number in the name: say the real rule so "5 lines qualify for 4 Line" isn't contradictory
+        mn = int(tgt["min_lines"]) if pd.notna(tgt.get("min_lines")) else 1
+        mx = tgt.get("max_lines")
+        rule_en = rule_es = ""
+        if mn > 1 and n != mn:
+            rule_en = (f" ({mn} or more lines)" if pd.isna(mx) else f" ({mn} to {int(mx)} lines)")
+            rule_es = (f" ({mn} o más líneas)" if pd.isna(mx) else f" (de {mn} a {int(mx)} líneas)")
+        our_en = "our " if rule_en else ""
+        our_es = "nuestro plan " if rule_es else ""
+        body = (f"Good news: {lines_en[0].lower() + lines_en[1:]} qualify for {our_en}{tgt['name']}{rule_en}. Same "
+                f"features, {_money(new)}/month instead of {_money(old)}. Nothing else changes. Reply YES and we'll move you."
                 if en else f"Buenas noticias: {lines_es[0].lower() + lines_es[1:]} califica{'n' if n > 1 else ''} para "
-                           f"{tgt['name']}. Las mismas funciones por {_money(new)} al mes en lugar de {_money(old)}. "
-                           "Nada más cambia. Responda SÍ y haremos el cambio.")
+                           f"{our_es}{tgt['name']}{rule_es}. Las mismas funciones por {_money(new)} al mes en lugar de "
+                           f"{_money(old)}. Nada más cambia. Responda SÍ y haremos el cambio.")
     elif action == "right_size":
         v = res["right_size"]
         tgt = P.loc[v["plan_sku"]]
@@ -185,9 +195,11 @@ def build_message(f: pd.Series, action: str, res: dict, promos: pd.DataFrame, pl
                 + " Reply YES to move, or ignore this to keep your plan."
                 if en else f"Podría pagar {_money(diff)} menos al mes: {tgt['name']} tiene {_benefit(tgt, 'es')}, "
                            "suficiente para su uso." + (f" Perdería: {', '.join(gives_es)}." if gives_es else "")
-                           + " Responda SÍ para cambiar.")
+                           + " Responda SÍ para cambiar, o ignore este mensaje para mantener su plan.")
         if len(f"{hi}{body} {stop}") > MAX_LEN:   # long give-up list: drop the 'enough for your use' clause
             body = body.replace(", enough for your use.", ".").replace(", suficiente para su uso.", ".")
+        if len(f"{hi}{body} {stop}") > MAX_LEN:   # es only: keep the opt-out, drop 'para mantener su plan'
+            body = body.replace(", o ignore este mensaje para mantener su plan.", ", o ignore este mensaje.")
     elif action == "step_up":
         tgt = P.loc[res["step_up"]["plan_sku"]]
         diff = plan_price_cents(tgt, n) - plan_price_cents(cur, n)
@@ -235,15 +247,20 @@ def build_message(f: pd.Series, action: str, res: dict, promos: pd.DataFrame, pl
     elif action == "check_in":
         yrs = int(f["tenure_months"] // 12)
         g = _guarantee(cur)
-        thanks_en = f"Thanks for {yrs} years with us. " if yrs >= 2 else "Thanks for being with us. "
-        thanks_es = f"Gracias por {yrs} años con nosotros. " if yrs >= 2 else "Gracias por estar con nosotros. "
-        fact_en = (f"Your {cur['name']} includes {_benefit(cur, 'en')}"
-                   + (f", covered by your {g}-Year Price Guarantee" if g else "") + ". ")
-        fact_es = (f"Su {cur['name']} incluye {_benefit(cur, 'es')}"
-                   + (f", cubierto por su garantía de precio de {g} años" if g else "") + ". ")
-        body = (f"{thanks_en}{fact_en}Is anything about your plan or service not working for you? Reply YES for a "
-                "free plan review, no strings attached."
-                if en else f"{thanks_es}{fact_es}¿Podemos mejorar algo de su plan? Responda SÍ para revisarlo.")
+        # one SMS (<=160): short thanks + the price-guarantee fact (benefit only when no guarantee) + review ask
+        thanks_en = f"Thanks for {yrs} years! " if yrs >= 2 else "Thanks for being with us! "
+        thanks_es = f"¡Gracias por {yrs} años! " if yrs >= 2 else "¡Gracias por estar con nosotros! "
+        fact_en = (f"Your {cur['name']} has a {g}-Year Price Guarantee. " if g
+                   else f"Your {cur['name']} includes {_benefit(cur, 'en')}. ")
+        fact_es = (f"Su {cur['name']} tiene garantía de precio de {g} años. " if g
+                   else f"Su {cur['name']} incluye {_benefit(cur, 'es')}. ")
+        ask_en = "Anything not working? Reply YES for a free plan review."
+        ask_es = "¿Algo no funciona? Responda SÍ para revisar su plan."
+        body = f"{thanks_en}{fact_en}{ask_en}" if en else f"{thanks_es}{fact_es}{ask_es}"
+        if len(f"{hi}{body} {stop}") > 160:   # long plan name: drop the thanks first, then the fact
+            body = f"{fact_en}{ask_en}" if en else f"{fact_es}{ask_es}"
+        if len(f"{hi}{body} {stop}") > 160:
+            body = f"{thanks_en}{ask_en}" if en else f"{thanks_es}{ask_es}"
     elif action == "perk_reminder":
         body = (f"Your {cur['name']} already includes a streaming video service with ads at no extra cost. "
                 "Reply YES and we'll help you set it up."

@@ -159,6 +159,22 @@ def test_persona_38_saves_40_a_month():
     assert bool(r["is_chosen"]) and abs(r["customer_monthly_delta"] + 40) < 1e-6
 
 
+def test_text_fixes_post_freeze(outputs):
+    """check-in fits one SMS; right-size es keeps an opt-out; '5 lines qualify for 4 Line' states the real rule."""
+    o = outputs[0]
+    ci = o[o.action_code == "check_in"]
+    assert (ci.message_en.str.len() <= 160).all() and (ci.message_es.str.len() <= 160).all()
+    rs = o[o.action_code == "right_size"]
+    assert rs.message_es.str.contains("o ignore este mensaje").all()
+    four = o[(o.action_code == "variant_switch") & o.message_en.fillna("").str.contains("4 Line Offer")]
+    odd = four[~four.message_en.str.contains(r"your 4 lines qualify")]
+    assert odd.message_en.str.contains(r"qualify for our Essentials 4 Line Offer 2\.0 \(4 or more lines\)").all()
+    assert odd.message_es.str.contains(r"\(4 o más líneas\)").all()
+    p39 = o.set_index("account_id").loc["ACC-PERSONA-39"]
+    if p39["action_code"] == "variant_switch":
+        assert "(4 or more lines)" in p39["message_en"] and "(4 o más líneas)" in p39["message_es"]
+
+
 def test_persona_24_reason_from_real_fields(outputs):
     o = outputs[0].set_index("account_id").loc["ACC-PERSONA-24"]
     assert o["why_this_offer"].startswith("Happy customer:"), o["why_this_offer"]
