@@ -1,0 +1,67 @@
+{
+ "contacts": 184,
+ "total_mid": 6428.0,
+ "total_mid_before_channel_costing": 3939.0,
+ "total_mid_before_open_ticket_rule": 4109.0,
+ "open_ticket_swaps": 25,
+ "swap_mid_before": 28.0,
+ "swap_mid_after_call_cost": -142.0,
+ "swap_mid_after": 218.0,
+ "total_low": -270.0,
+ "total_high": 16210.0,
+ "already_leaving_in_184": 32,
+ "mid_already_leaving": 1583.0,
+ "in_holdout": 30,
+ "mid_holdout": 893.0,
+ "text_channel_count": 64,
+ "channel_cost_usd": {
+  "agent call": 15.0,
+  "text": 0.013,
+  "in-app message": 0.0,
+  "email": 0.0001
+ },
+ "channel_cost_source": {
+  "agent call": "engine FIX_FIRST_CALLBACK_COST $15",
+  "text": "SMS list price $0.013/attempt (research14, RESEARCH s14a)",
+  "in-app message": "push/in-app $0 (research14, RESEARCH s14a)",
+  "email": "email $0.0001 (research14, RESEARCH s14a)"
+ },
+ "fix_first_contacts_by_channel": {
+  "agent call": {
+   "care_credit_fix_first": 3,
+   "fix_first": 11
+  },
+  "email": {
+   "care_credit_fix_first": 3,
+   "fix_first": 27
+  },
+  "in-app message": {
+   "care_credit_fix_first": 9,
+   "fix_first": 64
+  },
+  "text": {
+   "care_credit_fix_first": 14,
+   "fix_first": 49
+  }
+ },
+ "boot10_mean": 6307.0,
+ "range95_low": -703.0,
+ "range95_high": 15657.0,
+ "p_net_pos_at_10": 0.949,
+ "p_net_pos_at_5": 0.731,
+ "boot5_lo95": -1816.0,
+ "boot5_hi95": 9867.0,
+ "breakeven_save_rate": 0.0211,
+ "breakeven_effective_per_attempt_riskweighted": 0.0191,
+ "breakeven_saves_per_100_contacts": 0.51,
+ "old_range95": [
+  -2805.0,
+  13292.0
+ ],
+ "events_rows": 2705,
+ "events_accounts": 1855,
+ "event_types": {
+  "open_ticket": 2355,
+  "bill_up": 350
+ }
+}
