@@ -170,6 +170,11 @@ div[class*="st-key-tmcard_"]:hover {{border-color:#D6CEC4 !important}}
 .outr-b {{font-size:14px; color:var(--muted); margin-top:4px}}
 .outr-soon .outr-b {{color:var(--faint); font-size:13px}}
 .outr-m {{font-size:13px; color:var(--ink); margin-top:8px; padding-top:8px; border-top:1px solid var(--line)}}
+.outr-quiet {{border-left-color:var(--line)}}
+.outr-ch {{display:inline-block; margin-left:8px; padding:1px 8px; border:1px solid var(--line); border-radius:999px; font-size:10px; font-weight:500; letter-spacing:.04em; color:var(--muted); text-transform:none}}
+.outr-lang {{font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); margin:10px 0 4px}}
+.outr-bubble {{display:inline-block; max-width:85%; background:#ECE7E1; color:var(--ink); border-radius:16px 16px 16px 4px; padding:8px 12px; font-size:13px; line-height:1.4}}
+.outr-chan {{background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:4px 12px 10px; font-size:13px; color:var(--ink); margin-top:8px}}
 .outr-m span {{display:block; font-size:11px; color:var(--faint); margin-bottom:2px}}
 /* options table */
 table.opts {{width:100%; border-collapse:collapse; font-size:14px; margin:8px 0 16px; color:var(--ink); border:none}}
@@ -716,21 +721,39 @@ def _outreach():
 
 def outreach_slot(acc: str, action_key, whatif: bool = False) -> str:
     """'Why we're reaching out / not' + drafted message, from the per-account outreach file.
-    No file or no row for this account -> quiet 'coming soon' placeholder; never an invented reason."""
-    silent = normalize_action(action_key) == "do_nothing"
-    head = "Why we're not reaching out" if silent else "Why we're reaching out"
+    Only text messages render as a phone bubble; in-app, email and call-script messages get a plain card with the
+    channel as a small label. No file or no row for this account -> quiet 'coming soon' placeholder."""
     o = _outreach()
     row = o.loc[acc] if (o is not None and acc in o.index) else None
     if row is None or not str(row.get("outreach_reason", "")).strip():
+        silent = normalize_action(action_key) == "do_nothing"
+        head = "Why we're not reaching out" if silent else "Why we're reaching out"
         return (f"<div class='outr outr-soon'><div class='outr-h'>{head}<span class='outr-tag'>coming soon</span></div>"
                 "<div class='outr-b'>A plain-language reason and the drafted message will appear here.</div></div>")
-    body = f"<div class='outr-b'>{html.escape(clean_text(row['outreach_reason']))}</div>"
+    has_msg = bool(row.get("has_msg", False))
+    head = "Why we're reaching out" if has_msg else "Why we're not reaching out"
+    reason = re.sub(r"^\s*No message:\s*", "", str(row.get("reason") or row.get("outreach_reason", "")))
+    reason = reason[:1].upper() + reason[1:]
+    body = f"<div class='outr-b'>{html.escape(clean_text(reason))}</div>"
+    ch = str(row.get("channel", ""))
+    try:
+        from outreach import CHANNEL_LABEL
+    except Exception:  # noqa: BLE001
+        CHANNEL_LABEL = {}
+    ch_lab = CHANNEL_LABEL.get(ch, ch.capitalize()) if ch else ""
     msgs = [(lab, str(row.get(c, "")).strip()) for lab, c in (("English", "message_en"), ("Español", "message_es"))]
     msgs = [(lab, m) for lab, m in msgs if m]
-    if msgs and not silent:
-        body += "".join(f"<div class='outr-m'><span>Drafted message · {lab}</span>{html.escape(m)}</div>" for lab, m in msgs)
+    if has_msg and msgs:
+        if ch == "text":
+            body += "".join(f"<div class='outr-lang'>{lab}</div><div class='outr-bubble'>{html.escape(m)}</div>"
+                            for lab, m in msgs)
+        else:
+            body += "".join(f"<div class='outr-chan'><div class='outr-lang'>{lab}</div>{html.escape(m)}</div>"
+                            for lab, m in msgs)
+    tag = f"<span class='outr-ch'>{html.escape(ch_lab)}</span>" if (has_msg and ch_lab) else ""
     note = " <span class='outr-tag'>for the real decision, not the what-if</span>" if whatif else ""
-    return (f"<div class='outr'><div class='outr-h'>{head}{note}</div>{body}</div>")
+    cls = "outr" if has_msg else "outr outr-quiet"
+    return f"<div class='{cls}'><div class='outr-h'>{head}{tag}{note}</div>{body}</div>"
 
 
 def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = True):
