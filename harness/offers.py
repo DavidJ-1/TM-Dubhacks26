@@ -95,10 +95,12 @@ CONFIG = {
         "loyalty_credit":   {"on_target": 0.12, "off_target": 0.05},  # price / competitor shopping
         "keep_your_phone":  {"on_target": 0.20, "off_target": 0.05},  # price, phone paid off (free to leave)
         "right_size":       {"on_target": 0.30, "off_target": 0.10},  # overpaying / bill shock
-        "step_up":          {"on_target": 0.15, "off_target": 0.03},  # plan too small / life event
-        "device_upgrade":   {"on_target": 0.22, "off_target": 0.06},  # old or paid-off phone / device issues
+        # v2 upsell fix (tm-models, scratch_models/family15/RESULTS.md): upsells earn take x margin only, no
+        # churn-save credit (was 0.15/0.03, 0.18/0.05, 0.22/0.06; the device term did not even depend on take).
+        "step_up":          {"on_target": 0.0, "off_target": 0.0},  # plan too small / life event
+        "device_upgrade":   {"on_target": 0.0, "off_target": 0.0},  # old or paid-off phone / device issues
         "variant_switch":   {"on_target": 0.30, "off_target": 0.10},  # same plan for less
-        "family_upgrade":   {"on_target": 0.18, "off_target": 0.05},  # outgrowing / old phones on a family plan
+        "family_upgrade":   {"on_target": 0.0, "off_target": 0.0},  # outgrowing / old phones on a family plan
         "bill_shock_price_lock": {"on_target": 0.30, "off_target": 0.08},  # promo-end bill shock on More/Beyond
         "check_in":         {"on_target": 0.12, "off_target": 0.04},  # shopping / port-out / went quiet
         "perk_reminder":    {"on_target": 0.08, "off_target": 0.03},  # superseded by SAVE_RATE_ABSOLUTE (v2)
@@ -141,9 +143,10 @@ CONFIG = {
     #       Verizon retail postpaid upgrade rate 2.6% (2Q26), https://www.verizon.com/about/sites/default/files/2026-07/vz_2q2026_foi_072426.pdf
     #     (RESEARCH.md sections 5 and 9). The old 0.25 / 0.15 / 0.20 overstated upsell value ~2.5-6x.
     "P_ACCEPT": {
-        "step_up":              0.04,  # cited ceiling (upgrade-rate proxy above); was 0.25
+        "step_up":              0.04,  # cited ceiling (upgrade-rate proxy above); was 0.25. tm-models (family15
+                                       # RESULTS.md s.A) suggests 0.03, range 0.01-0.06; we keep the cited 4% ceiling
         "device_upgrade":       0.04,  # cited ceiling (upgrade-rate proxy above); was 0.15
-        "family_upgrade":       0.04,  # cited ceiling (upgrade-rate proxy above); was 0.20
+        "family_upgrade":       0.04,  # cited ceiling (upgrade-rate proxy above); was 0.20 (tm-models: 0.03, 0.01-0.06)
         "home_internet_bundle": 0.04,  # UNCITED assumption (unchanged; no public bundle take-rate found)
         "right_size":           0.03,  # ASSUMPTION, cited base (was 0.45, no public support). Randomized trials
                                        # land 1-13%: Ascarza et al. 2016 wireless trial (54,089 customers, call +
@@ -194,7 +197,8 @@ CONFIG = {
     },
     "UPSELL_AFTER_PAIN_PENALTY": 25.0,   # extra annoyance for upsells right after bill shock / unresolved issues
     # --- costs not in the sandbox (synthetic)
-    "FIX_FIRST_CALLBACK_COST": 15.0,     # agent callback + ticket escalation, $. v2: plausible vs Gartner assisted
+    "FIX_FIRST_CALLBACK_COST": 15.0,     # agent callback + ticket escalation, $ (env TM_FIX_FIRST_CALLBACK_COST;
+                                         # sensitivity $8). v2: plausible vs Gartner assisted
                                          # contact $8.01 (2019) / $13.50 median (~2024), ~1-2 contacts (RESEARCH.md s12)
     "LOYALTY_CREDIT_MONTHS": 12,         # open-ended $/mo credit valued over 12 months (sandbox API uses 12 too)
     "KYP_MONTHS": 6,                     # adapted keep-your-phone credit length (real promo pays 36 months
@@ -223,8 +227,14 @@ CONFIG = {
     #     "all_open":              contact every open-ticket account (forced; EV <= 0 contacts reported separately).
     #   A port-out save attempt (when PORT_OUT_CONTACT allows) on an open-ticket account uses fix-first regardless.
     "FIX_FIRST_FORCE": "ev_positive",
-    "STEP_UP_MARGIN": 0.80,              # share of incremental plan revenue that is margin
-    "DEVICE_UPGRADE_MARGIN": 80.0,       # $ margin on a device sale + new 24-month financing (synthetic)
+    "STEP_UP_MARGIN": 0.50,              # share of incremental plan revenue that is margin. v2: 0.80 -> 0.50 = the
+                                         # service-margin upper bound (tm-models, scratch_models/family15/RESULTS.md
+                                         # s.A; RESEARCH.md s12-13). Gain = p_accept x delta x margin x
+                                         # KEPT_VALUE_MONTHS (19.338 discounted months, the $1,478 basis) instead of
+                                         # x 24 x (1 - p). ASSUMPTION.
+    "DEVICE_UPGRADE_MARGIN": 0.0,        # $ margin on a device sale. v2: 80 -> 0 (tm-models family15 s.B: equipment
+                                         # margin is ~0 or negative; sandbox device upgrades never pay). ASSUMPTION.
+    # No auto add-a-line: the engine has no add-a-line action (ACTIONS) and never adds lines on its own.
     # --- batch 4/5 (tm-strategy proposals + prompt-fit audit). All synthetic.
     "ENRICHMENT_IN_DECISIONS": False,   # PERMANENTLY OFF (tm-strategy A/B, strategy/ab_enrichment/RESULTS.md):
                                         # simulated enrichment (job change, income, kid age band, likely_kid_flag)
@@ -243,7 +253,8 @@ CONFIG = {
     "SAME_COVERAGE_RULE": True,         # an eligible same-features cheaper variant (55+/partner/community/4-line)
                                         # beats do-nothing, upsells, check-ins and cross-sells (restraint =
                                         # no upsell, not hiding savings). Problem-solving actions still win.
-    "LOCK_CUT": 0.50,                   # hazard cut while new promo credits / financing are paying out
+    "LOCK_CUT": 0.25,                   # hazard cut while new promo credits / financing are paying out. v2: 0.50 ->
+                                        # 0.25 = research base (tm-models family15 s.B; RESEARCH.md s15). ASSUMPTION.
     "CHECK_IN_COST": 2.0,               # $ (message + light agent follow-up). v2: only holds if digital: between
                                         # Gartner self-service $0.10-1.84 and assisted $8-13.50 (RESEARCH.md s12)
     "PERK_MIN_STREAMING_HOURS": 20.0,   # streaming_hours_3m_avg that makes an unused perk relevant
@@ -258,6 +269,8 @@ if os.environ.get("TM_UPGRADE_GATE") is not None:
     CONFIG["UPGRADE_GATE"] = os.environ["TM_UPGRADE_GATE"] not in ("0", "false", "False", "")
 if os.environ.get("TM_FIELD_SAVE_RATE") is not None:
     CONFIG["FIELD_SAVE_RATE"] = float(os.environ["TM_FIELD_SAVE_RATE"])
+if os.environ.get("TM_FIX_FIRST_CALLBACK_COST") is not None:
+    CONFIG["FIX_FIRST_CALLBACK_COST"] = float(os.environ["TM_FIX_FIRST_CALLBACK_COST"])
 if os.environ.get("TM_KEPT_VALUE_MONTHS") is not None:
     CONFIG["KEPT_VALUE_MONTHS"] = float(os.environ["TM_KEPT_VALUE_MONTHS"])
 if os.environ.get("TM_PORT_OUT_CONTACT") is not None:
@@ -867,7 +880,7 @@ def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) 
         add("step_up", False, 0, why_not=upsell_block or afford_block(su[1]))
     elif su is not None:
         plan, delta = su
-        gain = pa("step_up") * delta * C["STEP_UP_MARGIN"] * C["VALUE_HORIZON_MONTHS"] * (1 - p)
+        gain = pa("step_up") * delta * C["STEP_UP_MARGIN"] * C["KEPT_VALUE_MONTHS"]
         add("step_up", True, 0.0, gain=gain, detail=f"move to {plan['name']} (+${delta:.0f}/mo)", skus=plan["sku"])
         res["step_up"].update(plan_name=plan["name"], plan_sku=plan["sku"], delta=delta)
     else:
@@ -886,7 +899,7 @@ def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) 
     elif fam_ok:
         plan, delta = su
         paf = pa("family_upgrade")
-        gain = paf * delta * C["STEP_UP_MARGIN"] * C["VALUE_HORIZON_MONTHS"] * (1 - p)
+        gain = paf * delta * C["STEP_UP_MARGIN"] * C["KEPT_VALUE_MONTHS"]
         add("family_upgrade", True, 0.0, gain=gain,
             detail=f"move the family to {plan['name']} (+${delta:.0f}/mo; usage need; no trade-in bundled)",
             skus=plan["sku"])
