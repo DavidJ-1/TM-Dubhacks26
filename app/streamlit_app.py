@@ -1,7 +1,7 @@
 """T-Mobile churn + upsell: lean demo app (tm-ui lane). ALL CUSTOMERS AND NUMBERS ARE SYNTHETIC.
 
 Run:  streamlit run app/streamlit_app.py
-Tabs: Four customers · How it decides · Customer journey · Pipeline visual.
+Tabs: Four customers · How it decides · Pipeline visual. (Customer journey tab hidden: its numbers were stale.)
 Data: TM_OUT_DIR -> demo_data/ -> harness/out/ -> app/mock/ (mock is flagged with a banner). See app/data.py.
 One churn number everywhere: churn_scores.csv p_churn_90d. On screen: "Churn risk model" / "Offer engine",
 no file paths, SKUs or codenames (provenance sits in a collapsed expander).
@@ -156,6 +156,7 @@ div[class*="st-key-tmcard_"]:hover {{border-color:#D6CEC4 !important}}
 .risk-bar span {{position:absolute; left:0; top:0; bottom:0; background:var(--mag); border-radius:2px}}
 .risk-scale {{display:flex; justify-content:space-between; color:var(--faint); font-size:11px; margin-top:8px}}
 .risk-was {{color:var(--muted); font-size:13px; margin-top:8px}}
+.risk-syn {{display:inline-block; margin-left:8px; padding:1px 7px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:10px; letter-spacing:.04em; text-transform:lowercase; vertical-align:1px}}
 /* metrics */
 [data-testid="stMetric"] {{background:var(--card) !important; border:1px solid var(--line) !important; border-radius:16px !important; padding:24px !important;
   box-shadow:none !important; border-left:1px solid var(--line) !important}}
@@ -220,16 +221,12 @@ def money(v) -> str:
     return "—" if pd.isna(v) else f"${v:,.0f}"
 
 
-tab2, tabj, tab3 = st.tabs(["How it decides · four customers", "Customer journey", "Pipeline visual"])
+tab2, tab3 = st.tabs(["How it decides · four customers", "Pipeline visual"])
+# Customer journey tab hidden: its embedded HTML (app/viz/customer_journey.html) carries stale counts
+# (504 flagged / 1,123 contacted vs 505 / 1,314 on the main page). Re-add only after regenerating it.
 
-# ---------------- Customer journey (HTML built by another worker; embedded as-is) ----------------
-with tabj:
-    _journey = REPO / "app" / "viz" / "customer_journey.html"
-    if _journey.exists():
-        components.html(_journey.read_text(encoding="utf-8", errors="replace"), height=820, scrolling=False)
-        st.caption("All customers are synthetic.")
-    else:
-        st.info("Journey view loading…")
+TOP10_CLAIM = ("The top 10% catches {pct} of leavers in held-out synthetic data, close to the 64.2% best possible, "
+               "because it recovers the patterns built into the synthetic data (synthetic).")
 
 # ---------------- TAB 2: Four customers ----------------
 CARDS = [  # account, story we intend, action codes that fit the story (demo script v2 order)
@@ -239,7 +236,7 @@ CARDS = [  # account, story we intend, action codes that fit the story (demo scr
     ("ACC-PERSONA-24", "Restraint: do nothing", {"do_nothing"}),
 ]
 BADGES = {  # challenge direction each card demonstrates
-    "ACC-PERSONA-38": "Household plan fit · cheaper best-fit plan",
+    "ACC-PERSONA-38": "Account plan fit · cheaper best-fit plan",
     "ACC-PERSONA-04": "Next Best Moment · proportionate fix + credit",
     "ACC-PERSONA-21": "Next Best Moment · live re-decide",
     "ACC-PERSONA-24": "Next Best Moment · doing nothing is allowed",
@@ -680,7 +677,8 @@ def ring(p, caption: str = "") -> str:
         w = max(1.5, min(100.0, float(p) / 0.20 * 100))
     except (TypeError, ValueError):
         w = 0.0
-    return (f"<div class='risk-card'><div class='risk-lbl'>Churn risk, 90 days</div><div class='risk-num'>{fmt_prob(p)}</div>"
+    return (f"<div class='risk-card'><div class='risk-lbl'>Churn risk, 90 days <span class='risk-syn'>synthetic</span></div>"
+            f"<div class='risk-num'>{fmt_prob(p)}</div>"
             f"<div class='risk-bar'><span style='width:{w:.1f}%'></span></div>"
             f"<div class='risk-scale'><span>0%</span><span>10%</span><span>20%+</span></div>"
             + (f"<div class='risk-was'>{html.escape(caption)}</div>" if caption else "") + "</div>")
@@ -816,7 +814,7 @@ with tab2:
     for i, (acc, story, fits) in enumerate(CARDS, 1):
         with st.container(border=True):
             card(acc, story, fits, i)
-    with st.expander("More household plan fits (synthetic)"):
+    with st.expander("More account plan fits (synthetic)"):
         mcols = st.columns(2)
         for mc, macc in zip(mcols, ("ACC-PERSONA-05",)):
             mr = df[df.account_id == macc]
@@ -919,7 +917,7 @@ with top_c:
         return "".join(f"<div class='brow'><span>{html.escape(str(lbl))}</span><b>{int(v):,}</b></div>"
                        f"<div class='bbar'><i style='width:{max(3, 100 * v / mx):.0f}%; background:{color}'></i></div>"
                        for lbl, v in series.items())
-    catch_txt = (f"Tested on held-out customers, the top 10% catches {catch:.0%} of churners (synthetic)." if catch is not None else "")
+    catch_txt = TOP10_CLAIM.format(pct=f"{catch:.0%}") if catch is not None else ""
     st.markdown(
         "<div class='bento'>"
         "<div class='tile t1'><div class='step'>01 · Customer data</div>"
@@ -1009,8 +1007,8 @@ with bottom_c:
     k[0].metric("Accounts", f"{n_acc:,}", help="Judge sandbox accounts incl. 42 personas (synthetic).")
     k[1].metric("Flagged at-risk", f"{n_flag:,}", help=f"Churn risk ≥ {fmt_prob(cut)}: the top 10% of regular accounts (synthetic).")
     k[2].metric("Top-10% catch", f"{catch:.0%}" if catch is not None else "n/a",
-                help=f"Share of churners in the riskiest 10%, {catch_src} scores vs synthetic labels"
-                     + (f"; AUC {auc:.3f}" if auc is not None else "") + ".")
+                help=(TOP10_CLAIM.format(pct=f"{catch:.0%}") if catch is not None else "")
+                     + f" Scores: {catch_src}, against simulated outcomes. Not a measure of real-world accuracy.")
     k[3].metric("Messages ready", f"{n_msg:,}", help="Accounts with an action and an EN/ES text ready (synthetic).")
     k[4].metric("Do nothing", f"{n_dn:,}", help="Accounts we deliberately leave alone (synthetic).")
     k[5].metric("Texts, not at risk", f"{n_msg_nonflag:,}",
@@ -1209,13 +1207,46 @@ with bottom_c:
 
 
 # ---------------- TAB 3: Pipeline visual ----------------
+def _clean_pipeline_html(h: str) -> str:
+    """Display-time wording fixes for the pre-built pipeline page (file itself untouched): honest top-10% claim,
+    'account' not 'household', no internal model names / file names / port-out wording on screen."""
+    claim = TOP10_CLAIM.format(pct="62%")
+    for a, b in (
+        ("held-out: top 10% catches 62%\\u003cbr\\u003eof churners (oracle 64%,\\u003cbr\\u003erule 53%) \\u00b7 AUC 0.853",
+         "held-out synthetic: top 10% catches 62%\\u003cbr\\u003eof leavers (best possible 64.2%;\\u003cbr\\u003e"
+         "recovers patterns built into the data)"),
+        ("Held-out Model A: top 10% catches 62% of churners (oracle 64%, 3+ calls rule 53%), AUC 0.853.", claim),
+        ("Model A = tm-churn churn_scores.csv (sandbox 5k) and scaled_scores/churn_scores.csv (50k). "
+         "Model B = tm-offers offers.csv / offer_candidates.csv.", "All customers and numbers are synthetic."),
+        (" // MODEL A = TM-CHURN CHURN_SCORES.CSV // MODEL B = TM-OFFERS OFFERS.CSV", ""),
+        ("Model A = tm-churn churn_scores.csv \\u00b7 actions = Model B (tm-offers offers.csv) \\u00b7 "
+         "column 4 = features.csv household segment", "Actions = offer engine \\u00b7 column 4 = account type"),
+        ("Engine: Model A + Model B (tm-offers). Model A = tm-churn churn_scores.csv; save_rate, offer_cost, "
+         "customer_value from offer_candidates.csv \\u002f offers.csv.", "Engine: churn risk model + offer engine."),
+        ("Synthetic. Model A = tm-churn churn_scores.csv; flagged", "Synthetic. Flagged"),
+        ("Actions = Model B (tm-offers offers.csv).", "Actions = offer engine."),
+        ("Model A re-score (score_account) \\u00b7 action re-picked by tm-offers choose_offer()",
+         "churn risk model re-scores \\u00b7 offer engine re-picks the action"),
+        ("Model B's", "the offer engine's"), ("Model A", "churn risk model"), ("MODEL A", "CHURN RISK MODEL"),
+        ("Model B", "offer engine"), ("MODEL B", "OFFER ENGINE"),
+        ("HOUSEHOLD (offered)", "ACCOUNT TYPE (offered)"), ("household:", "account:"),
+        ("no port-out inquiry", "hasn't asked about transferring their number"),
+        ("remove port-out inquiry", "remove number-transfer question"),
+        ("port out inquiry", "asked about transferring their number"), ("port-out", "number transfer"),
+        ("scored (churn_scores.csv)", "scored"), ("upgrade model (upgrade_scores.csv)", "upgrade model"),
+        ("offer engine, offers.csv)", "offer engine)"),
+    ):
+        h = h.replace(a, b)
+    return re.sub(r"(?i)households", "accounts", re.sub(r"(?i)household", "account", h))
+
+
 with tab3:
     st.markdown('### Pipeline visual')
     viz = APP / "viz" / "pipeline_flow.html"
     st.caption("The whole system on one page: sandbox data → churn risk → every eligible action priced, "
                "with do nothing as a real option → a text in their language. All synthetic.")
     if viz.exists():
-        components.html(viz.read_text(encoding="utf-8", errors="replace"), height=900, scrolling=True)
+        components.html(_clean_pipeline_html(viz.read_text(encoding="utf-8", errors="replace")), height=900, scrolling=True)
     else:
         st.info("Pipeline visual loading…")
 
@@ -1237,7 +1268,7 @@ def _run_label() -> str:
 
 with st.expander("Data provenance", expanded=False):
     kind = "placeholder mock data" if MOCK else "synthetic sandbox data"
-    st.markdown(f"**{kind.capitalize()}, {_run_label()}.** Judge-provided sandbox (5,000 synthetic households "
+    st.markdown(f"**{kind.capitalize()}, {_run_label()}.** Judge-provided sandbox (5,000 synthetic accounts "
                 "plus 42 test personas), our churn risk model and offer engine. No real customer data.")
     for n, lab_ in (("churn_scores", "Churn risk"), ("offers", "Decisions and texts"), ("features", "Customer signals"),
                     ("labels", "Simulated outcomes"), ("offer_candidates", "Options considered")):
