@@ -52,6 +52,79 @@ def test_on_screen_text_is_short_and_clean():
         assert len(s.split()) <= 15, s
 
 
+def _open(step: int):
+    """Scroll page on #02363 at one live tick, with the decision step of the walk-through open."""
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(str(ROOT / "app" / "scroll_app.py"))
+    at.session_state["acc"] = "ACC-02363"
+    at.session_state["customer_pick"] = "ACC-02363"
+    at.session_state["seg"] = "ACC-02363"
+    at.session_state["orbit_deal_quick"] = "ACC-02363"
+    at.session_state["tick_ACC-02363"] = step
+    at.session_state["orbit_step"] = 3
+    at.session_state["orbit_last_acc"] = "ACC-02363"
+    at = at.run(timeout=120)
+    assert not at.exception
+    return at
+
+
+@pytest.mark.parametrize("step", range(5))
+def test_live_tick_matches_across_the_page(step):
+    import html
+    import sys
+    sys.path.insert(0, str(ROOT / "app"))
+    import orbit_data as D
+
+    facts = D.live_facts("ACC-02363", step)
+    at = _open(step)
+    text = html.unescape(" ".join(m.value for m in at.markdown))
+    line = f"This step: {facts['line']}"
+    # Walk-through, contact log, and deal example each carry the same line. The book row does too after tick 0.
+    assert text.count(line) >= 3, text.count(line)
+    assert f"o-tk-risk'>{facts['risk_txt'][:-1]}<small>%</small>" in text
+    if facts["message"]:
+        assert "Reach out in the app" in text
+        assert text.count(facts["message"]) >= 3
+        assert at.session_state["_phone_preview"] == facts["message"]
+        assert "Picked:" in text and facts["action"] in text
+    else:
+        assert "No message sent, here's why" in text
+        assert "Picked:" in text and "do nothing" in text.lower()
+        assert at.session_state.get("_phone_preview", "") == ""
+    for ev in facts["events"]:
+        assert ev in text
+    for ev in facts["later"]:
+        assert ev not in text
+    if facts["label"]:
+        assert facts["label"] in text
+    assert "o-hero-num'>184" in text
+    assert "3,938" in text
+    if step > 0:
+        assert "This live what-if does not change them." in text
+    else:
+        assert "After event" not in text
+
+
+def test_next_event_and_reset_follow_the_same_step():
+    import html
+
+    at = _open(0)
+    at = next(b for b in at.button if b.label == "Next event →").click().run(timeout=120)
+    assert not at.exception
+    text = html.unescape(" ".join(m.value for m in at.markdown))
+    assert "After event 1: Logged into the app" in text
+    assert "Opened the app to check their usage." in text
+    assert "This live what-if does not change them." in text
+    assert "o-hero-num'>184" in text
+    at = next(b for b in at.button if b.label == "Reset").click().run(timeout=120)
+    assert not at.exception
+    text = html.unescape(" ".join(m.value for m in at.markdown))
+    assert "After event 1" not in text
+    assert "o-hero-num'>184" in text
+    assert at.session_state["tick_ACC-02363"] == 0
+
+
 def test_other_customers_are_told_the_rail_switches():
     from streamlit.testing.v1 import AppTest
 

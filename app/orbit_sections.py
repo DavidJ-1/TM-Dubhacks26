@@ -315,14 +315,17 @@ def _mark_customers(base: go.Figure, df: pd.DataFrame, log: bool, marks: list[di
 
 
 def render_hero(df: pd.DataFrame, *, show_money: bool = True, selected: str | None = None,
-                marks: list[dict] | None = None) -> list:
+                marks: list[dict] | None = None, book: pd.DataFrame | None = None) -> list:
     """Clickable risk-vs-bill scatter. Returns the selected plotly points (possibly empty).
 
     show_money: the hero shows no money of ours either way (bills are the customer's own); kept for a uniform API.
     Linear is the default axis. 'Log scale' relabels the axis 'Churn risk (log scale)'. The chart does not zoom.
+    book: frozen frame for the funnel counts. df is what the dots use, so one customer's what-if can move their dot
+    without changing the week's message count.
     """
-    scored, flagged = len(df), int(df.flagged.sum())
-    messaged, texts = int(df.messaged.sum()), int((df.channel == "text").sum())
+    src = df if book is None else book
+    scored, flagged = len(src), int(src.flagged.sum())
+    messaged, texts = int(src.messaged.sum()), int((src.channel == "text").sum())
     st.markdown(f"<div class='o-strip'><span><b>Churn + upsell board</b> · this week</span><span>{scored:,} customers scored</span>"
                 f"<span>01 / 05</span></div>", unsafe_allow_html=True)
     left, right = st.columns([0.3, 0.7], gap="small")
@@ -426,7 +429,7 @@ def render_deal_engine(df: pd.DataFrame, account_id: str, options: pd.DataFrame 
                        decisions: pd.DataFrame | None = None, show_money: bool = True, *,
                        candidates: pd.DataFrame | None = None, demo_ids: list[str] | None = None,
                        quick: list[tuple[str, str]] | None = None, on_quick: Callable | None = None,
-                       key: str = "orbit") -> str:
+                       key: str = "orbit", step_label: str | None = None, live_line: str | None = None) -> str:
     """Act 2 'How we pick the deal': five-box flow, then a live example for the selected customer.
     options: options.csv (account_id, option_label, verdict picked/not_sent/ruled_out, reason, net_mid_usd; do nothing first).
     decisions: decisions.csv (decision, channel, offer_label, decision_reason) for the closing sentence.
@@ -459,8 +462,11 @@ def render_deal_engine(df: pd.DataFrame, account_id: str, options: pd.DataFrame 
     picks = list(quick) if quick is not None else [(a, f"Customer {cid(a)}") for a in (demo_ids or [])]
     picks = [(a, lab) for a, lab in picks if a in set(df.account_id)]
     acc = account_id
+    step_html = f"<div class='o-lbl' style='text-transform:none;letter-spacing:0;margin-top:2px'>{esc(step_label)}</div>" if step_label else ""
+    fact_html = f"<div class='o-stepfacts' style='font:400 14px/1.45 SG;margin:4px 0 10px'>{esc(live_line)}</div>" if live_line else ""
     st.markdown(f"<div class='o-lbl'>Live example · the customer selected above</div>"
-                f"<div style='font:500 22px/1.2 SG,sans-serif;margin:4px 0 12px'>Customer {esc(cid(acc))}</div>",
+                f"<div style='font:500 22px/1.2 SG,sans-serif;margin:4px 0 12px'>Customer {esc(cid(acc))}</div>"
+                f"{step_html}{fact_html}",
                 unsafe_allow_html=True)
     if picks and on_quick is not None:
         cols = st.columns(len(picks))
@@ -824,6 +830,7 @@ def _select_lang(r, drafts: dict[str, str], key: str, account_id: str) -> str:
 
 def _send_to_phone(body: str, *, title: str, button_key: str) -> None:
     """Post the text on screen. An empty SEND_BACKEND still uses ntfy; an explicit dryrun stays a preview."""
+    st.session_state["_phone_preview"] = body
     if not body or not st.button("Send to my phone", key=button_key):
         return
     import os
@@ -1153,7 +1160,12 @@ def _why_when(r, nv, e) -> str:
     if nv["kind"] == "quiet" or e is None or not len(e):
         return ""
     top = e.iloc[0]
-    return f"<b>Why now:</b> {esc(_event_text(top))} on {esc(pd.Timestamp(top.event_date).strftime('%b %d') if _sv(top, 'event_date') else '')}."
+    raw = _sv(top, "event_date")
+    try:
+        when = pd.Timestamp(raw).strftime("%b %d") if raw else ""
+    except Exception:  # noqa: BLE001
+        when = raw
+    return f"<b>Why now:</b> {esc(_event_text(top))} on {esc(when)}."
 
 
 def _opts_for(options, acc) -> pd.DataFrame | None:
@@ -1322,6 +1334,7 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
         st.markdown(f"<div class='o-lbl'>No customer {esc(account_id)} in this data.</div>", unsafe_allow_html=True)
         return
     r = df[df.account_id == account_id].iloc[0]
+    st.session_state["_phone_preview"] = ""
     sk = f"{key}_step"
     if st.session_state.get(f"{key}_last_acc") != account_id:
         st.session_state[f"{key}_last_acc"] = account_id
@@ -1360,8 +1373,18 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
 <div class='sub'>{sub}</div></div>
 <div class='{an}'><div class='risk o-tk-risk'>{pct(p_now)[:-1]}<small>%</small></div><div class='rl'>90-DAY CHURN RISK</div>{was}</div></div>""", unsafe_allow_html=True)
 
-    events_df = _events_for(account_id, events, decisions)
+    facts = (tick or {}).get("facts") or ""
+    if facts:
+        st.markdown(f"<div class='o-stepfacts' style='font:400 14px/1.45 SG;margin:0 0 8px'>{esc(facts)}</div>",
+                    unsafe_allow_html=True)
+    log = (tick or {}).get("log")
+    if isinstance(log, pd.DataFrame) and len(log):
+        events_df = log
+    else:
+        events_df = _events_for(account_id, events, decisions)
     strip = _strip_html(events_df, _next_version(r, decisions), live=bool(tick and "step" in tick))
+    if facts:
+        strip += f"<div class='o-stepfacts' style='font:400 14px/1.45 SG;margin:4px 0 10px'>{esc(facts)}</div>"
     if strip:
         st.markdown(strip, unsafe_allow_html=True)
     if live is not None and len(live) and account_id in set(live.account_id):
@@ -1658,7 +1681,9 @@ def _decision_counts(scored: int, ch: pd.Series, bill: int, messaged: int, kinds
 
 def render_dashboard(df: pd.DataFrame, economics: dict | None = None, *, typical_risk: float | None = None,
                      decisions: pd.DataFrame | None = None, breakeven: float = 0.048, value_note: str | None = None,
-                     summary: dict | None = None, show_money: bool = True, key: str = "orbit") -> str | None:
+                     summary: dict | None = None, show_money: bool = True, key: str = "orbit",
+                     book: pd.DataFrame | None = None, book_decisions: pd.DataFrame | None = None,
+                     freeze_note: str | None = None, row_note: str | None = None) -> str | None:
     """economics: {'breakeven_sr': float (0-1), 'receipt_lines': int, 'receipt_monthly': float}. Missing keys are skipped.
     Money comes only from decisions['net_mid_usd'] (summed over messaged accounts); without it no dollar figure is shown.
     breakeven: default used when economics has no 'breakeven_sr'. value_note: optional line shown under the meter.
@@ -1668,19 +1693,21 @@ def render_dashboard(df: pd.DataFrame, economics: dict | None = None, *, typical
     Customers' own savings (savings lines on the bill) stay.
     Returns the account_id clicked in the riskiest-ten table (or None)."""
     e = economics or {}
+    src = df if book is None else book
+    src_dec = decisions if book_decisions is None else book_decisions
     _act("03 / 05", "The whole book, at a glance", "this week")
-    scored, flagged = len(df), int(df.flagged.sum())
-    messaged = int(df.messaged.sum())
-    ch = df[df.messaged].channel.map(CHANNEL_LABEL).value_counts()
+    scored, flagged = len(src), int(src.flagged.sum())
+    messaged = int(src.messaged.sum())
+    ch = src[src.messaged].channel.map(CHANNEL_LABEL).value_counts()
     mix = "".join(f"<div style='flex:{v} 1 0;{'background:' + MAG + ';color:#fff' if k == 'text' else ''}'>"
                   f"{k.upper()} {v}</div>" for k, v in ch.items())
-    med = float(df.p_churn_90d.median() * 100)
+    med = float(src.p_churn_90d.median() * 100)
     cells = [f"<div class='o-cell'><span class='o-lbl'>Customers scored</span><span class='v'>{scored:,}</span><span class='s'>every account, every week</span></div>",
              f"<div class='o-cell warn'><span class='o-lbl'>Flagged at risk · top 10%</span><span class='v'>{flagged}</span><span class='s'>cut at {pct(df.attrs.get('flag_cut', 0) * 100)} 90-day risk</span></div>",
              f"<div class='o-cell w2'><span class='o-lbl'>Messages this week · by channel</span><span class='v'>{messaged}</span>"
              f"<div class='o-mix'>{mix}</div></div>"]
-    dec_bill = _dec_bill(decisions)
-    kinds0 = _bill_kinds(decisions)
+    dec_bill = _dec_bill(src_dec)
+    kinds0 = _bill_kinds(src_dec)
     if kinds0 is not None and dec_bill is not None:
         dec_bill = (kinds0[0], dec_bill[1])
     if dec_bill is not None:
@@ -1689,7 +1716,7 @@ def render_dashboard(df: pd.DataFrame, economics: dict | None = None, *, typical
         cells.append(f"<div class='o-cell{'' if show_money else ' w2'}'><span class='o-lbl'>Savings lines on the bill</span><span class='v'>{int(e['receipt_lines']):,}</span>"
                      f"<span class='s'>same features, lower price{(' · $' + format(e['receipt_monthly'], ',.0f') + '/mo if all switch') if 'receipt_monthly' in e else ''}</span></div>")
     sm = summary or {}
-    net = _net_mid(df, decisions)
+    net = _net_mid(src, src_dec)
     if net is None and sm.get("total_mid") is not None:
         net = float(sm["total_mid"])
     be_v = float(sm.get("breakeven_save_rate", e.get("breakeven_sr", breakeven)))
@@ -1707,8 +1734,11 @@ def render_dashboard(df: pd.DataFrame, economics: dict | None = None, *, typical
         cells.append(f"<div class='o-cell'><span class='o-lbl'>Typical customer risk</span><span class='v'>{pct(typical_risk)[:-1]}<small>%</small></span><span class='s'>90-day churn · model baseline</span></div>")
     cells.append(f"<div class='o-cell'><span class='o-lbl'>Median customer risk</span><span class='v'>{med:.2f}<small>%</small></span><span class='s'>half the book is below this</span></div>")
     st.markdown("<div class='o-grid'>" + "".join(cells) + "</div>", unsafe_allow_html=True)
-    bill = _bill_count(df, decisions)
-    kinds = _bill_kinds(decisions)
+    if freeze_note:
+        st.markdown(f"<div class='o-lbl' style='text-transform:none;letter-spacing:0;font-size:13px;margin-top:8px'>{esc(freeze_note)}</div>",
+                    unsafe_allow_html=True)
+    bill = _bill_count(src, src_dec)
+    kinds = _bill_kinds(src_dec)
     quiet_n = scored - messaged - (sum(kinds) if kinds else bill)
     counts = ([("messaged", messaged), ("bill line", kinds[0]), ("bill line with a trade-off", kinds[1]), ("stay quiet", quiet_n)] if kinds
               else [("messaged", messaged), ("cheaper plan on the bill, no message", bill), ("stay quiet", quiet_n)])
@@ -1723,8 +1753,8 @@ def render_dashboard(df: pd.DataFrame, economics: dict | None = None, *, typical
     c1, c2 = st.columns([1.35, 1], gap="large")
     with c1:
         st.markdown("<div class='o-ch'><span class='o-lbl'>Churn risk · every customer</span><span class='o-lbl'>share of the book</span></div>", unsafe_allow_html=True)
-        pctl = df.p_churn_90d * 100
-        cut = float(df.attrs.get("flag_cut", 1.0)) * 100
+        pctl = src.p_churn_90d * 100
+        cut = float(src.attrs.get("flag_cut", df.attrs.get("flag_cut", 1.0))) * 100
         band_defs = [("Under 1%", pctl < 1, 0.0), ("1% to under 5%", (pctl >= 1) & (pctl < 5), 1.0),
                      ("5% to under 10%", (pctl >= 5) & (pctl < 10), 5.0), ("10% and higher", pctl >= 10, 10.0)]
         has_bill = "last_bill_cents" in df.columns
@@ -1734,7 +1764,7 @@ def render_dashboard(df: pd.DataFrame, economics: dict | None = None, *, typical
             share = (100.0 * n / scored) if scored else 0.0
             row = {"Risk band": name, "Customers": f"{n:,}", "Share": f"{share:.1f}%"}
             if has_bill:
-                bills = pd.to_numeric(df.loc[mask, "last_bill_cents"], errors="coerce")
+                bills = pd.to_numeric(src.loc[mask, "last_bill_cents"], errors="coerce")
                 row["Median bill"] = f"${float(bills.median()) / 100:,.0f}/mo" if bills.notna().any() else ""
             band_rows.append(row)
             band_names.append(name)
@@ -1781,6 +1811,10 @@ def render_dashboard(df: pd.DataFrame, economics: dict | None = None, *, typical
                       column_config={"Customer": st.column_config.TextColumn(width="small"), "Risk": st.column_config.TextColumn(width="small"),
                                      "Bill": st.column_config.TextColumn(width="small"),
                                      "Channel": st.column_config.TextColumn(width="small")})
+    if row_note:
+        st.markdown(f"<div class='o-lbl' style='margin-top:8px'>Customer #02363 · not in the top ten</div>"
+                    f"<div class='o-stepfacts' style='font:400 14px/1.45 SG;margin:4px 0 8px'>{esc(row_note)}</div>",
+                    unsafe_allow_html=True)
     rows = (ev.selection.rows if ev is not None and hasattr(ev, "selection") else []) or []
     return t.iloc[rows[0]].account_id if rows else None
 

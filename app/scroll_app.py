@@ -59,7 +59,18 @@ if pending and pending in _ids:
         st.session_state["_chart_gen"] = int(st.session_state.get("_chart_gen", 0)) + 1
         st.session_state["_seen_dot"] = None
 
-_hero_points = _call(O.render_hero, df, selected=st.session_state.get("acc"), marks=D.quick_marks()) or []
+TICK_KEY = f"tick_{D.LIVE_ACC}"
+tick_i = max(0, int(st.session_state.get(TICK_KEY, 0) or 0))
+live_now = D.live_facts(D.LIVE_ACC, tick_i)
+if live_now:
+    tick_i = int(live_now["step"])
+live_df = D.live_row(df, D.LIVE_ACC, tick_i)
+_marks = D.quick_marks()
+if tick_i > 0 and live_now:
+    _marks = [{**m, "text": f"{D.customer_cid(m['id'])} · {live_now['risk_txt']}",
+               "hover": f"{live_now['risk_txt']} risk, {live_now['action']}"} if m["id"] == D.LIVE_ACC else m
+              for m in _marks]
+_hero_points = _call(O.render_hero, live_df, selected=st.session_state.get("acc"), marks=_marks, book=df) or []
 dot = D.account_from_point_selection(_hero_points)
 if dot and dot in _ids and dot != st.session_state.get("acc"):
     D.apply_shared_selection(st.session_state, dot)
@@ -67,11 +78,20 @@ if dot and dot in _ids and dot != st.session_state.get("acc"):
     st.rerun()
 st.session_state["_seen_dot"] = dot or None
 
-_menu_ids = D.customers_by_risk(df)
-_menu_labels = {
-    a: D.customer_menu_label(a, p, b)
-    for a, p, b in zip(df.account_id, df.p_churn_90d, df["last_bill_cents"] if "last_bill_cents" in df.columns else [None] * len(df))
-}
+_menu_ids = D.customers_by_risk(live_df)
+_bills = live_df["last_bill_cents"] if "last_bill_cents" in live_df.columns else [None] * len(live_df)
+
+
+def _menu_label(account_id: str, risk: float, bill) -> str:
+    """#02363's dropdown line uses the live step's risk. Everyone else stays on the book."""
+    if account_id == D.LIVE_ACC and tick_i > 0 and live_now:
+        shown = D.format_monthly_bill(bill)
+        tail = f", {shown}" if shown else ""
+        return f"Customer {D.customer_cid(account_id)}, {live_now['risk_txt']} risk{tail}"
+    return D.customer_menu_label(account_id, risk, bill)
+
+
+_menu_labels = {a: _menu_label(a, p, b) for a, p, b in zip(live_df.account_id, live_df.p_churn_90d, _bills)}
 if st.session_state["acc"] not in _menu_labels and len(_menu_ids):
     D.apply_shared_selection(st.session_state, _menu_ids[0])
 
@@ -110,7 +130,16 @@ def _from_live():
 
 
 st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-_qlabel = {q["id"]: D.quick_button(q) for q in D.QUICK}
+
+
+def _quick_label(q: dict) -> str:
+    """#02363's shortcut follows the live step; the other three stay the book."""
+    if q["id"] == D.LIVE_ACC and tick_i > 0 and live_now:
+        return f"{D.customer_cid(q['id'])} · {live_now['risk_txt']} risk, {live_now['action']}"
+    return D.quick_button(q)
+
+
+_qlabel = {q["id"]: _quick_label(q) for q in D.QUICK}
 st.segmented_control("Quick picks", list(D.QUICK_IDS), key="seg",
                      format_func=lambda i: _qlabel.get(i, D.customer_cid(i)), on_change=_from_seg)
 st.selectbox("Find a customer", _menu_ids, key="customer_pick", format_func=lambda i: _menu_labels.get(i, i), on_change=_from_pick)
@@ -128,10 +157,9 @@ if opts is None:
 dec_all = dec
 if not SHOW_MONEY:   # backstop: no company dollars in anything handed to the sections module
     cand, econ, dec, opts = D.strip_money(cand), D.economics_no_money(econ), D.strip_money(dec), D.strip_money(opts)
-# ---- 'the account ticks': for the live account, a thin event rail at the top of the customer section drives the
-# whole view (header risk + chip, step 1 inputs, step 2 tower and reasons). Buttons only, no timer. The rest of the
-# page stays frozen (it is drawn from df, never from the ticked row).
-TICK_KEY = f"tick_{D.LIVE_ACC}"
+# ---- 'the account ticks': for #02363, Next event and Reset redraw the page so every section that shows this
+# customer uses the same step. Book totals stay on df (184 messages, +$3,938).
+
 TICK_CSS = (f"<style>.st-key-orbit_tick{{position:sticky;top:0;z-index:20;background:{O.BG};padding:8px 0 0;margin-bottom:10px}}"
             f".o-tick{{display:flex;align-items:center;gap:0;font:400 12px 'SM';color:{O.INK};height:34px}}"
             f".o-tick .seg{{flex:1;height:1px;background:{O.INK}}}"
@@ -162,6 +190,7 @@ TICK_CSS = (f"<style>.st-key-orbit_tick{{position:sticky;top:0;z-index:20;backgr
 def _tick_go(i: int) -> None:
     st.session_state[TICK_KEY] = i
     st.session_state["_tick_anim"] = i > 0   # animate the run right after a Next event press (not on Reset)
+    st.session_state["_tick_full"] = True    # redraw the chart, the deal, the log and the book row too
 
 
 def _tick_open() -> None:   # the rail as entry point: from any other customer, Next event opens the live account
@@ -224,6 +253,11 @@ def customer_section():
         view, cfn = D.live_row(df, acc_, t["step"]), D.live_contributions(t["step"], acc_)
         dec_v = D.live_decisions(dec, acc_, t["step"], show_money=SHOW_MONEY)
         opt_v = D.live_options(acc_, t["step"], show_money=SHOW_MONEY)
+        step_facts = D.live_facts(acc_, t["step"])
+        if step_facts:
+            t["facts"] = f"This step: {step_facts['line']}"
+            if t["step"] > 0:
+                t["log"] = D.live_log(acc_, t["step"])
     elif live is not None:
         st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
     _call(O.render_customer, view if SHOW_MONEY else D.strip_money(view), acc_, contributions_fn=cfn, candidates=cand,
@@ -232,19 +266,36 @@ def customer_section():
 
 
 customer_section()
-clicked = _call(O.render_dashboard, df if SHOW_MONEY else D.strip_money(df), econ, typical_risk=D.typical_risk(),
-                decisions=dec, summary=D.dashboard_summary() if SHOW_MONEY else None)
+_book_note = None if tick_i <= 0 else (D.BOOK_FREEZE_NOTE if SHOW_MONEY else
+                "Book totals stay at 184 messages. This live what-if does not change them.")
+_row_note = f"This step: {live_now['line']}" if tick_i > 0 and live_now else None
+clicked = _call(O.render_dashboard, live_df if SHOW_MONEY else D.strip_money(live_df), econ, typical_risk=D.typical_risk(),
+                decisions=dec, summary=D.dashboard_summary() if SHOW_MONEY else None,
+                book=df if SHOW_MONEY else D.strip_money(df), book_decisions=dec,
+                freeze_note=_book_note, row_note=_row_note)
 if clicked and clicked != st.session_state.get("_last_row_pick"):
     st.session_state["_last_row_pick"] = clicked
     st.session_state["_pending_acc"] = clicked
     st.rerun()
 if not clicked:
     st.session_state["_last_row_pick"] = None
-# section 4: how we pick the deal, for the same customer selected above. Demo personas are quick picks only.
+# section 4: how we pick the deal, for the same customer selected above. For #02363 above tick 0, the cards,
+# the pick and the why are this step's. Book-level option counts stay on the frozen options.
 if hasattr(O, "render_deal_engine"):
     allo = D.all_options()
-    _call(O.render_deal_engine, df, acc, options=allo if SHOW_MONEY else D.strip_money(allo),
-          decisions=dec_all if SHOW_MONEY else D.strip_money(dec_all),
-          quick=[(q["id"], D.quick_button(q)) for q in D.QUICK], on_quick=_on_quick)
+    deal_df, deal_opts, deal_dec = df, allo, dec_all
+    deal_label = deal_line = None
+    if acc == D.LIVE_ACC and live_now:
+        deal_line = f"This step: {live_now['line']}"
+        deal_label = live_now["label"] or None
+        if tick_i > 0:
+            deal_df = live_df
+            deal_opts = D.live_book_options(allo, acc, tick_i, show_money=SHOW_MONEY)
+            deal_dec = D.live_decisions(dec_all, acc, tick_i, show_money=SHOW_MONEY)
+    if not SHOW_MONEY:
+        deal_df, deal_opts, deal_dec = D.strip_money(deal_df), D.strip_money(deal_opts), D.strip_money(deal_dec)
+    _call(O.render_deal_engine, deal_df, acc, options=deal_opts, decisions=deal_dec,
+          quick=[(q["id"], _quick_label(q)) for q in D.QUICK], on_quick=_on_quick,
+          step_label=deal_label, live_line=deal_line)
 _call(O.render_considered, D.considerations() if SHOW_MONEY else D.considerations_no_money(D.considerations()),
       summary=D.considered_summary() if SHOW_MONEY else None)

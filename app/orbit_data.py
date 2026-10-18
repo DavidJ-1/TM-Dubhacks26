@@ -835,9 +835,59 @@ def live_steps() -> list[dict] | None:
         return None
 
 
+BOOK_FREEZE_NOTE = ("Book totals stay at 184 messages and +$3,938. This live what-if does not change them.")
+
+
+def live_facts(acc: str, i: int) -> dict | None:
+    """One live step, in the words every section should show: risk, action, why, message, and the events so far."""
+    L = live_events()
+    if L is None or acc not in set(L.account_id):
+        return None
+    sub = L[L.account_id == acc].sort_values("step")
+    i = max(0, min(int(i), int(sub.step.max())))
+    cur = sub[sub.step == i].iloc[0]
+    pct_n = float(cur.risk) * 100
+    risk_txt = f"{pct_n:.1f}%" if pct_n >= 1 else f"{pct_n:.2f}%"
+    action = "Do nothing" if str(cur.pick) == "silent" else str(cur.pick_label)
+    why = str(cur.why or "").strip()
+    dd = (_live_step(acc, i) or {}).get("decision") or {}
+    message = clean(dd.get("message_en") or "") if dd.get("decision") == "message" else ""
+    events, later = [], []
+    for _, r in sub.iterrows():
+        text = str(r.event_line or r.event_label or "").strip()
+        if not text or int(r.step) <= 0:
+            continue
+        (events if int(r.step) <= i else later).append(text)
+    line = f"{risk_txt} risk · {action} · {why} · {message or 'No message'}"
+    return {"step": i, "risk": float(cur.risk), "risk_txt": risk_txt, "action": action, "why": why,
+            "message": message, "label": "" if i == 0 else f"After event {i}: {cur.event_label}",
+            "events": events, "later": later, "line": line}
+
+
+def live_log(acc: str, i: int) -> pd.DataFrame:
+    """Scripted events 1..i as contact-log rows (event_text is the event line). Empty before the first event."""
+    facts = live_facts(acc, i)
+    if facts is None or i <= 0:
+        return pd.DataFrame(columns=["account_id", "event_date", "event_type", "event_text"])
+    rows = [{"account_id": acc, "event_date": f"Event {n:02d}", "event_type": "live", "event_text": text}
+            for n, text in enumerate(facts["events"], start=1)]
+    return pd.DataFrame(rows)
+
+
+def live_book_options(base: pd.DataFrame | None, acc: str, i: int, show_money: bool = True) -> pd.DataFrame | None:
+    """Every account's options, with this account's rows replaced by the live step. Book rows stay put."""
+    if base is None or i <= 0:
+        return base
+    o = live_options(acc, i, show_money=show_money)
+    if o is None or not len(o):
+        return base
+    keep = base[base.account_id != acc]
+    return pd.concat([keep, o.reindex(columns=keep.columns)], ignore_index=True)
+
+
 def live_row(df: pd.DataFrame, acc: str, i: int) -> pd.DataFrame:
     """df with this account's model inputs set to their values after event i (cumulative), and its risk set to the
-    rescored one. Only that one row changes; the frame passed to the rest of the page stays as it is."""
+    rescored one. Only that one row changes. Book totals stay on the original frame."""
     S, L = live_steps(), live_events()
     if not S or L is None or i <= 0:
         return df
