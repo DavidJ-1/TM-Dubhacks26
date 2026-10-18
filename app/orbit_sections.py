@@ -76,6 +76,7 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stApp"]{background:va
 .o-know .gh{font:700 11px 'SM';letter-spacing:.08em;text-transform:uppercase;padding:8px 12px;border-bottom:1px solid #111}
 .o-kv{display:flex;justify-content:space-between;gap:12px;padding:6px 12px;border-bottom:1px solid rgba(17,17,17,.18);font:400 14px 'SG'}
 .o-kv:last-child{border-bottom:0}
+.o-know-sm .o-kv{padding:3px 10px;font-size:13px}.o-know-sm .o-kv span:last-child{font-size:12px}
 .o-kv span:last-child{font:400 13px 'SM';text-align:right}
 .o-drv{display:grid;grid-template-columns:30px 1fr 60px 80px;border-bottom:1px solid #111;padding:7px 0;font:400 14px 'SG';align-items:baseline}
 .o-drv:first-child{border-top:1px solid #111}
@@ -128,7 +129,7 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stApp"]{background:va
 .o-cell.warn{background:var(--mag);color:#fff}
 .o-cell.warn .o-lbl,.o-cell.warn .s{color:#fff}
 .o-mix{display:flex;height:34px;border:1px solid #111;margin-top:10px}
-.o-mix div{border-right:1px solid #111;display:flex;align-items:center;padding-left:8px;font:400 11px 'SM';white-space:nowrap;overflow:hidden}
+.o-mix div{border-right:1px solid #111;display:flex;min-width:78px;flex-shrink:0;align-items:center;padding-left:8px;font:400 11px 'SM';white-space:nowrap;overflow:hidden}
 .o-mix div:last-child{border-right:0}
 .o-ch{border-top:1px solid #111;padding:10px 0 2px;display:flex;justify-content:space-between}
 .o-ledger{columns:2;column-gap:48px}
@@ -140,6 +141,8 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stApp"]{background:va
 /* step rail + nav: real buttons, restyled */
 [class*="st-key-orbit_rail"] button{border-radius:0!important;border:0!important;border-top:2px solid #111!important;background:transparent!important;color:#111!important;font:400 11px 'SM'!important;justify-content:flex-start!important;padding:6px 0 0!important;min-height:0!important;box-shadow:none!important}
 [class*="st-key-orbit_rail"] button p{font:400 11px 'SM'!important;letter-spacing:.06em;text-transform:uppercase;text-align:left}
+[class*="st-key-orbit_money"] label p{font:400 11px 'SM'!important;letter-spacing:.08em;text-transform:uppercase;color:#111;white-space:nowrap}
+[class*="st-key-orbit_money"]{padding-bottom:8px}
 [class*="st-key-orbit_rail"] button[kind="primary"]{border-top-color:var(--mag)!important;color:var(--mag)!important}
 [class*="st-key-orbit_rail"] button[kind="primary"] p{color:var(--mag)!important;font-weight:700!important}
 [class*="st-key-orbit_nav"] button{border-radius:0!important;border:1px solid #111!important;background:transparent!important;font:400 12px 'SM'!important;color:#111!important}
@@ -253,11 +256,12 @@ def _hero_fig(_df: pd.DataFrame, sig: str) -> go.Figure:
     return fig
 
 
-def render_hero(df: pd.DataFrame) -> None:
+def render_hero(df: pd.DataFrame, *, show_money: bool = True) -> None:
+    """show_money: the hero shows no money of ours either way (bills on hover are the customer's own); kept for a uniform API."""
     scored, flagged = len(df), int(df.flagged.sum())
     messaged, texts = int(df.messaged.sum()), int((df.channel == "text").sum())
     st.markdown(f"<div class='o-strip'><span><b>Churn + upsell board</b> · this week</span><span>{scored:,} customers scored</span>"
-                f"<span>01 / 04</span></div>", unsafe_allow_html=True)
+                f"<span>01 / 05</span></div>", unsafe_allow_html=True)
     left, right = st.columns([0.3, 0.7], gap="small")
     with left:
         st.markdown(f"""<div style='margin-top:28px'><div class='o-lbl'>Messages this week</div>
@@ -276,7 +280,140 @@ def render_hero(df: pd.DataFrame) -> None:
     st.markdown("<div class='o-cue'>↓&nbsp;&nbsp;SCROLL · OPEN ONE CUSTOMER</div>", unsafe_allow_html=True)
 
 
-# ============================================================== act 2 — one customer, six steps
+# ============================================================== act 2 — how we pick the deal
+CSS_DEAL = f"""
+.o-flow{{display:flex;align-items:stretch;margin:6px 0 10px}}
+.o-flow .bx{{flex:1 1 0;border:1px solid {INK};padding:12px 14px 14px;background:{BG};min-height:118px}}
+.o-flow .bx .no{{font:400 11px 'SM';letter-spacing:.08em;color:{MUTED}}}
+.o-flow .bx .t{{font:500 17px/1.2 'SG';margin:6px 0 6px}}
+.o-flow .bx .d{{font:400 13px/1.35 'SG';color:#333}}
+.o-flow .bx.end{{border-color:{MAG};box-shadow:inset 0 0 0 1px {MAG}}}
+.o-flow .ln{{flex:0 0 22px;align-self:center;border-top:1px solid {INK}}}
+.o-cards{{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:12px 0 10px}}
+.o-card{{border:1px solid {INK};padding:10px 12px 12px;background:{BG};min-height:112px;display:flex;flex-direction:column;gap:6px}}
+.o-card .nm{{font:500 14px/1.25 'SG'}}
+.o-card .bar{{font:400 10px 'SM';letter-spacing:.08em;text-transform:uppercase;color:{MUTED}}}
+.o-card .pill{{align-self:flex-start;font:400 10px 'SM';letter-spacing:.08em;text-transform:uppercase;border:1px solid {INK};padding:2px 6px}}
+.o-card .rs{{font:400 12px/1.35 'SG';color:#333}}
+.o-card .nt{{margin-top:auto;font:400 12px 'SM'}}
+.o-card.win{{border:2px solid {MAG};padding:9px 11px 11px}}
+.o-card.win .pill{{border-color:{MAG};background:{MAG};color:#fff}}
+.o-card.out{{border-color:#B9B2A7;color:#8C877D}}
+.o-card.out .nm{{text-decoration:line-through;color:#8C877D}}
+.o-card.out .rs,.o-card.out .pill{{color:#8C877D;border-color:#B9B2A7}}
+.o-pickline{{font:400 18px/1.4 'SG';border-top:1px solid {INK};padding:12px 0 4px}}
+"""
+
+
+def _deal_stats(options, candidates=None) -> tuple[float, float, str] | None:
+    """(options weighed per customer, ruled out per customer, source) averaged over every account."""
+    try:
+        if options is not None and len(options) and {"account_id", "verdict"} <= set(options.columns):
+            g = options.groupby("account_id")
+            ruled = options.verdict.astype(str).str.lower().str.replace("_", " ").eq("ruled out").groupby(options.account_id).sum()
+            return float(g.size().mean()), float(ruled.mean()), "options"
+        if candidates is not None and len(candidates) and "account_id" in candidates:
+            g = candidates.groupby("account_id")
+            ok = candidates.eligible.astype(str).str.lower().isin(["true", "1"]) if "eligible" in candidates else None
+            ruled = (~ok).groupby(candidates.account_id).sum().mean() if ok is not None else float("nan")
+            return float(g.size().mean()), float(ruled), "candidates"
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def _pick_sentence(r, d, o) -> str:
+    """'Picked: X, sent by Y, because Z.' from decisions (else df)."""
+    def low(t):
+        t = _cap(t).rstrip(".")
+        return t[:1].lower() + t[1:]
+    lang = {"EN": "English", "ES": "Spanish"}.get(str(r.get("language", "")).upper(), "")
+    dec = _sv(d, "decision") if d is not None else ("message" if bool(r.get("messaged")) else ("receipt_only" if _sv(r, "receipt_line_en") else "silent"))
+    ch = (_sv(d, "channel") if d is not None else _sv(r, "channel")).lower()
+    reason = (_sv(d, "decision_reason") if d is not None else _sv(r, "reason_line")) or ""
+    if dec == "message":
+        label = _sv(d, "offer_label") if d is not None else ""
+        if not label and o is not None and (o.verdict == "picked").any():
+            label = str(o[o.verdict == "picked"].option_label.iloc[0])
+        how = CHANNEL_PHRASE.get(ch, "as a message").replace("as an agent call", "an agent call").replace("in the app", "in-app message").replace("by ", "")
+        return (f"Picked: <b>{esc(label or 'one message')}</b>, sent by <b>{esc(how)}</b>{(' in ' + lang) if lang else ''}, "
+                f"because {esc(low(reason.split(':', 1)[-1] if ':' in reason[:40] else reason))}.")
+    if dec == "receipt_only":
+        sav = _sv(d, "customer_saves_usd_mo") if d is not None else _sv(r, "receipt_saving_mo")
+        saves = f" (saves them ${float(sav):,.0f}/mo)" if sav and float(sav) > 0 else ""
+        return (f"Picked: <b>a cheaper plan{esc(saves)}</b>, shown <b>on the bill and in the app</b>{(' in ' + lang) if lang else ''}, "
+                f"because a plan change is never sent as a message.")
+    return f"Picked: <b>do nothing</b>, nothing is sent, because {esc(low(reason) or 'no option beats doing nothing')}."
+
+
+def render_deal_engine(df: pd.DataFrame, account_id: str, options: pd.DataFrame | None = None,
+                       decisions: pd.DataFrame | None = None, show_money: bool = True, *,
+                       candidates: pd.DataFrame | None = None, demo_ids: list[str] | None = None, key: str = "orbit") -> str:
+    """Act 2 'How we pick the deal': five-box flow, then a live example for one demo customer.
+    options: options.csv (account_id, option_label, verdict picked/not_sent/ruled_out, reason, net_mid_usd; do nothing first).
+    decisions: decisions.csv (decision, channel, offer_label, decision_reason) for the closing sentence.
+    candidates (optional, every account): fallback for the per-customer averages when options is missing.
+    demo_ids: account ids for the small picker (default: the demo accounts in df); account_id is the default pick.
+    show_money=False: no net figures; weighing is described without cost. Returns the account shown."""
+    st.markdown(f"<style>{CSS_DEAL}</style>", unsafe_allow_html=True)
+    _act("04 / 05", "How we pick the deal", "the same five steps for every customer")
+    weigh = ("The chance it keeps them, against what it costs us and how much it bugs them (team estimate)." if show_money
+             else "How likely it helps vs how much it bugs them (team estimate).")
+    boxes = [("Every option on the table", "Do nothing is always first: every offer has to beat it."),
+             ("Eligibility rules", "The real promotion rules cross out what this customer can't get."),
+             ("Open issue?", "Fix it first. With an open support issue, the only message is a fix."),
+             ("Weigh each option", weigh),
+             ("The pick", "One decision, plus the channel and the language.")]
+    flow = "<div class='ln'></div>".join(f"<div class='bx {'end' if i == 4 else ''}'><div class='no'>{i + 1:02d}</div><div class='t'>{esc(t)}</div>"
+                                         f"<div class='d'>{esc(d)}</div></div>" for i, (t, d) in enumerate(boxes))
+    stt = _deal_stats(options, candidates)
+    cap = ""
+    if stt and stt[2] == "options":
+        cap = f"Each customer: {stt[0]:.0f} options weighed, {stt[1]:.0f} ruled out by real promotion rules on average."
+    elif stt:
+        cap = f"{stt[0]:.0f} options weighed per customer" + (f", {stt[1]:.0f} ruled out on average." if stt[1] == stt[1] else ".")
+    st.markdown(f"<div class='o-flow'>{flow}</div>" + (f"<div class='o-lbl' style='margin-bottom:22px'>{esc(cap)}</div>" if cap else ""),
+                unsafe_allow_html=True)
+
+    ids = demo_ids or list(df[df.is_demo].account_id)
+    ids = [a for a in ids if a in set(df.account_id)]
+    pk = f"{key}_deal_pick"
+    if ids:
+        if st.session_state.get(pk) not in ids:
+            st.session_state[pk] = account_id if account_id in ids else ids[0]
+        a, _ = st.columns([2, 3])
+        a.segmented_control("Live example", ids, key=pk, format_func=lambda x: f"Customer {cid(x)}")
+        acc = st.session_state.get(pk) or account_id
+    else:
+        acc = account_id
+    if acc not in set(df.account_id):
+        return acc
+    r = df[df.account_id == acc].iloc[0]
+    o = _opts_for(options, acc)
+    d = _drow(decisions, acc)
+    cards = ""
+    if o is not None:
+        for i, x in enumerate(o.itertuples()):
+            v = x.verdict
+            is_dn = str(x.option_label).strip().lower() == "do nothing"
+            cls = "win" if v == "picked" else ("out" if v == "ruled out" else "")
+            reason = x.reason
+            if v == "picked" and reason.strip().lower() in ("sent.", "sent"):
+                reason = "Won: worth sending at realistic save rates and passed every outreach rule."
+            elif v == "picked" and reason.lower().startswith("no message:"):
+                reason = "Won: " + _cap(reason)
+            nt = getattr(x, "net_mid_usd", None)
+            net = (f"<div class='nt'>{'net at 10% · ' + _signed(float(nt)) if not is_dn else 'net $0 · the baseline'}</div>"
+                   if show_money and nt is not None and not pd.isna(nt) else "")
+            cards += (f"<div class='o-card {cls}'>" + ("<div class='bar'>the bar to beat</div>" if is_dn else "")
+                      + f"<div class='nm'>{esc(str(x.option_label))}</div><span class='pill'>{esc(v)}</span>"
+                      f"<div class='rs'>{esc(reason)}</div>{net}</div>")
+    st.markdown((f"<div class='o-cards'>{cards}</div>" if cards else "")
+                + f"<div class='o-pickline'>{_pick_sentence(r, d, o)}</div>", unsafe_allow_html=True)
+    return acc
+
+
+# ============================================================== act 3 — one customer, six steps
 # model column -> (wording when this customer is ABOVE typical, wording when BELOW typical, group)
 SIGNALS = {
     "extra_lines": ("More lines than typical", "Fewer lines than typical", "Commerce"),
@@ -383,11 +520,11 @@ def _tower(base, top, rest, overlap, p_now, key) -> go.Figure:
         t, i = top.loc[n], n + 1
         ann.append(dict(x=i, y=lane_y[t.lane], z=cols[i][3] + max(t.pts, 0), text=f"<b>{n + 1}</b>  {esc(t.label)}<br>{t.pts:+.2f} pts",
                         showarrow=True, arrowhead=0, arrowwidth=1, arrowcolor=MAG if t.pts > 0 else INK,
-                        ax=-50 + 40 * n, ay=-36 - 40 * n, font=dict(family="SM", size=10, color=INK),
+                        ax=[-50, 30, 140][n], ay=[-34, -80, -126][n], font=dict(family="SM", size=10, color=INK),
                         bgcolor="#fff", bordercolor=INK, borderwidth=1, borderpad=4))
     for ln, y in (("COMMERCE", 0), ("CUSTOMER", 1), ("LIVE", 2)):
         ann.append(dict(x=len(cols) - 0.35, y=y, z=0, text=ln, showarrow=False, xanchor="left", font=dict(family="SM", size=10, color=MUTED)))
-    zmax = max(max(c[3] + max(c[2], 0) for c in cols), p_now, base) * 1.5
+    zmax = max(max(c[3] + max(c[2], 0) for c in cols), p_now, base) * 1.7
     fig.update_layout(paper_bgcolor=BG, plot_bgcolor=BG, margin=dict(l=0, r=0, t=0, b=0), height=430, showlegend=False,
                       uirevision="orbit-tower", hoverlabel=dict(bgcolor="#fff", bordercolor=INK, font=dict(family="SM", size=11, color=INK)),
                       scene=dict(xaxis=_axes("", showticklabels=False, range=[-0.7, len(cols) + 1.0]),
@@ -428,17 +565,96 @@ def _facts(r) -> dict[str, list[tuple[str, str]]]:
     return {k: [(a, b) for a, b in v if b not in (None, "", "Nan")] for k, v in g.items()}
 
 
-def _message_html(r) -> str:
-    """Step 5: the message as the customer receives it, in its channel's look. Empty string when there is nothing to show."""
+def _v(r, c):
+    v = r.get(c)
+    return None if v is None or (isinstance(v, float) and math.isnan(v)) else v
+
+
+def _yn(r, c):
+    v = _v(r, c)
+    return None if v is None else ("yes" if float(v) > 0 else "no")
+
+
+def _fmt(r, c, f):
+    v = _v(r, c)
+    return None if v is None else f(v)
+
+
+INPUT_VALUES: dict[str, Callable] = {  # considerations item -> this customer's value (None = not in this view)
+    "Bill increase": lambda r: _fmt(r, "bill_increase_pct", lambda v: f"{float(v) * 100:+.0f}%"),
+    "Promo ended recently": lambda r: _yn(r, "promo_expired_recent"),
+    "Plan misfit": lambda r: _fmt(r, "plan_misfit_share", lambda v: f"{float(v) * 100:.0f}% of lines"),
+    "Phone age": lambda r: _fmt(r, "max_device_age_months", lambda v: f"{float(v):.0f} months"),
+    "Bring-your-own-phone account": lambda r: None if _v(r, "n_byod_lines") is None else f"{int(r.n_byod_lines)} of {int(_n(r, 'n_lines'))} lines",
+    "Phone payoff within 3 months": lambda r: _yn(r, "financing_ends_within_3m"),
+    "Home Internet on the account": lambda r: _yn(r, "has_home_internet"),
+    "Plan, family and price": lambda r: None if _v(r, "plan_family") is None else
+        f"{str(r.plan_family).replace('_', ' ').title()} {str(_v(r, 'plan_tier') or '').replace('_', ' ').title()} · ${_n(r, 'plan_price_cents') / 100:,.0f}/mo".replace("  ", " "),
+    "Last bill": lambda r: _fmt(r, "last_bill_cents", lambda v: f"${float(v) / 100:,.0f}"),
+    "Bill change reason": lambda r: _fmt(r, "bill_change_reason", lambda v: str(v).replace("_", " ")),
+    "Phone financing and trade-in value": lambda r: _fmt(r, "max_financing_months_remaining", lambda v: f"{int(v)} months left" if float(v) > 0 else "nothing financed"),
+    "Add-ons and streaming perk": lambda r: None if _v(r, "n_account_addons") is None else
+        f"{int(r.n_account_addons)} add-ons · streaming {'included' if _n(r, 'has_streaming_addon') > 0 else 'no'}",
+    "Connected lines (watch, tablet)": lambda r: _fmt(r, "n_connected_lines", lambda v: f"{int(v)}"),
+    "AutoPay": lambda r: _yn(r, "autopay"),
+    "Tenure": lambda r: _fmt(r, "tenure_months", lambda v: f"{int(v)} months"),
+    "Lines on the account": lambda r: _fmt(r, "n_lines", lambda v: f"{int(v)}"),
+    "Cancellation inquiries": lambda r: _fmt(r, "cancel_inquiries_270d", lambda v: f"{int(v)} in 270 days"),
+    "Segment and discount group": lambda r: None if _v(r, "segment") is None else
+        f"{str(r.segment).title()} · {str(_v(r, 'discount_group') or 'none').replace('_', ' ')}",
+    "Credit tier": lambda r: _fmt(r, "credit_tier", lambda v: str(v)),
+    "Language": lambda r: _fmt(r, "language", lambda v: str(v).upper()),
+    "Contact preference": lambda r: _fmt(r, "contact_preference", lambda v: str(v)),
+    "Total support contacts in 90 days": lambda r: _fmt(r, "support_90d", lambda v: f"{int(v)}"),
+    "Unresolved support contacts (90 days)": lambda r: _fmt(r, "unresolved_90d", lambda v: f"{int(v)}"),
+    "Unhappy support contacts (90 days)": lambda r: _fmt(r, "negative_contacts_90d", lambda v: f"{int(v)}"),
+    "Negative sentiment": lambda r: _fmt(r, "avg_sentiment_90d", lambda v: f"{float(v):+.2f} avg, 90 days"),
+    "Troubled (4+ contacts and one bad)": lambda r: None if _v(r, "support_90d") is None else
+        ("yes" if _n(r, "support_90d") >= 4 and (_n(r, "unresolved_90d") > 0 or _n(r, "negative_contacts_90d") > 0) else "no"),
+    "Comparing carriers": lambda r: _fmt(r, "competitor_research_score", lambda v: f"{float(v):.2f} of 1"),
+    "Asked about transferring their number": lambda r: _yn(r, "port_out_inquiry"),
+    "App use": lambda r: _fmt(r, "app_sessions_30d", lambda v: f"{int(v)} sessions, 30 days"),
+    "Recent usage": lambda r: _fmt(r, "data_gb_3m_avg", lambda v: f"{float(v):.1f} GB/mo · {_n(r, 'streaming_hours_3m_avg'):.0f} h streaming"),
+    "Open issue topic": lambda r: _fmt(r, "open_issue_topic", lambda v: str(v)),
+}
+
+
+def _inputs_html(r, inputs: pd.DataFrame) -> tuple[str, int, int]:
+    cols, shown, total = "", 0, 0
+    for g, x in inputs.groupby("group", sort=False):
+        name = re.sub(r"^\w+\.\s*(Inputs:\s*)?", "", str(g)).strip().title()
+        rows = ""
+        for it in x.itertuples():
+            fn = INPUT_VALUES.get(str(it.item))
+            val = fn(r) if fn else None
+            total += 1
+            shown += val is not None
+            rows += (f"<div class='o-kv'><span>{esc(str(it.item))}</span><span>{esc(str(val)) if val is not None else '<i style=\"color:#6B675F\">not in this view</i>'}</span></div>")
+        cols += f"<div class='col'><div class='gh'>{esc(name)} · {len(x)}</div>{rows}</div>"
+    return cols, shown, total
+
+
+def _message_html(r, d=None) -> str:
+    """Step 5: the message as the customer receives it, in its channel's look. Empty string when there is nothing to show.
+    d (optional decisions row): receipt_line / customer_saves_usd_mo fill in when df lacks them; receipt_kind 'tradeoff'
+    adds the receipt_tradeoff_line under the bill row as "but you'd lose: ..."."""
     msg = str(r.get("message_en", "") or "").strip()
     ch = r.get("channel")
-    bill = str(r.get("receipt_line_en", "") or "").strip()
+    bill = str(r.get("receipt_line_en", "") or "").strip() or (_sv(d, "receipt_line") if d is not None else "")
+    trade = _sv(d, "receipt_tradeoff_line") if d is not None and _sv(d, "receipt_kind").lower() == "tradeoff" else ""
+    mm = re.search(r"(?:,\s*)?\bbut you'?d lose:?\s*(.*)$", trade, flags=re.I)
+    lose = mm.group(1).strip().rstrip(".") if mm else trade
+    if not bill and trade:
+        bill = (trade[:mm.start()] if mm else trade).strip().rstrip(".")
     if bill:
         lines = [s.strip() for s in bill.split("|") if s.strip()]
         sav = r.get("receipt_saving_mo")
+        if (sav is None or pd.isna(sav)) and d is not None and _sv(d, "customer_saves_usd_mo"):
+            sav = float(d.get("customer_saves_usd_mo")) or None
         rows = "".join(
-            f"<div class='row {'mark' if i == 0 else ''}'><span>{esc(s)}</span>"
-            f"<span class='amt'>{('−$' + format(float(sav), ',.0f') + '/mo') if i == 0 and sav is not None and not pd.isna(sav) else ''}</span></div>"
+            f"<div class='row {'mark' if i == 0 else ''}'><span>{esc(s)}"
+            + (f"<br><span style='font:400 11px SM;color:#6B675F'>but you'd lose: {esc(lose)}</span>" if i == 0 and lose else "")
+            + f"</span><span class='amt'>{('−$' + format(float(sav), ',.0f') + '/mo') if i == 0 and sav is not None and not pd.isna(sav) else ''}</span></div>"
             for i, s in enumerate(sorted(lines, key=lambda s: not s.lower().startswith("same features"))))
         bill_html = f"<div class='o-bill'><div class='h'><span>Your monthly bill · notes</span><span>printed on the bill</span></div>{rows}</div>"
     else:
@@ -518,16 +734,269 @@ def outreach_rules(r) -> list[tuple[str, str, str]]:
     return out
 
 
+def _cap(t) -> str:
+    t = str(t or "").removeprefix("No message: ").strip()
+    return t[:1].upper() + t[1:]
+
+
+TODAY_LABEL = {"check_in": "a free check-in", "variant_switch": "a cheaper version of their plan", "right_size": "a right-sized plan",
+               "care_credit_fix_first": "a $25 credit plus a fix-first callback", "fix_first": "a fix-first callback",
+               "care_credit": "a $25 care credit", "loyalty_credit": "a loyalty credit", "perk_reminder": "a perk reminder",
+               "bill_shock_price_lock": "bill-shock relief", "step_up": "a step-up plan", "family_upgrade": "a family upgrade",
+               "home_internet_bundle": "a Home Internet bundle", "do_nothing": "do nothing"}
+CHANNEL_PHRASE = {"in_app": "in the app", "text": "by text", "email": "by email", "call": "as an agent call"}
+
+
+def _sv(r, c) -> str:
+    v = r.get(c) if hasattr(r, "get") else None
+    return "" if v is None or (isinstance(v, float) and math.isnan(v)) else str(v).strip()
+
+
+def _drow(decisions, acc):
+    try:
+        if decisions is None or not len(decisions) or "account_id" not in decisions:
+            return None
+        d = decisions[decisions.account_id == acc]
+        return d.iloc[0] if len(d) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _next_version(r, decisions=None) -> dict:
+    """The next-version decision for one account: from decisions.csv when given, else from the outreach columns on df."""
+    d = _drow(decisions, r.account_id)
+    nv = {"net": None}
+    if d is not None:
+        nets = [d.get(f"net_{k}_usd") for k in ("low", "mid", "high")]
+        try:
+            nv["net"] = tuple(float(x) for x in nets) if all(x is not None and not pd.isna(x) for x in nets) else None
+        except (TypeError, ValueError):
+            nv["net"] = None
+        nv["net_why"] = _sv(d, "why_mid") or _sv(d, "net_mid_why") or _sv(d, "net_why")
+    if d is not None and not any(c in d.index for c in ("channel", "decision", "receipt_line", "offer_label")):
+        dd, d = d, None   # money/timing-only ledger: the pick itself comes from df
+    else:
+        dd = d
+    if d is not None:
+        ch = _sv(d, "channel").lower().replace("-", "_").replace(" ", "_")
+        ch = {"in_app_message": "in_app", "agent_call": "call", "phone_call": "call", "sms": "text", "none": ""}.get(ch, ch)
+        if _sv(d, "receipt_line") or _sv(d, "decision") == "receipt_only" or ch == "bill":
+            kind, ch = "bill", ""
+        elif ch:
+            kind = "message"
+        else:
+            kind = "quiet"
+        reason = _sv(d, "decision_reason") or _sv(d, "guardrail_note")
+        label = _sv(d, "offer_label") or _sv(d, "decision")
+        code = None
+    else:
+        ch = r.get("channel") if isinstance(r.get("channel"), str) else ""
+        kind = "message" if bool(r.get("messaged")) else ("bill" if _sv(r, "receipt_line_en") else "quiet")
+        reason = _cap(_sv(r, "reason_line"))
+        label = ""
+        code = (_sv(r, "policy_action") or None) if kind == "message" else (
+            (_sv(r, "action_code") if _sv(r, "action_code") in ("variant_switch", "right_size") else "variant_switch") if kind == "bill" else "do_nothing")
+    low = reason[:1].lower() + reason[1:] if reason else ""
+    if kind == "quiet":
+        nv.update(headline="Stay quiet.", sentence=f"we'd stay quiet, because {low.rstrip('.')}." if low else "we'd stay quiet.")
+    elif kind == "bill":
+        nv.update(headline="Cheaper plan on the bill. No message.", sentence=f"we'd show the cheaper plan on the bill instead of messaging. {reason}".strip())
+    else:
+        nv.update(headline=f"Reach out {CHANNEL_PHRASE.get(ch, 'with a message')}" + (f": {label}." if label else "."),
+                  sentence=f"we'd reach out {CHANNEL_PHRASE.get(ch, 'with one message')}. {reason}".strip())
+    if dd is not None and _sv(dd, "already_leaving").lower() in ("true", "1", "yes"):
+        nv["leaving"] = _leaving(_sv(dd, "already_leaving_note")) if _sv(dd, "already_leaving_note") else LEAVING_DEFAULT
+    nv.update(kind=kind, channel=ch, code=code, label=label, reason=reason,
+              timing=_sv(dd, "timing").lower() if dd is not None else "", wait_until=_sv(dd, "wait_until") if dd is not None else "")
+    return nv
+
+
+def _money_bar(nv) -> str:
+    if not nv.get("net"):
+        return ""
+    lo, mid, hi = nv["net"]
+    span = max(abs(lo), abs(hi), 1)
+    def x(v):
+        return 50 + 50 * v / span
+    return (f"<div class='o-lbl' style='margin-top:10px'>Net value, low / mid / high save rate</div>"
+            f"<div style='position:relative;height:22px;border-bottom:1px solid #111;margin-top:4px'>"
+            f"<div style='position:absolute;left:50%;top:0;bottom:0;border-left:1px dashed #111'></div>"
+            f"<div style='position:absolute;left:{min(x(lo), x(hi)):.1f}%;width:{abs(x(hi) - x(lo)):.1f}%;top:8px;height:6px;background:#111'></div>"
+            f"<div style='position:absolute;left:{x(mid):.1f}%;top:2px;width:2px;height:18px;background:{MAG}'></div></div>"
+            f"<div style='display:flex;justify-content:space-between;font:400 12px SM;margin-top:4px'><span>{_signed(lo)}</span>"
+            f"<span style='color:{MAG}'>{_signed(mid)}</span><span>{_signed(hi)}</span></div>"
+            + (f"<div class='o-lbl' style='text-transform:none;margin-top:4px'>{esc(nv.get('net_why', ''))}</div>" if nv.get("net_why") else ""))
+
+
+LEAVING_DEFAULT = "Asked us about moving their number. We still reach out because fixing their open issue is worth it."
+
+
+def _leaving(note: str) -> str:
+    """'Already leaving' always means the customer asked us about leaving; never claim we saw them try to leave."""
+    t = str(note or "").strip()
+    if not t or re.search(r"\b(tr(y|ied|ying) to leave|caught|saw them|seen leaving|detected)\b", t, re.I):
+        return "They asked us about leaving."
+    t = re.sub(r",\s*so this account is counted\b.*$", ".", t)   # headline split is pending: no 'counted on its own line'
+    return t
+
+
+EVENT_WORDS = {"billing": "billing", "device": "phone", "network": "coverage", "plan_change": "plan change",
+               "cancellation_inquiry": "cancelling", "promo_expired": "a promo ended", "device_installment": "a new phone payment",
+               "installment_ended": "a phone was paid off"}
+
+
+def _event_text(e) -> str:
+    t = _sv(e, "event_text")
+    if t:
+        t = _leaving(t) if "leav" in t.lower() else t
+        return t[:1].upper() + t[1:]
+    et = _sv(e, "event_type").lower()
+    parts = et.split(":")
+    if parts[0] == "support" and len(parts) > 1:
+        topic, extra = parts[1], (parts[2] if len(parts) > 2 else "")
+        if topic == "cancellation_inquiry":
+            return "Asked us about leaving"
+        return f"Contacted support about {EVENT_WORDS.get(topic, topic.replace('_', ' '))}" + (", still open" if extra == "unresolved" else "")
+    if parts[0] == "bill" and len(parts) > 1:
+        why, amt = parts[1], (parts[2] if len(parts) > 2 else "")
+        try:
+            a = float(amt) / 100
+            head = f"Bill {'up' if a > 0 else 'down'} ${abs(a):,.0f}"
+        except ValueError:
+            head = "Bill changed"
+        return f"{head}: {EVENT_WORDS.get(why, why.replace('_', ' '))}"
+    return et.replace("_", " ").capitalize()
+
+
+def _events_for(acc, events=None, decisions=None) -> pd.DataFrame:
+    src = events if events is not None else decisions
+    try:
+        if src is None or not len(src) or not {"account_id", "event_date"} <= set(src.columns):
+            return pd.DataFrame()
+        e = src[src.account_id == acc].copy()
+        e = e[e.event_date.astype(str).str.strip().ne("") & e.event_date.notna()]
+        return e.sort_values("event_date", ascending=False).head(3)
+    except Exception:  # noqa: BLE001
+        return pd.DataFrame()
+
+
+def _strip_html(e: pd.DataFrame, nv: dict) -> str:
+    if e is None or not len(e):
+        return ""
+    def d(x):
+        try:
+            return pd.Timestamp(x).strftime("%b %d").upper()
+        except Exception:  # noqa: BLE001
+            return str(x)
+    items = "".join(f"<span style='margin-right:26px'><span style='font:700 11px SM'>{esc(d(x.event_date))}</span>&nbsp;&nbsp;"
+                    f"<span style='font:400 14px SG'>{esc(_event_text(x._asdict() if hasattr(x, '_asdict') else x))}</span></span>"
+                    for x in e.itertuples(index=False))
+    timing = (_sv(e.iloc[0], "timing") or nv.get("timing", "")).lower()
+    wait = _sv(e.iloc[0], "wait_until") or nv.get("wait_until", "")
+    tag = (f"<span style='font:700 11px SM;color:{MAG};letter-spacing:.06em;text-transform:uppercase'>wait until {esc(d(wait))}</span>"
+           if timing == "wait" and wait else "<span class='o-lbl'>now</span>")
+    if nv.get("kind") not in ("message", "bill"):
+        tag = ""
+    return (f"<div style='display:flex;align-items:baseline;gap:12px;border-bottom:1px solid #111;padding:7px 0'>"
+            f"<span class='o-lbl' style='min-width:150px'>Latest on the account</span><span style='flex:1'>{items}</span>{tag}</div>"
+            f"<div style='text-align:right;font:400 10px SM;color:{MUTED};padding:3px 0 2px'>latest events from the account record, refreshed each run</div>")
+
+
+def _why_when(r, nv, e) -> str:
+    if nv.get("timing") == "wait" or (e is not None and len(e) and _sv(e.iloc[0], "timing").lower() == "wait"):
+        wait = nv.get("wait_until") or (_sv(e.iloc[0], "wait_until") if e is not None and len(e) else "")
+        why = _sv(e.iloc[0], "wait_reason") if e is not None and len(e) else ""
+        return f"<b>Why wait:</b> {esc(why or ('the better moment is ' + wait if wait else 'the timing is better later'))}."
+    if nv["kind"] == "bill":
+        return "<b>Why now:</b> it goes on their next bill, where they already look; nothing is sent."
+    if nv["kind"] == "quiet" or e is None or not len(e):
+        return ""
+    top = e.iloc[0]
+    return f"<b>Why now:</b> {esc(_event_text(top))} on {esc(pd.Timestamp(top.event_date).strftime('%b %d') if _sv(top, 'event_date') else '')}."
+
+
+def _opts_for(options, acc) -> pd.DataFrame | None:
+    """This account's rows of options.csv (option_label, verdict, reason[, net_mid_usd]), verdicts normalised; None if absent."""
+    try:
+        if options is None or not len(options) or not {"account_id", "option_label", "verdict"} <= set(options.columns):
+            return None
+        o = options[options.account_id == acc].copy()
+        if not len(o):
+            return None
+        o["verdict"] = o.verdict.astype(str).str.replace("_", " ").str.strip().str.lower()
+        o["reason"] = o.get("reason", pd.Series("", index=o.index)).fillna("").astype(str)
+        return o
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _options_html(r, candidates, nv, stop, options=None) -> str:
+    """Every option with one verdict: from options.csv (option_label, verdict, reason) when given, else derived."""
+    o = _opts_for(options, r.account_id)
+    if o is not None:
+        rows, n = "", {"picked": 0, "not sent": 0, "ruled out": 0}
+        for x in o.itertuples():
+            v = x.verdict
+            n[v] = n.get(v, 0) + 1
+            col = f"color:{MAG};font-weight:700" if v == "picked" else ""
+            rows += (f"<div class='o-opt {'off' if v == 'ruled out' else ''}' style='grid-template-columns:1fr 120px 1.8fr;padding:5px 0'>"
+                     f"<span>{esc(str(x.option_label))}</span><span style='font:400 12px SM;{col}'>{esc(v)}</span><span class='why'>{esc(x.reason)}</span></div>")
+        head = (f"<div class='o-lbl' style='margin:12px 0 4px'>Every option weighed · {n.get('picked', 0)} picked · {n.get('not sent', 0)} not sent · "
+                f"{n.get('ruled out', 0)} ruled out</div>")
+        return head + f"<div style='max-height:180px;overflow:auto;border-top:1px solid #111;margin-bottom:16px'>{rows}</div>"
+    if candidates is None or not len(candidates):
+        return ""
+    c = candidates.copy()
+    c["ok"] = c.eligible.astype(str).str.lower().isin(["true", "1"])
+    dn = c.action_code.eq("do_nothing") if "action_code" in c else c.action.eq("do nothing")
+    c = pd.concat([c[dn], c[~dn & c.ok], c[~dn & ~c.ok]])
+    opt = None
+    try:
+        if options is not None and len(options) and {"account_id", "option_label", "verdict"} <= set(options.columns):
+            opt = options[options.account_id == r.account_id].copy()
+            opt["k"] = opt.option_label.astype(str).str.lower().str.strip()
+            opt = opt.drop_duplicates("k").set_index("k")
+    except Exception:  # noqa: BLE001
+        opt = None
+    pick = str(nv.get("code") or "").split("|")
+    rows, n = "", {"picked": 0, "not sent": 0, "ruled out": 0}
+    for x in c.itertuples():
+        k = str(x.action).lower().strip()
+        if opt is not None and k in opt.index:
+            v, w = _sv(opt.loc[k], "verdict") or "—", _sv(opt.loc[k], "reason")
+        elif not x.ok:
+            v, w = "ruled out", str(x.blocked_or_ineligible_reason or "")
+        elif getattr(x, "action_code", "") in pick:
+            v, w = "picked", ("on the bill" if nv["kind"] == "bill" else CHANNEL_PHRASE.get(nv["channel"], ""))
+        else:
+            v, w = "not sent", stop or (f"we send one message only: {nv['label']}" if nv["kind"] == "message" and nv.get("label") else
+                                        "we send one message only" if nv["kind"] == "message" else "")
+        n[v] = n.get(v, 0) + 1
+        col = f"color:{MAG};font-weight:700" if v == "picked" else ""
+        rows += (f"<div class='o-opt {'off' if v == 'ruled out' else ''}' style='grid-template-columns:1fr 120px 1.8fr;padding:5px 0'>"
+                 f"<span>{esc(str(x.action))}</span><span style='font:400 12px SM;{col}'>{esc(v)}</span><span class='why'>{esc(w)}</span></div>")
+    head = (f"<div class='o-lbl' style='margin:12px 0 4px'>Every option weighed · {n.get('picked', 0)} picked · {n.get('not sent', 0)} not sent · "
+            f"{n.get('ruled out', 0)} ruled out</div>")
+    return head + f"<div style='max-height:180px;overflow:auto;border-top:1px solid #111;margin-bottom:16px'>{rows}</div>"
+
+
 def _go(state_key: str, i: int) -> None:
     st.session_state[state_key] = i
 
 
 def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Callable | None = None,
-                    candidates: pd.DataFrame | None = None, rules: dict[str, str] | None = None, key: str = "orbit") -> None:
+                    candidates: pd.DataFrame | None = None, inputs: pd.DataFrame | None = None,
+                    decisions: pd.DataFrame | None = None, options: pd.DataFrame | None = None,
+                    events: pd.DataFrame | None = None, show_money: bool = True, key: str = "orbit") -> None:
     """Act 2. contributions_fn(account_id, edits) -> (intercept_logit, contributions Series, p, standardized-values Series or None).
     candidates: every option row for this account (action, eligible, expected_value, blocked_or_ineligible_reason, is_chosen).
-    rules: optional {action_code: plain-language rule} shown in step 3."""
-    _act("02 / 04", "One customer, step by step", "why this score · why this action")
+    events (optional): account_id, event_date, event_type[, event_text, timing, wait_until] for the 'Latest on the account' strip
+    (read from decisions when not given; strip hidden when there are none).
+    decisions / options (optional, engine output): when given they drive step 3's verdicts, step 4's pick, reason
+    and money bar; otherwise the outreach columns on df are used. Missing columns degrade quietly.
+    inputs: the engine-input rows of the considerations table (groups 1a-1c: group, item); step 1 lists this customer's value for each.
+    show_money=False hides step 4's net-value bar; the customer's own savings (bill lines) stay."""
+    _act("02 / 05", "One customer, step by step", "why this score · why this action")
     if account_id not in set(df.account_id):
         st.markdown(f"<div class='o-lbl'>No customer {esc(account_id)} in this data.</div>", unsafe_allow_html=True)
         return
@@ -558,10 +1027,14 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
     lines = int(_n(r, "n_lines"))
     sub = (f"typical customer {pct(base)} · " if base else "") + (f"risk rank {int(r.risk_rank):,} of {len(df):,}" if "risk_rank" in r else "")
     st.markdown(f"""<div class='o-cust'><div><div class='o-lbl'>Customer {esc(cid(account_id))}</div>
-<div class='name'>{esc(str(r.get('segment', '')).title())} account · {int(_n(r, 'tenure_months')) // 12} yrs with us · {lines} line{'s' if lines != 1 else ''}</div>
+<div class='name'>{esc(str(r.get('segment', '')).title())} account · {(str(int(_n(r, 'tenure_months')) // 12) + ' yrs') if _n(r, 'tenure_months') >= 12 else (str(int(_n(r, 'tenure_months'))) + ' months')} with us · {lines} line{'s' if lines != 1 else ''}</div>
 <div class='sub'>{sub}</div></div>
 <div><div class='risk'>{pct(p_now)[:-1]}<small>%</small></div><div class='rl'>90-DAY CHURN RISK</div>{was}</div></div>""", unsafe_allow_html=True)
 
+    events_df = _events_for(account_id, events, decisions)
+    strip = _strip_html(events_df, _next_version(r, decisions))
+    if strip:
+        st.markdown(strip, unsafe_allow_html=True)
     with st.container(key=f"orbit_rail_{key}"):
         rc = st.columns(len(STEPS))
         for i, (c, name) in enumerate(zip(rc, STEPS)):
@@ -571,11 +1044,16 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
     panel = st.container()
     with panel:
         if step == 0:
-            g = _facts(r)
-            cols = "".join(f"<div class='col'><div class='gh'>{k}</div>" + "".join(
-                f"<div class='o-kv'><span>{esc(a)}</span><span>{esc(str(b))}</span></div>" for a, b in v) + "</div>" for k, v in g.items())
-            st.markdown(f"<div class='o-ph'>Everything the models see for this account<small>{sum(len(v) for v in g.values())} inputs</small></div>"
-                        f"<div class='o-know'>{cols}</div>", unsafe_allow_html=True)
+            if inputs is not None and len(inputs):
+                cols, shown, total = _inputs_html(r, inputs)
+                st.markdown(f"<div class='o-ph'>Every input the engine uses, and this customer's value<small>{total} inputs</small></div>"
+                            f"<div class='o-know o-know-sm' style='margin-bottom:16px'>{cols}</div>", unsafe_allow_html=True)
+            else:
+                g = _facts(r)
+                cols = "".join(f"<div class='col'><div class='gh'>{k}</div>" + "".join(
+                    f"<div class='o-kv'><span>{esc(a)}</span><span>{esc(str(b))}</span></div>" for a, b in v) + "</div>" for k, v in g.items())
+                st.markdown(f"<div class='o-ph'>Everything the models see for this account<small>{sum(len(v) for v in g.values())} inputs</small></div>"
+                            f"<div class='o-know'>{cols}</div>", unsafe_allow_html=True)
         elif step == 1:
             if not bd:
                 st.markdown("<div class='o-lbl'>Score breakdown unavailable here.</div>", unsafe_allow_html=True)
@@ -595,44 +1073,45 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
                     st.markdown(f"<div class='o-ph'>Typical {pct(b)} → this customer {pct(pn)}</div>{rows}", unsafe_allow_html=True)
         elif step == 2:
             rl = outreach_rules(r)
+            nv = _next_version(r, decisions)
             mark = {"stop": f"<span style='color:{MAG};font-weight:700'>STOPS HERE</span>", "pass": "passes", "info": "applies", "skip": "not reached"}
-            rrows = "".join(f"<div class='o-opt {'win' if s_ == 'stop' else ''} {'off' if s_ == 'skip' else ''}' style='grid-template-columns:1.4fr 1.2fr 110px'>"
+            rrows = "".join(f"<div class='o-opt {'win' if s_ == 'stop' else ''} {'off' if s_ == 'skip' else ''}' style='grid-template-columns:1.4fr 1.2fr 110px;padding:5px 0'>"
                             f"<span>{i + 1}. {esc(rule)}</span><span class='why'>{esc(det)}</span><span class='v'>{mark[s_]}</span></div>"
                             for i, (rule, s_, det) in enumerate(rl))
-            st.markdown(f"<div class='o-ph'>The rules, in order: the first one that applies decides</div>{rrows}", unsafe_allow_html=True)
-            if candidates is not None and len(candidates):
-                c = candidates.copy()
-                c["ok"] = c.eligible.astype(str).str.lower().isin(["true", "1"])
-                c = pd.concat([c[c.ok].sort_values("expected_value", ascending=False), c[~c.ok]])
-                rows = ""
-                for x in c.itertuples():
-                    why = ("picked" if x.is_chosen else "allowed, not picked") if x.ok else str(x.blocked_or_ineligible_reason or "")
-                    v = f"${x.expected_value:,.2f}" if x.ok and not pd.isna(x.expected_value) else "—"
-                    rows += (f"<div class='o-opt {'win' if x.is_chosen else ''} {'' if x.ok else 'off'}'><span>{esc(str(x.action))}</span>"
-                             f"<span class='why'>{esc(why)}</span><span class='v'>{v}</span></div>")
-                st.markdown(f"<div class='o-lbl' style='margin:14px 0 4px'>Every option weighed · {int(c.ok.sum())} allowed · {int((~c.ok).sum())} ruled out · "
-                            f"expected value at the engine's own save rates</div><div style='max-height:190px;overflow:auto;border-top:1px solid #111'>{rows}</div>",
-                            unsafe_allow_html=True)
+            st.markdown(f"<div class='o-ph'>The rules, in order<small>the first one that applies decides</small></div>{rrows}", unsafe_allow_html=True)
+            if (candidates is not None and len(candidates)) or _opts_for(options, account_id) is not None:
+                stop = next((d for _, s_, d in rl if s_ == "stop"), "")
+                st.markdown(_options_html(r, candidates, nv, stop, options), unsafe_allow_html=True)
         elif step == 3:
-            messaged, bill = bool(r.messaged), str(r.get("receipt_line_en", "") or "").strip()
-            reason = esc(str(r.get("reason_line", "") or "").removeprefix("No message: "))
-            if messaged:
-                big = f"<div class='big'>Reach out by {esc(CHANNEL_LABEL.get(r.channel, 'message'))}.</div>"
-                head = "Why we're reaching out"
-            elif bill:
-                big = "<div class='big'>Put the cheaper plan on the bill.<br>No message is sent.</div>"
-                head = "Why we're not reaching out"
+            nv = _next_version(r, decisions)
+            reason = nv.get("reason", "")
+            if nv["kind"] == "quiet":
+                big = "<div class='big hero'>Do nothing.<br>No text is sent.</div>"
+            elif nv["kind"] == "bill":
+                big = "<div class='big'>Cheaper plan on the bill.<br>No message is sent.</div>"
             else:
-                big = "<div class='big hero'>Do nothing.<br>No message is sent.</div>"
-                head = "Why we're not reaching out"
-            why = f"<div class='o-lbl' style='padding:10px 14px 0;border-top:1px solid #111'>{head}</div><div class='why' style='border-top:0'>{reason}</div>" if reason else ""
-            st.markdown(f"<div class='o-dec' style='max-width:760px'><div class='hd'><span class='o-lbl'>What we picked</span></div>{big}{why}</div>",
+                big = f"<div class='big'>{esc(nv['headline'])}</div>"
+            head = "Why we're reaching out" if nv["kind"] == "message" else "Why we're not reaching out"
+            why = (f"<div class='o-lbl' style='padding:10px 14px 0;border-top:1px solid #111'>{head}</div>"
+                   f"<div class='why' style='border-top:0'>{esc(reason)}</div>") if reason else ""
+            wl = _why_when(r, nv, events_df)
+            when = f"<div style='border-top:1px solid #111;padding:10px 14px;font:400 15px/1.4 SG'>{wl}</div>" if wl else ""
+            money = f"<div style='border-top:1px solid #111;padding:6px 14px 14px'>{_money_bar(nv)}</div>" if nv.get("net") and show_money else ""
+            if nv.get("leaving"):
+                when += (f"<div style='border-top:1px solid #111;padding:10px 14px'><div style='border:1px solid #111;padding:8px 12px'>"
+                         f"<div class='o-lbl'>Asked us about leaving</div><div style='font:400 14px/1.4 SG;margin-top:4px'>{esc(nv['leaving'])}</div></div></div>")
+            st.markdown(f"<div class='o-dec' style='max-width:780px'><div class='hd'><span class='o-lbl'>What we picked</span></div>{big}{why}{when}{money}</div>",
                         unsafe_allow_html=True)
+            if nv["kind"] in ("message", "bill"):
+                m = _message_html(r, _drow(decisions, account_id))
+                if m:
+                    lab = "On the bill:" if nv["kind"] == "bill" else f"Sent {CHANNEL_PHRASE.get(nv['channel'], 'as a message')}:"
+                    st.markdown(f"<div class='o-lbl' style='margin:12px 0 6px'>{esc(lab)}</div>{m}", unsafe_allow_html=True)
         elif step == 4:
-            m = _message_html(r)
+            m = _message_html(r, _drow(decisions, account_id))
             reason = str(r.get("reason_line", "") or "")
             head = "Why we're reaching out" if r.messaged else "Why we're not"
-            top = f"<div class='o-lbl'>{head}</div><div class='o-ph'>{esc(reason.removeprefix('No message: '))}</div>" if reason else ""
+            top = f"<div class='o-lbl'>{head}</div><div class='o-ph'>{esc(_cap(reason))}</div>" if reason else ""
             st.markdown(top + m, unsafe_allow_html=True)
         else:
             rel = [(k, lab) for k, lab, cond, _ in TOGGLES if cond(r)]
@@ -663,33 +1142,188 @@ def _flat2d(f: go.Figure, h: int) -> go.Figure:
     return f
 
 
+SAVED_VALUE_LINE = ("We value a saved account at its own monthly margin times 19.3 months (how long an average saved customer stays): "
+                    "about $1,500 for an average account, about $2,000 for the ones we message.")
+
+
+def _net_mid(df: pd.DataFrame, decisions: pd.DataFrame | None) -> float | None:
+    """Sum of net_mid_usd over messaged accounts, from decisions/ledger. None when not available."""
+    try:
+        if decisions is None or "net_mid_usd" not in decisions or "account_id" not in decisions:
+            return None
+        msg = set(df.loc[df.messaged, "account_id"])
+        v = pd.to_numeric(decisions[decisions.account_id.isin(msg)].net_mid_usd, errors="coerce").dropna()
+        return float(v.sum()) if len(v) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _pct2(v: float) -> str:
+    """Percent with up to two decimals, as given: 5.17, 4.8."""
+    return f"{v:.2f}".rstrip("0").rstrip(".")
+
+
+def _band(lo: float, mid: float | None, hi: float, p_ahead: float | None) -> str:
+    """Hairline band for the 95% range of the total, on its own dollar scale with a zero tick."""
+    span_lo, span_hi = min(lo, 0), max(hi, 0)
+    w = (span_hi - span_lo) or 1
+    def x(v):
+        return (v - span_lo) / w * 100
+    mid_mark = (f"<div style='position:absolute;left:{x(mid):.2f}%;top:-4px;width:2px;height:9px;background:{MAG}'></div>" if mid is not None else "")
+    ahead = f" · ahead in {p_ahead * 100:.0f}% of re-runs" if p_ahead is not None else ""
+    return (f"<div style='margin:0 0 22px auto;width:46%'><div class='o-lbl' style='display:flex;justify-content:space-between'>"
+            f"<span>95% range at our central assumption{ahead}</span></div>"
+            f"<div style='position:relative;height:1px;background:#111;margin:10px 0 6px'>"
+            f"<div style='position:absolute;left:0;top:-4px;height:9px;border-left:1px solid #111'></div>"
+            f"<div style='position:absolute;right:0;top:-4px;height:9px;border-left:1px solid #111'></div>"
+            f"<div style='position:absolute;left:{x(0):.2f}%;top:-3px;height:7px;border-left:1px dashed #111'></div>{mid_mark}</div>"
+            f"<div style='position:relative;height:14px;font:400 11px SM'><span style='position:absolute;left:0'>{_signed(lo)}</span>"
+            f"<span style='position:absolute;left:{x(0):.2f}%;transform:translateX(-50%)'>$0</span>"
+            f"<span style='position:absolute;right:0'>{_signed(hi)}</span></div></div>")
+
+
+def _signed(v: float) -> str:
+    return f"{'+' if v >= 0 else '−'}${abs(v):,.0f}"
+
+
+def _meter(breakeven: float, net: float | None, counts: list[tuple[str, int]], needle: float = 0.10,
+           band: tuple | None = None) -> str:
+    be, nd, top = breakeven * 100, needle * 100, 20.0
+    ticks = "".join(f"<div style='position:absolute;left:{t / top * 100:.2f}%;bottom:0;height:{10 if t % 5 == 0 else 5}px;border-left:1px solid #111'></div>"
+                    + (f"<div style='position:absolute;left:{t / top * 100:.2f}%;top:46px;transform:translateX(-50%);font:400 10px SM'>{t}%</div>" if t % 5 == 0 and t != round(nd) else "")
+                    for t in range(0, 21))
+    money = (f"<div style='position:absolute;left:{nd / top * 100:.2f}%;top:-24px;margin-left:8px;font:500 20px SG;color:{MAG}'>"
+             f"{'+' if net >= 0 else '−'}${abs(net):,.0f} at {nd:.0f}%</div>") if net is not None else ""
+    cnt = "".join(f"<div><b style='font:300 34px SG'>{v:,}</b><div class='o-lbl'>{esc(k)}</div></div>" for k, v in counts)
+    return (f"<div style='border:1px solid #111;border-top:0;padding:14px 16px 18px'><div class='o-lbl'>Save-rate ruler · share of messaged customers we keep</div>"
+            f"<div style='position:relative;height:40px;border-bottom:1px solid #111;margin:30px 0 40px'>{ticks}"
+            f"<div style='position:absolute;left:0;width:{be / top * 100:.2f}%;bottom:0;height:12px;background:repeating-linear-gradient(90deg,#111 0 1px,transparent 1px 5px)'></div>"
+            f"<div style='position:absolute;left:{be / top * 100:.2f}%;bottom:0;height:34px;border-left:1px dashed #111'></div>"
+            f"<div style='position:absolute;left:{be / top * 100:.2f}%;top:-22px;transform:translateX(-50%);font:400 11px SM'>break-even {_pct2(be)}%</div>"
+            f"<div style='position:absolute;left:{nd / top * 100:.2f}%;bottom:-18px;height:64px;border-left:2px solid {MAG}'></div>{money}"
+            f"<div style='position:absolute;left:{nd / top * 100:.2f}%;top:46px;transform:translateX(-50%);font:700 10px SM;color:{MAG};white-space:nowrap;"
+            f"letter-spacing:.06em;text-transform:uppercase'>{nd:.0f}% · our central assumption</div></div>"
+            + (_band(*band) if band else "")
+            + f"<div style='display:flex;gap:48px;margin-top:6px'>{cnt}</div></div>")
+
+
+def _bill_kinds(decisions) -> tuple[int, int] | None:
+    """(clean, trade-off) bill-line counts from decisions.receipt_kind; None when the column is absent."""
+    try:
+        if decisions is None or "receipt_kind" not in decisions:
+            return None
+        k = decisions.receipt_kind.astype(str).str.lower().str.strip()
+        return int(k.eq("clean").sum()), int(k.eq("tradeoff").sum())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _dec_bill(decisions) -> tuple[int, float | None] | None:
+    """(bill-line-only accounts, their total monthly saving) from decisions.csv, or None without a decision column."""
+    try:
+        if decisions is None or "decision" not in decisions:
+            return None
+        b = decisions[decisions.decision.astype(str).eq("receipt_only")]
+        if "receipt_kind" in b:
+            b = b[b.receipt_kind.astype(str).str.lower().eq("clean")]
+        sav = float(pd.to_numeric(b.customer_saves_usd_mo, errors="coerce").sum()) if "customer_saves_usd_mo" in b else None
+        return len(b), sav
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _bill_count(df, decisions) -> int:
+    d = _dec_bill(decisions)
+    if d is not None:
+        return d[0]
+    return int((df.receipt_line_en.astype(str).str.strip().ne("") & ~df.messaged).sum()) if "receipt_line_en" in df else 0
+
+
+def _decision_counts(scored: int, ch: pd.Series, bill: int, messaged: int, kinds: tuple[int, int] | None = None) -> str:
+    """Money-off stand-in for the meter: one decision per account, as a flat proportional bar plus counts."""
+    quiet = max(scored - messaged - (sum(kinds) if kinds else bill), 0)
+    order = [k for k in ("text", "in-app", "email", "call") if k in ch.index]
+    bills = [("bill line", kinds[0], "#8C877D"), ("bill line with a trade-off", kinds[1], "#B9B2A7")] if kinds else [("bill line", bill, "#8C877D")]
+    segs = [(f"{k}", int(ch[k]), MAG if k == "text" else INK) for k in order] + bills + [("quiet", quiet, "#D9D3C8")]
+    bar = "".join(f"<div title='{esc(k)} {v:,}' style='flex:{v} 1 0;min-width:{3 if v else 0}px;background:{c};border-right:1px solid {BG}'></div>" for k, v, c in segs)
+    chs = " · ".join(f"{k} {int(ch[k])}" for k in order)
+    def col(n, lab, sub):
+        return (f"<div style='border-left:1px solid #111;padding:2px 0 0 14px'><b style='font:300 44px/1 SG'>{n:,}</b>"
+                f"<div class='o-lbl' style='margin-top:6px'>{esc(lab)}</div><div class='o-lbl' style='text-transform:none;letter-spacing:0;color:#6B675F'>{esc(sub)}</div></div>")
+    return (f"<div style='border:1px solid #111;border-top:0;padding:14px 16px 18px'>"
+            f"<div style='display:flex;justify-content:space-between'><span class='o-lbl'>What every account gets this week · one decision each</span>"
+            f"<span class='o-lbl'>{scored:,} accounts</span></div>"
+            f"<div style='display:flex;height:22px;margin:16px 0 18px;border:1px solid #111'>{bar}</div>"
+            f"<div style='display:grid;grid-template-columns:repeat({4 if kinds else 3},1fr);gap:0'>"
+            + col(messaged, "messaged", chs)
+            + (col(kinds[0], "bill line", "same features, lower price, no message") + col(kinds[1], "bill line with a trade-off", "cheaper, but they'd lose something")
+               if kinds else col(bill, "bill line only", "cheaper plan on the bill, no message"))
+            + col(quiet, "stay quiet", "no message, nothing on the bill")
+            + "</div></div>")
+
+
 def render_dashboard(df: pd.DataFrame, economics: dict | None = None, *, typical_risk: float | None = None,
-                     key: str = "orbit") -> str | None:
-    """economics: {'net_10': float, 'breakeven_sr': float (0-1), 'receipt_lines': int, 'receipt_monthly': float}. Missing keys are skipped.
+                     decisions: pd.DataFrame | None = None, breakeven: float = 0.048, value_note: str | None = None,
+                     summary: dict | None = None, show_money: bool = True, key: str = "orbit") -> str | None:
+    """economics: {'breakeven_sr': float (0-1), 'receipt_lines': int, 'receipt_monthly': float}. Missing keys are skipped.
+    Money comes only from decisions['net_mid_usd'] (summed over messaged accounts); without it no dollar figure is shown.
+    breakeven: default used when economics has no 'breakeven_sr'. value_note: optional line shown under the meter.
+    summary (optional, ledger summary): breakeven_save_rate (break-even mark), total_mid (checked against the
+    decisions sum), range95_low/range95_high (hairline band on the meter only), p_net_pos_at_10.
+    show_money=False: no net value, break-even, ruler or value note; the meter's place shows decision counts instead.
+    Customers' own savings (savings lines on the bill) stay.
     Returns the account_id clicked in the riskiest-ten table (or None)."""
     e = economics or {}
-    _act("03 / 04", "The whole book, at a glance", "this week")
+    _act("03 / 05", "The whole book, at a glance", "this week")
     scored, flagged = len(df), int(df.flagged.sum())
     messaged = int(df.messaged.sum())
     ch = df[df.messaged].channel.map(CHANNEL_LABEL).value_counts()
-    mix = "".join(f"<div style='width:{v / max(1, messaged) * 100:.1f}%;{'background:' + MAG + ';color:#fff' if k == 'text' else ''}'>"
+    mix = "".join(f"<div style='flex:{v} 1 0;{'background:' + MAG + ';color:#fff' if k == 'text' else ''}'>"
                   f"{k.upper()} {v}</div>" for k, v in ch.items())
     med = float(df.p_churn_90d.median() * 100)
     cells = [f"<div class='o-cell'><span class='o-lbl'>Customers scored</span><span class='v'>{scored:,}</span><span class='s'>every account, every week</span></div>",
              f"<div class='o-cell warn'><span class='o-lbl'>Flagged at risk · top 10%</span><span class='v'>{flagged}</span><span class='s'>cut at {pct(df.attrs.get('flag_cut', 0) * 100)} 90-day risk</span></div>",
              f"<div class='o-cell w2'><span class='o-lbl'>Messages this week · by channel</span><span class='v'>{messaged}</span>"
              f"<div class='o-mix'>{mix}</div></div>"]
+    dec_bill = _dec_bill(decisions)
+    kinds0 = _bill_kinds(decisions)
+    if kinds0 is not None and dec_bill is not None:
+        dec_bill = (kinds0[0], dec_bill[1])
+    if dec_bill is not None:
+        e = {**e, "receipt_lines": dec_bill[0], **({"receipt_monthly": dec_bill[1]} if dec_bill[1] is not None else {})}
     if "receipt_lines" in e:
-        cells.append(f"<div class='o-cell'><span class='o-lbl'>Savings lines on the bill</span><span class='v'>{int(e['receipt_lines']):,}</span>"
+        cells.append(f"<div class='o-cell{'' if show_money else ' w2'}'><span class='o-lbl'>Savings lines on the bill</span><span class='v'>{int(e['receipt_lines']):,}</span>"
                      f"<span class='s'>same features, lower price{(' · $' + format(e['receipt_monthly'], ',.0f') + '/mo if all switch') if 'receipt_monthly' in e else ''}</span></div>")
-    if "net_10" in e:
-        be = f" · break-even about {e['breakeven_sr'] * 100:.1f}%" if "breakeven_sr" in e else ""
-        cells.append(f"<div class='o-cell'><span class='o-lbl'>Net value at a 10% save rate</span><span class='v'>{'+' if e['net_10'] >= 0 else '−'}"
-                     f"<small>$</small>{abs(e['net_10']):,.0f}</span><span class='s'>{be.strip(' ·')}</span></div>")
+    sm = summary or {}
+    net = _net_mid(df, decisions)
+    if net is None and sm.get("total_mid") is not None:
+        net = float(sm["total_mid"])
+    be_v = float(sm.get("breakeven_save_rate", e.get("breakeven_sr", breakeven)))
+    band = ((float(sm["range95_low"]), net, float(sm["range95_high"]), sm.get("p_net_pos_at_10"))
+            if sm.get("range95_low") is not None and sm.get("range95_high") is not None else None)
+    if not show_money:
+        pass
+    elif net is not None:
+        cells.append(f"<div class='o-cell'><span class='o-lbl'>Net value at a 10% save rate</span><span class='v'>{'+' if net >= 0 else '−'}"
+                     f"<small>$</small>{abs(net):,.0f}</span><span class='s'>over {messaged} messages · break-even {_pct2(be_v * 100)}%</span></div>")
+    else:
+        cells.append(f"<div class='o-cell'><span class='o-lbl'>Break-even save rate</span><span class='v'>{_pct2(be_v * 100)}<small>%</small></span>"
+                     f"<span class='s'>below this, messaging costs more than it keeps</span></div>")
     if typical_risk is not None:
         cells.append(f"<div class='o-cell'><span class='o-lbl'>Typical customer risk</span><span class='v'>{pct(typical_risk)[:-1]}<small>%</small></span><span class='s'>90-day churn · model baseline</span></div>")
     cells.append(f"<div class='o-cell'><span class='o-lbl'>Median customer risk</span><span class='v'>{med:.2f}<small>%</small></span><span class='s'>half the book is below this</span></div>")
     st.markdown("<div class='o-grid'>" + "".join(cells) + "</div>", unsafe_allow_html=True)
+    bill = _bill_count(df, decisions)
+    kinds = _bill_kinds(decisions)
+    quiet_n = scored - messaged - (sum(kinds) if kinds else bill)
+    counts = ([("messaged", messaged), ("bill line", kinds[0]), ("bill line with a trade-off", kinds[1]), ("stay quiet", quiet_n)] if kinds
+              else [("messaged", messaged), ("cheaper plan on the bill, no message", bill), ("stay quiet", quiet_n)])
+    if show_money:
+        st.markdown(_meter(be_v, net, counts, band=band), unsafe_allow_html=True)
+    else:
+        st.markdown(_decision_counts(scored, ch, bill, messaged, kinds), unsafe_allow_html=True)
+    if value_note and show_money:
+        st.markdown(f"<div class='o-lbl' style='text-transform:none;letter-spacing:0;font-size:12px;margin-top:8px'>{esc(value_note)}</div>", unsafe_allow_html=True)
 
     st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
     c1, c2 = st.columns([1.35, 1], gap="large")
@@ -725,7 +1359,7 @@ def render_dashboard(df: pd.DataFrame, economics: dict | None = None, *, typical
     st.markdown("<div class='o-ch' style='margin-top:18px'><span class='o-lbl'>Riskiest ten this week · click a row to open it</span><span class='o-lbl'></span></div>", unsafe_allow_html=True)
     t = df[~df.is_demo].head(10)
     tab = pd.DataFrame({"Customer": [cid(a) for a in t.account_id], "Risk": [pct(v * 100) for v in t.p_churn_90d],
-                        "Top reason": t.get("risk_reason_1", ""), "What we do": t.reason_line.str.removeprefix("No message: "),
+                        "Top reason": t.get("risk_reason_1", ""), "What we do": t.reason_line.map(_cap),
                         "Channel": t.channel.map(CHANNEL_LABEL).fillna("none")})
     ev = st.dataframe(tab, hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row", key=f"{key}_riskiest",
                       column_config={"Customer": st.column_config.TextColumn(width="small"), "Risk": st.column_config.TextColumn(width="small"),
@@ -735,15 +1369,142 @@ def render_dashboard(df: pd.DataFrame, economics: dict | None = None, *, typical
 
 
 # ============================================================== act 4 — what we considered
-def render_considered(dc: pd.DataFrame | None) -> None:
-    """dc columns: group, item, how_handled[, source]. source is never shown. Renders nothing for None/empty."""
+CSS4 = """
+.o-cg{display:grid;grid-template-columns:repeat(4,1fr);border-left:1px solid #111;border-top:1px solid #111;align-items:start}
+.o-cg details{border-right:1px solid #111;border-bottom:1px solid #111;margin:0}
+.o-cg summary{list-style:none;cursor:pointer;padding:12px 14px 14px;display:flex;flex-direction:column;justify-content:space-between;min-height:120px}
+.o-cg summary::-webkit-details-marker{display:none}
+.o-cg summary .n{font:300 54px/0.95 'SG';letter-spacing:-.03em}
+.o-cg summary .g{font:400 14px/1.25 'SG'}
+.o-cg summary .h{font:400 10px 'SM';letter-spacing:.08em;text-transform:uppercase;color:#6B675F}
+.o-cg details[open] summary{background:#111;color:#F6F3EE}
+.o-cg details[open] summary .h{color:#F6F3EE}
+.o-cg .it{padding:8px 14px;border-top:1px solid rgba(17,17,17,.25);font:400 13px/1.35 'SG'}
+.o-cg .it b{display:block;font-weight:600;margin-bottom:2px}
+.o-cg .it span{color:#6B675F}
+"""
+
+
+_SIM = re.compile(r"\s*\((?:simulated|synthetic)\)", re.I)
+_MSG_RESULT = re.compile(r"^(\d[\d,]*) messages come out [+-]?\$[\d,]+ ahead\b[^.]*\.?\s*(.*)$")
+_BOOT = re.compile(r"^(\d[\d,]*) account resamples\b.*$")
+_EARLIER = re.compile(r"^The earlier engine\b[^.]*-\$[\d,]+[^.]*\.\s*(.*)$")
+_HALF = re.compile(r"at 5% it is -?\$[\d,]+ ahead")
+SAVED_VALUE_PLAIN = "We value a saved account by its own monthly margin and how long an average saved customer stays (19.3 months)."
+_PLAIN_OFF = [(r"It is priced at \$0 and every", "It is always on the table and every"),
+              (r"^A fix-first callback costs \$15, a check-in \$2, plus an annoyance cost of \$2 to \$6 per contact\.$",
+               "Every contact has a cost, plus an annoyance cost; an offer has to cover both."),
+              (r"\s*\(-?\$[\d,]+\)", ""),
+              (r"at a \$0 device margin", "with no margin on the device")]
+_CUSTOMER_DOLLARS = re.compile(r"\$\d+ (?:care |one-time )?credit|\$[\d,]+(?:/mo| a month)|\$0 early termination", re.I)
+
+
+def _drop_our_money(t: str) -> str:
+    """Keep only sentences whose dollar figures are the customer's own (credits, savings a month, $0 termination fee)."""
+    parts = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])", str(t).strip())
+    keep = [p for p in parts if "$" not in _CUSTOMER_DOLLARS.sub("", p)]
+    return " ".join(keep)
+
+
+_DROP_ITEMS = {"simulated data only"}
+SAVES_STICK = "If a saved customer stays as risky as before, most of the money disappears. That's the first thing a real rollout tests."
+_BLANKET = re.compile(r"^A (?:flat )?(\$\d+) credit to (.+?) is -?\$[\d,]+ at \d+%.*$")
+
+
+def _money(v: float) -> str:
+    return f"{'-' if v < 0 else ''}${abs(v):,.0f}"
+
+
+def _considered_text(t: str, summary: dict | None) -> str:
+    """Drop simulated notes; swap stale money results for data-driven ones, or for plain sentences."""
+    t = _SIM.sub("", t).strip()
+    s = summary or {}
+    m = _MSG_RESULT.match(t)
+    if m:
+        n = f"{int(s['contacts']):,}" if s.get("contacts") is not None else m.group(1)
+        net = s.get("net_usd")
+        rest = (" " + m.group(2).strip()) if m.group(2).strip() else ""
+        if net is None:
+            return f"{n} messages come out ahead at our central assumption.{rest}"
+        word = "ahead" if net >= 0 else "behind"
+        return f"{n} messages come out {_signed(net) if net >= 0 else _money(abs(net))} {word} at our central assumption.{rest}"
+    m = _BOOT.match(t)
+    if m:
+        lo, hi = s.get("range_low_usd"), s.get("range_high_usd")
+        out = f"We re-ran the money {m.group(1)} times on resampled accounts to get a range."
+        if lo is not None and hi is not None:
+            out += f" At our central assumption it runs from {_money(lo)} to {_money(hi)}."
+        return out
+    m = _EARLIER.match(t)
+    if m:
+        rest = (m.group(1) or "").strip()
+        return "Our earlier engine lost money on the same accounts." + (f" {rest}" if rest else "")
+    m = _BLANKET.match(t)
+    if m:
+        net = s.get("blanket_net_usd")
+        if net is None:
+            return f"A flat {m.group(1)} credit to {m.group(2)} loses money at the same assumption."
+        verb = f"loses {_money(abs(net))}" if net < 0 else f"comes out {_money(net)} ahead"
+        return f"A flat {m.group(1)} credit to {m.group(2)} {verb} at the same assumption."
+    return t
+
+
+def render_considered(dc: pd.DataFrame | None, summary: dict | None = None, *, show_money: bool = True) -> None:
+    """dc columns: group, item, how_handled[, source]. source is never shown. Renders nothing for None/empty.
+    summary (optional, from decisions=/ledger): {"net_usd": total net over messaged accounts at the central
+    assumption, "blanket_net_usd": the blanket-credit comparison, "net_low_usd": net at half the central
+    assumption (the half-rate item shows only when this is passed and positive), "range_low_usd"/"range_high_usd":
+    the resampled range}.
+    show_money=False: summary is ignored, our dollar figures become plain sentences, the resampled-range row is dropped;
+    customer-side amounts ($25 credit, savings a month, $0 termination fee) stay. Without it, stale dollar results become plain sentences."""
     if dc is None or not len(dc):
         return
-    _act("04 / 04", "What we considered", "and how each one is handled")
-    groups = "".join(
-        f"<div class='grp'><div class='gh'>{esc(str(g))} · {len(x)}</div>" + "".join(
-            f"<div class='it'><span>{esc(str(i.item))}</span><span>{esc(str(i.how_handled))}</span></div>" for i in x.itertuples()) + "</div>"
-        for g, x in dc.groupby("group", sort=False))
-    st.markdown(f"<div style='display:flex;align-items:baseline;gap:18px;margin:6px 0 18px'><span class='o-hero-num' style='font-size:120px'>{len(dc)}</span>"
-                f"<span class='o-lbl'>things checked</span></div><div class='o-ledger'>{groups}</div>", unsafe_allow_html=True)
-    st.markdown("<div class='o-foot'><span>Churn + upsell board</span><span>design mockup</span></div>", unsafe_allow_html=True)
+    st.markdown(f"<style>{CSS4}</style>", unsafe_allow_html=True)
+    _act("05 / 05", "What we considered", "and how each one is handled")
+    dc = dc.copy()
+    flat = dc.item.astype(str).str.contains(r"\$1,478|per save", regex=True) | dc.how_handled.astype(str).str.contains(r"flat \$?1,478|\$1,478 per save", regex=True)
+    dc.loc[flat, "item"] = "Value of a saved account"
+    dc.loc[flat, "how_handled"] = SAVED_VALUE_LINE
+    dc = dc[~dc.item.astype(str).str.strip().str.lower().isin(_DROP_ITEMS)]
+    stick = dc.item.astype(str).str.strip().str.lower().eq("do saves stick?")
+    if stick.any():
+        lim = [g for g in dc.group.astype(str).unique() if "known limits" in g.lower()]
+        dc.loc[stick, "how_handled"] = SAVES_STICK
+        dup = dc.how_handled.astype(str).str.strip().eq(SAVES_STICK) & ~stick
+        if lim and not dup.any():
+            dc.loc[stick, "group"] = lim[0]
+            order = list(dict.fromkeys(dc.group.astype(str)))
+            dc = dc.assign(_g=dc.group.astype(str).map({g: i for i, g in enumerate(order)})).sort_values("_g", kind="stable").drop(columns="_g")
+    half = dc.how_handled.astype(str).str.contains(_HALF)
+    if not show_money:
+        summary = None
+        dc = dc[~dc.how_handled.astype(str).str.match(_BOOT)]
+        dc.loc[dc.how_handled.astype(str).eq(SAVED_VALUE_LINE) | dc.how_handled.astype(str).str.contains("19.3 months", regex=False),
+               "how_handled"] = SAVED_VALUE_PLAIN
+        for pat, new in _PLAIN_OFF:
+            dc["how_handled"] = dc.how_handled.astype(str).str.replace(pat, new, regex=True)
+    net_low = (summary or {}).get("net_low_usd")
+    if net_low is not None and net_low > 0:
+        dc.loc[half, "item"] = "Half our central assumption"
+        dc.loc[half, "how_handled"] = f"Still ahead at half our central assumption ({_money(net_low)})."
+    else:
+        dc = dc[~half]
+    dc = dc.copy()
+    dc["group"] = dc.group.astype(str).map(lambda t: _SIM.sub("", t).strip())
+    dc["item"] = dc.item.astype(str).map(lambda t: _considered_text(t, summary))
+    dc["how_handled"] = dc.how_handled.astype(str).map(lambda t: _considered_text(t, summary))
+    if not show_money:   # any sentence still carrying our own dollars goes; a row left empty goes too
+        dc["how_handled"] = dc.how_handled.map(_drop_our_money)
+        dc = dc[dc.how_handled.str.strip().ne("")]
+    groups = list(dc.groupby("group", sort=False))
+    cells = ""
+    for g, x in groups:
+        name = re.sub(r"^\w+\.\s*", "", str(g)).strip()
+        items = "".join(f"<div class='it'><b>{esc(str(i.item))}</b><span>{esc(str(i.how_handled))}</span></div>" for i in x.itertuples())
+        cells += (f"<details><summary><span class='h'>{esc(str(g).split('.')[0])}</span><span class='n'>{len(x)}</span>"
+                  f"<span class='g'>{esc(name)}</span></summary>{items}</details>")
+    st.markdown(f"<div style='margin:8px 0 6px'><span class='o-hero-num' style='font-size:150px'>{len(dc)}</span></div>"
+                f"<div class='o-ph' style='font-size:30px;margin-top:4px'>things we checked</div>"
+                f"<div class='o-lbl' style='margin:-4px 0 16px'>{len(groups)} groups · open any group to see each item and how it's handled</div>"
+                f"<div class='o-cg'>{cells}</div>", unsafe_allow_html=True)
+    st.markdown("<div class='o-foot'><span>Churn + upsell board</span><span>Every account, every week</span></div>", unsafe_allow_html=True)
