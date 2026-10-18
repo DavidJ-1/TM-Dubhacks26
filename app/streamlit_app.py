@@ -221,7 +221,11 @@ def money(v) -> str:
     return "—" if pd.isna(v) else f"${v:,.0f}"
 
 
-tab2, tab3 = st.tabs(["How it decides · four customers", "Pipeline visual"])
+SHOW_PIPELINE_TAB = False  # hidden for tonight: its message count predates the current engine run
+if SHOW_PIPELINE_TAB:
+    tab2, tab3 = st.tabs(["How it decides · four customers", "Pipeline visual"])
+else:
+    tab2, tab3 = st.container(), None
 # Customer journey tab hidden: its embedded HTML (app/viz/customer_journey.html) carries stale counts
 # (504 flagged / 1,123 contacted vs 505 / 1,314 on the main page). Re-add only after regenerating it.
 
@@ -1240,15 +1244,16 @@ def _clean_pipeline_html(h: str) -> str:
     return re.sub(r"(?i)households", "accounts", re.sub(r"(?i)household", "account", h))
 
 
-with tab3:
-    st.markdown('### Pipeline visual')
-    viz = APP / "viz" / "pipeline_flow.html"
-    st.caption("The whole system on one page: sandbox data → churn risk → every eligible action priced, "
-               "with do nothing as a real option → a text in their language. All synthetic.")
-    if viz.exists():
-        components.html(_clean_pipeline_html(viz.read_text(encoding="utf-8", errors="replace")), height=900, scrolling=True)
-    else:
-        st.info("Pipeline visual loading…")
+if tab3 is not None:
+  with tab3:
+      st.markdown('### Pipeline visual')
+      viz = APP / "viz" / "pipeline_flow.html"
+      st.caption("The whole system on one page: sandbox data → churn risk → every eligible action priced, "
+                 "with do nothing as a real option → a text in their language. All synthetic.")
+      if viz.exists():
+          components.html(_clean_pipeline_html(viz.read_text(encoding="utf-8", errors="replace")), height=900, scrolling=True)
+      else:
+          st.info("Pipeline visual loading…")
 
 st.divider()
 
