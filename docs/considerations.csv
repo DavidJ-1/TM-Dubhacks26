@@ -42,7 +42,7 @@ group,item,how_handled,source
 1c. Inputs: live,Open issue topic,"What an open support contact is about (coverage, bill, phone). Used by: messages (fix-first wording names the topic).",Account features or sandbox tables
 2. How a customer is scored and explained,Churn score,A standardized logistic regression scores 90-day churn on 20 inputs; the 42 hand-built demo accounts are scored but never trained on.,Model card
 2. How a customer is scored and explained,How good it is (simulated),"Out-of-fold AUC 0.853; its riskiest 10% hold about 62% of leavers. This shows the pipeline works, not real accuracy.",Model card; project write-up
-2. How a customer is scored and explained,Who is flagged,"The riskiest 10% of the 5,000 regular accounts: 500 flagged (504 if the demo accounts are mixed in).",Churn scores
+2. How a customer is scored and explained,Who is flagged,"The riskiest 10% of the 5,000 regular accounts: 500 flagged; 505 across all 5,042 once the demo accounts are scored against the same cutoff.",Churn scores
 2. How a customer is scored and explained,Why this score,"Each account gets up to 3 reasons to leave and 3 reasons to stay, written from its own fields, e.g. '6 unresolved support contacts in 90 days'.",Churn scores
 2. How a customer is scored and explained,How reasons are computed,"Each input's push on the score vs an average account, grouped; a reason must move the score by at least 0.05 and a risk-raising value is never shown as a stay reason.",Model card
 2. How a customer is scored and explained,Common-sense check on inputs,"Inputs whose effect pointed the wrong way were removed and the model refit (AutoPay, no financing).",Model card
@@ -51,11 +51,11 @@ group,item,how_handled,source
 2. How a customer is scored and explained,Why we're reaching out (or not),"One plain sentence per account that ends with the channel, or the do-not-contact reason.",Customer card file
 3. Offer or do nothing,Doing nothing is always an option,It is priced at $0 and every offer has to beat it.,Offer engine
 3. Offer or do nothing,Expected value,"Chance of churn x chance the action saves them x value of the account, minus the offer cost and a contact cost.",Offer engine; economics notes
-3. Offer or do nothing,"Value of a kept customer: $1,478","About $76.46 a month margin over 24 months, weighted for the chance they leave anyway (0.99% a month) and discounted 10% a year.","Research notes, public filing"
+3. Offer or do nothing,Value of a saved account,"We value a saved account at its own monthly margin times 19.3 months, about $1,500 for an average account and about $2,000 for the ones we message.","Money ledger; research notes, public filing"
 3. Offer or do nothing,Save rate assumption,"The next version picks at a 10% save rate, scaling each action's rate down to match.",Guardrail summary
-3. Offer or do nothing,Contact costs,"A fix-first callback costs $15, a check-in $2, plus an annoyance cost of $2 to $6 per contact.",Offer engine settings
+3. Offer or do nothing,Contact costs,"An open support issue takes agent time to fix, so every fix-first contact costs about $15 ($10.75 agent time plus $4.25 escalation), plus the channel's own sending cost; a call is charged the $15 once. A check-in costs $2, plus an annoyance cost of $2 to $6 per contact.",Money ledger; offer engine settings
 3. Offer or do nothing,Retention picks,202 accounts are worth contacting at 10%; 184 remain after the do-not-contact rules.,Guardrail summary
-3. Offer or do nothing,What the 184 get,"Fix first 126, care credit plus fix 29, perk reminder 26, check-in 2, bill-shock credit 1.",Guardrail summary
+3. Offer or do nothing,What the 184 get,"Fix first 151, care credit plus fix 29, check-in 2, bill-shock credit 1, perk reminder 1 (25 perk reminders became fix-first because of an open ticket).",Money ledger; guardrail summary
 3. Offer or do nothing,No credits at low risk,No bill or goodwill credit below 5% churn risk.,Offer engine settings
 3. Offer or do nothing,"Same features, lower price wins",An eligible cheaper plan with the same features beats upsells and check-ins.,Offer engine settings
 3. Offer or do nothing,Prices checked,"Every dollar figure in a message is checked against the sandbox plan and promotion tables, or the run fails.",Outreach checks
@@ -81,11 +81,11 @@ group,item,how_handled,source
 5. Channel and language,Length limits,"Texts at most 320 characters (longest 257 English, 293 Spanish); other channels at most 420.",Outreach summary
 5. Channel and language,No claim one channel works better,No telecom study compares channels on the same offer.,Outreach playbook
 5. Channel and language,Same text everywhere,Fixed templates; two runs give byte-identical files.,Outreach summary
-6. Money honesty (simulated),Result at a 10% save rate,"184 messages come out $4,109 ahead (simulated).",Economics headline
-6. Money honesty (simulated),Break-even about 4.8%,"Below a 4.80% save rate it loses money; at 5% it is $161 ahead, a coin flip.",Economics headline
+6. Money honesty (simulated),Result at a 10% save rate,"184 messages come out +$3,938 ahead at our central assumption (simulated). Two rules shape it: customers with an open ticket get a fix-your-issue-first message instead of a perk reminder, and every fix-first contact is charged about $15 of agent time.",Money ledger
+6. Money honesty (simulated),Break-even 5.17%,Below a 5.17% save rate it loses money; at 5% it comes out ahead only 41% of the time.,Money ledger
 6. Money honesty (simulated),Measured campaigns run 2% to 11%,"Published retention results run about 2% to 11% relative, so this pays in the stronger campaigns and loses in the weakest.",Project write-up (Ascarza 2018; Verhelst et al. 2023; Marketing Science 2018)
-6. Money honesty (simulated),Bootstrap,"2,000 account resamples (seed 2026): at 10% it comes out ahead 82% of the time (mean $3,953, range -$2,805 to $13,292); at 5%, 44%.",Economics headline
-6. Money honesty (simulated),Do saves stick?,"If each saved customer stays as risky as before, only 58 are worth contacting, break-even rises to 7.6%, and it is ahead only 43% of the time at 10%. A holdout test is the only way to know.",Economics notes
+6. Money honesty (simulated),Bootstrap,"2,000 account resamples: an 80% chance of coming out ahead at our central 10% assumption (41% at 5%); mean +$3,817, 95% range -$3,186 to +$13,148.",Money ledger
+6. Money honesty (simulated),Do saves stick?,"On our 184 contacts, if each saved customer keeps their own risk, they are worth -$1,307 at 10%, only 36 of the 184 are worth contacting, break-even rises to 14.5%, and it is ahead 22% of the time at 10%. A holdout is built in so a rollout can measure saves.",Money ledger rerun
 6. Money honesty (simulated),The shipped demo engine,"The earlier engine contacts 1,314 accounts and is -$71,838 at a 10% save rate in full dollars. That is why the next version contacts far fewer.",Chart check
 6. Money honesty (simulated),Blanket discount rule,"A $25 credit to the top 10% by risk is -$4,116 at 10%.",Chart check
 6. Money honesty (simulated),Not statistically proven,"At about 5,000 accounts, no 5% result is distinguishable from zero.",Economics notes
@@ -119,7 +119,8 @@ group,item,how_handled,source
 10. Left out on purpose,Win-back,Out of scope: we act before they leave.,Project brief
 10. Left out on purpose,Claims about pending FCC rules,None made; the one checked is not in force.,Outreach playbook
 11. Known limits,No real churn outcomes,"Labels are simulated from a formula we wrote, so the model's accuracy is partly by construction.",Model card; economics notes
-11. Known limits,Save rate unknown,Every dollar figure rests on an assumed save rate; only a holdout test can measure it.,Economics notes
+11. Known limits,Save rate unknown,Every dollar figure rests on an assumed save rate; a holdout is built in so a rollout can measure saves.,Economics notes
+11. Known limits,Saves may not stick,"If a saved customer stays as risky as before, most of the money disappears. That's the first thing a real rollout tests.",Money ledger rerun
 11. Known limits,Holdout size,"A reliable read needs about 12,800 accounts per group; at our ~5,000 only very large effects show.",Project write-up
 11. Known limits,Contacts lean on bill changes,"Only 35 of the 184 have no recent bill change, because bill changes are churn terms in our own generator.",Economics notes
 11. Known limits,"No outreach log, opt-out field or time zone","Quarterly cap, opt-out and send hours are hooks, untested on this data.",Outreach playbook
