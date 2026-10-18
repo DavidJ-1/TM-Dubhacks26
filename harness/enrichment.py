@@ -11,7 +11,7 @@ household_income_usd / income_band (SYNTHETIC individual values): the sandbox ha
   city or state), so incomes come from the REAL national distribution, ACS 2020-2024 5-year table
   B19001 (household income, 16 bins), median B19013 = $80,734 (+/-166), fetched via the Census Reporter
   API (https://api.censusreporter.org/1.0/data/show/acs2024_5yr?table_ids=B19001,B19013&geo_ids=01000US;
-  cached in <raw>/censusreporter_acs2024_5yr_B19001_B19013_us.json). (api.census.gov now requires a key
+  cached in harness/data_cache/censusreporter_acs2024_5yr_B19001_B19013_us.json). (api.census.gov now requires a key
   from this host; we did not sign up.) The latent rank links mildly to credit tier, segment and bill size, then
   maps to the national inverse CDF, so the marginal matches ACS exactly. Uniform within bins; Pareto(2.5)
   above $200k, capped at $2M.
@@ -51,8 +51,10 @@ sys.path.insert(0, str(HERE))
 from features import find_db  # noqa: E402
 from labels import sigmoid, solve_b0, uniform  # noqa: E402
 
-RAW = HERE.parent.parent / "raw"
+# Small public-domain Census ACS JSON (~2 KB) is committed in-repo so a fresh clone needs no download.
+RAW = HERE / "data_cache"
 ACS_FILE = RAW / "censusreporter_acs2024_5yr_B19001_B19013_us.json"
+USER_AGENT = "TM-Dubhacks26/1.0 (DubHacks 2026 student project; synthetic data only)"
 ACS_URL = "https://api.censusreporter.org/1.0/data/show/acs2024_5yr?table_ids=B19001,B19013&geo_ids=01000US"
 OUT = HERE / "out" / "enrichment.csv"
 JOB_RATE_MONTHLY = 0.033  # BLS JOLTS hires rate, Aug 2026
@@ -72,7 +74,9 @@ def load_acs() -> tuple[np.ndarray, float]:
     if not ACS_FILE.exists():
         import urllib.request
         RAW.mkdir(parents=True, exist_ok=True)
-        ACS_FILE.write_bytes(urllib.request.urlopen(ACS_URL, timeout=60).read())
+        # Census Reporter returns HTTP 403 to urllib's default User-Agent, so send our own.
+        req = urllib.request.Request(ACS_URL, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+        ACS_FILE.write_bytes(urllib.request.urlopen(req, timeout=60).read())
     d = json.loads(ACS_FILE.read_text())["data"]["01000US"]
     est = d["B19001"]["estimate"]
     counts = np.array([est[f"B19001{k:03d}"] for k in range(2, 18)], dtype=float)

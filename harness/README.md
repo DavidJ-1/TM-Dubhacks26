@@ -13,14 +13,14 @@ Other lanes' docs: [DATA_README.md](DATA_README.md) (features + labels), [UPLIFT
 ## Rerun everything (one command, from the repo root)
 
 ```bash
-/workspace/tmobile/harness/.venv/bin/python harness/model_harness.py --all
+.venv/bin/python harness/model_harness.py --all   # venv from `make setup`
 ```
 
 This covers churn (`churn_90d` and `toy_churn`), then upgrade (`upgrade_90d`), then the uplift evaluation. It
 re-reads `labels.csv` every time; nothing is cached. Other options: `--target churn|upgrade`, `--model NAME`,
 `--uplift`, `--no-cv` (faster), `--data scaled` (50k synthetic accounts), `--scaled-to-real` (train on 50k,
 test on the real 5k), `--include-enrichment` (enrichment columns are excluded from X by default).
-Tests: `/workspace/tmobile/harness/.venv/bin/python -m pytest tests/test_model_harness.py -q`
+Tests: `.venv/bin/python -m pytest tests/test_model_harness.py -q` (or `make test`)
 
 ## Targets and models
 
@@ -80,9 +80,11 @@ The harness never writes `uplift.csv` or `policy_eval.csv`.
   split. With about 35 churn positives per holdout, single splits are noisy: read the CV mean and the
   same-rows oracle.
 - Persona checks are provisional. "High" means at or above the 90th percentile of regular accounts' scores
-  (David has not yet chosen between 80 and 90); "low" means at or below the median.
+  (top 10%), per David on 2026-10-17; "low" means at or below the median (50th percentile). Personas 21 and 22
+  are borderline by label design: they sit at the 91.7th and 90.2th percentile even on the true (synthetic)
+  probability, so they can miss the bar in some resamples or with some models.
 - The upgrade rule is a proxy for "near the cap 2+ months", because features.csv has no monthly near-cap count.
-- The Orange Belgium uplift data (CC BY-NC-ND) is read in place from `/workspace/tmobile/raw/` and is never
+- The Orange Belgium uplift data (CC BY-NC-ND) is read in place from `<repo>/../raw/` (or `$MH_ORANGE_ARFF`) and is never
   committed.
 
 ## End-to-end pipeline summary (`harness/pipeline.py`)
@@ -94,7 +96,7 @@ one-account trace). Invariant: offered + wait == flagged. A stage whose source i
 `count: null` and a `note`. All numbers are synthetic.
 
 ```bash
-PY=/workspace/tmobile/harness/.venv/bin/python
+PY=.venv/bin/python   # from the repo root, after `make setup`
 $PY harness/pipeline.py                         # summarise the lanes' latest outputs in harness/out/
 $PY harness/pipeline.py --run                   # recompute every stage into harness/out/pipeline_run/sandbox_5k/
 $PY harness/pipeline.py --trace ACC-PERSONA-04 --lang es --segment risk_band

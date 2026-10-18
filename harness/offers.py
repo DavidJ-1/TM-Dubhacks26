@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -64,6 +65,12 @@ CONFIG = {
         "right_size":       {"on_target": 0.30, "off_target": 0.10},  # overpaying / bill shock
         "step_up":          {"on_target": 0.15, "off_target": 0.03},  # plan too small / life event
         "device_upgrade":   {"on_target": 0.22, "off_target": 0.06},  # old or paid-off phone / device issues
+        "variant_switch":   {"on_target": 0.30, "off_target": 0.10},  # same plan for less
+        "family_upgrade":   {"on_target": 0.18, "off_target": 0.05},  # outgrowing / old phones on a family plan
+        "bill_shock_price_lock": {"on_target": 0.30, "off_target": 0.08},  # promo-end bill shock on More/Beyond
+        "check_in":         {"on_target": 0.12, "off_target": 0.04},  # shopping / port-out / went quiet
+        "perk_reminder":    {"on_target": 0.08, "off_target": 0.03},  # streams a lot, perk unused
+        "home_internet_bundle": {"on_target": 0.03, "off_target": 0.03},  # bundles are stickier
         "fix_first":        {"on_target": 0.35, "off_target": 0.04,   # network / unresolved service issue
                              "billing_only": 0.15},                   # a callback can explain a price rise,
                                                                       # not undo it
@@ -75,17 +82,22 @@ CONFIG = {
     # --- bill-shock guardrail (nextbest ladder rule in the plan doc: "no upsell after bill shock")
     "UPSELL_BLOCK_DAYS_AFTER_BILL_SHOCK": 90,   # step-up / device upgrade are INELIGIBLE this many days after a
                                                 # promo expired or the bill jumped (>= 15%, not a new phone)
+    "BILL_SHOCK_RELIEF_OVERRIDE": True,         # OPEN DECISION (David). One switch for the override below.
+                                                # Env TM_BILL_SHOCK_RELIEF_OVERRIDE=0 to turn it off.
     "BILL_SHOCK_RELIEF": {                      # POLICY OVERRIDE, not a sandbox rule: in that same window the
         "enabled": True,                        # care credit's 3-contact minimum is relaxed so bill-shocked
         "care_credit_min_contacts": 1,          # customers who did reach out can get it (tenure >= 6 still applies)
         "credit_save_boost": 0.05,              # credits directly offset the price rise: +5 pts save rate
     },
     # --- probability the customer takes the offer (only matters for upsell gain / conditional costs)
-    "P_ACCEPT": {"right_size": 0.60, "step_up": 0.25, "device_upgrade": 0.15},
+    "P_ACCEPT": {"right_size": 0.45, "variant_switch": 0.70, "step_up": 0.25, "device_upgrade": 0.15,
+                 "family_upgrade": 0.20, "home_internet_bundle": 0.04},
     # --- annoyance: dollar-equivalent cost of contacting (agent time, message fatigue, sleeping-dog risk)
     "ANNOYANCE": {
         "care_credit": 3.0, "loyalty_credit": 3.0, "keep_your_phone": 3.0, "right_size": 2.0,
-        "step_up": 5.0, "device_upgrade": 6.0, "fix_first": 4.0,
+        "step_up": 5.0, "device_upgrade": 6.0, "fix_first": 4.0, "variant_switch": 2.0,
+        "family_upgrade": 6.0, "bill_shock_price_lock": 3.0, "check_in": 2.0, "perk_reminder": 2.0,
+        "home_internet_bundle": 6.0,
     },
     "UPSELL_AFTER_PAIN_PENALTY": 25.0,   # extra annoyance for upsells right after bill shock / unresolved issues
     # --- costs not in the sandbox (synthetic)
@@ -96,26 +108,75 @@ CONFIG = {
     "RIGHT_SIZE_REVENUE_MONTHS": 12,     # months of lost revenue counted as the cost of a right-size
     "RIGHT_SIZE_MIN_SAVINGS": 10.0,      # $/mo; smaller savings aren't worth a message
     "RIGHT_SIZE_CAP_HEADROOM": 0.70,     # target plan cap must be >= heaviest line's recent peak / 0.70
+    "SAVER_MAX_LINE_PEAK_GB": 10.0,      # Essentials -> Essentials Saver only for light users (every line's peak
+                                         # <= 10 GB): Saver is the basic tier (max 2 lines, no watch/tablet lines)
+    "PORT_OUT_ALWAYS_CONTACT": True,     # batch 7: a port-out inquiry never gets "do nothing": check-in (or the
+                                         # fix-first callback when an issue is open)
     "STEP_UP_MARGIN": 0.80,              # share of incremental plan revenue that is margin
     "DEVICE_UPGRADE_MARGIN": 80.0,       # $ margin on a device sale + new 24-month financing (synthetic)
+    # --- batch 4/5 (tm-strategy proposals + prompt-fit audit). All synthetic.
+    "ENRICHMENT_IN_DECISIONS": False,   # PERMANENTLY OFF (tm-strategy A/B, strategy/ab_enrichment/RESULTS.md):
+                                        # simulated enrichment (job change, income, kid age band, likely_kid_flag)
+                                        # never feeds eligibility, p_accept, EV or text; listed in `drivers` only,
+                                        # tagged enrichment(simulated)[not used]. There is no code path that reads it.
+    "AFFORDABILITY_MAX_BILL_INCREASE": 0.25,  # upsell blocked if the plan increase > 25% of the current bill
+                                              # (synthetic threshold; never income)
+    "AFFORDABILITY_MAX_BILL_INCREASE_OVER_CAP": 0.40,  # ... 40% when a line is already over its data cap
+                                                       # (they are already throttled / paying for overage)
+    "FAMILY_UPGRADE_ENDING_MONTHS": 2,
+    "UPGRADE_GATE": True,               # device / family upgrade only for accounts in the top 15% of tm-bench's
+                                        # NO-INCOME upgrade model (upgrade_gate.py). Env TM_UPGRADE_GATE=0 to drop.  # promo / financing ending within this many months = upgrade moment
+    "MIN_CREDIT_P_CHURN": 0.05,         # guardrail: no bill/goodwill credit below 5% 90-day risk
+    "CUSTOMER_BENEFIT_WEIGHT": 0.5,     # customer-first actions: $ of customer savings counted as trust value.
+                                        # EV += W*savings*12*p_accept ; lost margin counted x (1-W)
+    "SAME_COVERAGE_RULE": True,         # an eligible same-features cheaper variant (55+/partner/community/4-line)
+                                        # beats do-nothing, upsells, check-ins and cross-sells (restraint =
+                                        # no upsell, not hiding savings). Problem-solving actions still win.
+    "LOCK_CUT": 0.50,                   # hazard cut while new promo credits / financing are paying out
+    "CHECK_IN_COST": 2.0,               # $ (message + light agent follow-up)
+    "PERK_MIN_STREAMING_HOURS": 20.0,   # streaming_hours_3m_avg that makes an unused perk relevant
+    "HINT_MARGIN": 0.30,                # share of Home Internet revenue that is margin
+    "QUIET_APP_SESSIONS": 3,            # app_sessions_30d at or below = went quiet
     # --- mock churn model (used only when real churn_scores.csv is missing)
     "MOCK_MEAN_MONTHLY_HAZARD": 0.0099,  # calibrate mock to 0.99%/month like tm-data's synthetic labels
 }
+if os.environ.get("TM_BILL_SHOCK_RELIEF_OVERRIDE") is not None:
+    CONFIG["BILL_SHOCK_RELIEF_OVERRIDE"] = os.environ["TM_BILL_SHOCK_RELIEF_OVERRIDE"] not in ("0", "false", "False", "")
+if os.environ.get("TM_UPGRADE_GATE") is not None:
+    CONFIG["UPGRADE_GATE"] = os.environ["TM_UPGRADE_GATE"] not in ("0", "false", "False", "")
 if os.environ.get("TM_ENABLE_RIGHT_SIZE") is not None:
     CONFIG["ENABLE_RIGHT_SIZE"] = os.environ["TM_ENABLE_RIGHT_SIZE"] not in ("0", "false", "False", "")
 
-ACTIONS = ["do_nothing", "care_credit", "loyalty_credit", "keep_your_phone", "right_size", "step_up",
-           "device_upgrade", "fix_first", "care_credit_fix_first"]
+ACTIONS = ["do_nothing", "care_credit", "loyalty_credit", "keep_your_phone", "variant_switch", "right_size",
+           "step_up", "family_upgrade", "device_upgrade", "fix_first", "care_credit_fix_first",
+           "bill_shock_price_lock", "check_in", "perk_reminder", "home_internet_bundle"]
 ACTION_LABEL = {
     "do_nothing": "do nothing", "care_credit": "$25 care credit", "loyalty_credit": "loyalty credit",
-    "keep_your_phone": "keep-your-phone credit", "right_size": "right-size plan", "step_up": "step-up plan",
+    "keep_your_phone": "keep-your-phone credit", "variant_switch": "switch to discount plan variant",
+    "right_size": "right-size plan", "step_up": "step-up plan", "family_upgrade": "family upgrade",
     "device_upgrade": "device upgrade", "fix_first": "fix-first callback",
     "care_credit_fix_first": "$25 care credit + fix-first callback",
+    "bill_shock_price_lock": "bill-shock relief ($25 credit, price-guarantee fact)",
+    "check_in": "check-in / plan review", "perk_reminder": "perk reminder",
+    "home_internet_bundle": "Home Internet bundle",
+}
+SEGMENT = {  # offers.csv `offer_segment` (customer type stays in features.csv `segment`)
+    "do_nothing": "leave alone", "fix_first": "fix first", "care_credit_fix_first": "fix first + goodwill",
+    "care_credit": "goodwill credit", "bill_shock_price_lock": "bill-shock relief",
+    "loyalty_credit": "loyalty thank-you", "keep_your_phone": "keep your phone",
+    "variant_switch": "save money (same plan, discount variant)", "right_size": "save money (right-size)",
+    "step_up": "better-fitting plan (step-up)", "family_upgrade": "family upgrade",
+    "device_upgrade": "device upgrade", "check_in": "check-in", "perk_reminder": "perk reminder",
+    "home_internet_bundle": "bundle",
 }
 PROMO_FOR_ACTION = {
     "care_credit": "PROMO-STUB-CARE-CREDIT", "loyalty_credit": "PROMO-STUB-LOYALTY-CREDIT",
     "keep_your_phone": "PROMO-STUB-KEEP-YOUR-PHONE",
 }
+UPSELLS = ("step_up", "family_upgrade", "device_upgrade", "home_internet_bundle")
+CREDIT_ACTIONS = ("care_credit", "loyalty_credit", "keep_your_phone", "care_credit_fix_first",
+                  "bill_shock_price_lock")
+PROBLEM_ACTIONS = ("fix_first", "care_credit_fix_first", "care_credit", "bill_shock_price_lock")
 
 # =============================================================================================
 # Churn scores: real (tm-churn) or mock
@@ -186,6 +247,10 @@ def load_churn_scores(f: pd.DataFrame) -> tuple[pd.DataFrame, str]:
             if c not in cs.columns:
                 cs[c] = ""
         return cs[CHURN_COLS], f"real ({real})"
+    if src != "mock" and os.environ.get("TM_ALLOW_MOCK_SCORES") != "1":
+        raise FileNotFoundError(
+            f"Real churn scores not found at {real}. Run tm-churn's Model A (harness/churn_model.py) first, or set "
+            "TM_ALLOW_MOCK_SCORES=1 to use clearly-labelled mock scores.")
     mock = make_mock_churn_scores(f)
     mock.to_csv(OUT_DIR / "mock_churn_scores.csv", index=False)
     return mock, f"mock ({OUT_DIR / 'mock_churn_scores.csv'})"
@@ -212,41 +277,98 @@ def _fits_usage(plan: pd.Series, row: pd.Series) -> bool:
     return True
 
 
-def right_size_option(row: pd.Series, plans: pd.DataFrame):
-    """Cheapest allowed plan that still fits every line's usage and saves >= RIGHT_SIZE_MIN_SAVINGS/mo.
+def _price(p: pd.Series, n: int) -> int:
+    return det.plan_price_cents(p["line_prices"], p["extra_line_cents"], n)
 
-    Gated so we don't push every premium household down to Essentials:
-      - households flagged by the sandbox's own misfit rule (every line < 5 GB on a premium plan) may move to
-        any cheaper plan that fits;
-      - everyone else may only move to a cheaper variant of the SAME family (e.g. a partner / community / 55+
-        discount variant they qualify for, or the 4 Line Offer), keeping the same benefits.
-    """
-    best = None
-    low_use = bool(row["all_low_use_premium_any"])
+
+def variant_option(row: pd.Series, plans: pd.DataFrame):
+    """Same family + same features, cheaper: a discount variant the account qualifies for per the sandbox
+    (plans.eligibility == accounts.discount_group: 55+/partner/community) or the Essentials 4 Line Offer
+    (4+ lines). Never Military / First Responder (not in the sandbox). Returns (plan, $save/mo) or None."""
     cur = plans.set_index("sku").loc[row["plan_sku"]]
+    if cur["variant"] != "standard":
+        return None
+    best = None
     for _, p in plans.iterrows():
-        if p["sku"] == row["plan_sku"] or not _plan_allowed(p, row["n_lines"], row["discount_group"]):
+        if p["sku"] == row["plan_sku"] or p["family"] != cur["family"] or p["variant"] in ("standard", "saver"):
             continue
-        if not low_use and (p["family"] != cur["family"] or p["tier"] != cur["tier"]):
-            continue  # same family AND same tier only (no Essentials -> Saver downgrade unless misfit)
-        if not _fits_usage(p, row):
+        if not _plan_allowed(p, row["n_lines"], row["discount_group"]) or not _fits_usage(p, row):
             continue
-        price = det.plan_price_cents(p["line_prices"], p["extra_line_cents"], row["n_lines"])
-        save = (row["plan_price_cents"] - price) / 100
+        save = (row["plan_price_cents"] - _price(p, row["n_lines"])) / 100
         if save >= CONFIG["RIGHT_SIZE_MIN_SAVINGS"] and (best is None or save > best[1]):
             best = (p, save)
+    return best
+
+
+def right_size_option(row: pd.Series, plans: pd.DataFrame):
+    """Move DOWN to a cheaper plan that still fits every line's usage (saves >= RIGHT_SIZE_MIN_SAVINGS/mo).
+
+      - 'low_use': sandbox misfit rule (every line < 5 GB on a premium plan) -> any cheaper plan that fits;
+      - 'beyond_down': Experience Beyond where every line averages < 15 GB and < 2 GB hotspot, no connected
+        lines -> Experience More (same variant group). The customer gives up hotspot / perks; the text says so.
+    Same-family discount variants are variant_option(), not this. Returns (plan, $save/mo, kind) or None.
+    """
+    cur = plans.set_index("sku").loc[row["plan_sku"]]
+    low_use = bool(row["all_low_use_premium_any"])
+    beyond_down = bool(cur["family"] == "experience_beyond"
+                       and (row["max_line_data_gb"] if pd.notna(row["max_line_data_gb"]) else 0) < 15
+                       and (row["max_line_hotspot_gb"] if pd.notna(row["max_line_hotspot_gb"]) else 0) < 2
+                       and (row.get("n_connected_lines", 0) or 0) == 0
+                       and not (row.get("has_streaming_addon", 0) or 0)      # uses Beyond's streaming perks
+                       and not bool(row.get("has_home_internet", False)))   # bundled household: leave alone
+    no_extras = bool((row.get("n_connected_lines", 0) or 0) == 0 and not (row.get("has_streaming_addon", 0) or 0)
+                     and not bool(row.get("has_home_internet", False))
+                     and (row["max_line_hotspot_gb"] if pd.notna(row["max_line_hotspot_gb"]) else 0) <= 0.5)
+    # batch 7: 4+ lines on standard More, no hotspot / perks / connected lines, every line fits 50 GB -> 4 Line Offer
+    more_4line = bool(cur["family"] == "experience_more" and cur["variant"] == "standard" and row["n_lines"] >= 4
+                      and no_extras)
+    # batch 7: 1-2 light lines on standard Essentials -> Essentials Saver (same 50 GB cap; basic tier, max 2 lines,
+    # no watch/tablet lines)
+    peak = row["max_line_data_peak_gb"] if pd.notna(row["max_line_data_peak_gb"]) else 0
+    saver = bool(cur["family"] == "essentials" and cur["variant"] == "standard" and row["n_lines"] <= 2
+                 and (row.get("n_connected_lines", 0) or 0) == 0 and peak <= CONFIG["SAVER_MAX_LINE_PEAK_GB"])
+    if not (low_use or beyond_down or more_4line or saver):
+        return None
+    best = None
+    for _, p in plans.iterrows():
+        if not _plan_allowed(p, row["n_lines"], row["discount_group"]) or not _fits_usage(p, row):
+            continue
+        if FAMILY_RANK[p["family"]] < FAMILY_RANK[cur["family"]]:
+            if low_use:
+                kind = "low_use"
+            elif beyond_down and p["family"] == "experience_more":
+                kind = "beyond_down"
+            elif more_4line and p["variant"] == "four_line_offer":
+                kind = "more_to_4line"
+            else:
+                continue
+        elif saver and p["sku"] != row["plan_sku"] and p["family"] == "essentials" and p["variant"] == "saver":
+            kind = "essentials_saver"
+        else:
+            continue
+        save = (row["plan_price_cents"] - _price(p, row["n_lines"])) / 100
+        if save >= CONFIG["RIGHT_SIZE_MIN_SAVINGS"] and (best is None or save > best[1]):
+            best = (p, save, kind)
     return best
 
 
 FAMILY_RANK = {"essentials": 0, "experience_more": 1, "experience_beyond": 2}
 
 
+def usage_need(row: pd.Series) -> bool:
+    """Batch 7: the only upsell trigger. Near / over the data cap, or using hotspot the plan lacks
+    (Essentials has no high-speed hotspot; More's 60 GB is nearly used up, > 45 GB). Usage growth alone, a
+    graduation inference or an old phone is NOT a reason to sell a bigger plan."""
+    hs = row["max_line_hotspot_gb"] if pd.notna(row["max_line_hotspot_gb"]) else 0
+    return bool(row["um_near_plan_limit"] or row["um_over_plan_cap"]
+                or (row["plan_family"] == "essentials" and hs > 0.5)
+                or (row["plan_family"] == "experience_more" and hs > 45))
+
+
 def step_up_option(row: pd.Series, plans: pd.DataFrame):
     """Cheapest allowed plan one step up, when the household is outgrowing its plan or a life event hits."""
-    outgrowing = bool(row["um_near_plan_limit"] or row["um_over_plan_cap"] or row["um_usage_growth"]
-                      or (row["plan_family"] == "essentials" and (row["max_line_hotspot_gb"] or 0) > 0.5)
-                      or (row["plan_family"] == "experience_more" and (row["max_line_hotspot_gb"] or 0) > 45))
-    grad = bool(row["um_student_graduating"])
+    outgrowing = usage_need(row)   # batch 7: usage need only (usage growth alone is not a need)
+    grad = False  # graduation is an inferred life event (student + tenure heuristic): not an upsell trigger
     if not (outgrowing or grad):
         return None
     cur_rank = FAMILY_RANK[row["plan_family"]]
@@ -286,52 +408,100 @@ def promo_rule_ok(promo: pd.Series, row: pd.Series) -> tuple[bool, str]:
     return (not why), "; ".join(why)
 
 
+SHOP_REASON = re.compile(r"port|carrier|compet|shopping", re.I)
+
+
 def drivers(row: pd.Series) -> dict:
     """Which churn drivers are present (synthetic thresholds on real sandbox fields)."""
-    return {
+    d = {
         "billing_pain": bool(row["um_promo_expired"] or row["bill_increase_pct"] >= 0.10 or row["billing_90d"] >= 1),
         "service_pain": bool(row["unresolved_90d"] >= 1 or row["network_90d"] >= 2 or row["neg_contacts_90d"] >= 2),
         "network_pain": bool(row["network_90d"] >= 1 and (row["network_unresolved_90d"] >= 1 or row["network_90d"] >= 2)),
         "unresolved": bool(row["unresolved_90d"] >= 1),
         "shopping": bool(row["competitor_research_score"] >= 0.6 or row["port_out_inquiry"] == 1
                          or row["cancel_inquiry_90d"] >= 1),
+        "quiet": bool(row["app_sessions_30d"] <= CONFIG["QUIET_APP_SESSIONS"]),
         "device_pain": bool(row["device_90d"] >= 1 or row["um_old_device"]),
         "overpay": bool(row["um_plan_overpay"]),
-        "outgrowing": bool(row["um_near_plan_limit"] or row["um_over_plan_cap"] or row["um_usage_growth"]),
+        "outgrowing": usage_need(row),
         "life_event": bool(row["um_student_graduating"]),
         "free_to_leave": bool(row["max_financing_months_left"] == 0 and row["n_lines"] > 0),
         "bill_shock_recent": bool(pd.notna(row["days_since_bill_shock"])
                                   and row["days_since_bill_shock"] <= CONFIG["UPSELL_BLOCK_DAYS_AFTER_BILL_SHOCK"]),
-        # unresolved contacts about something a callback can actually fix (not only billing)
         "fixable_unresolved": bool(row["unresolved_90d"] > 0
-                                   and (row["unresolved_90d"] > row["billing_90d"] or row["network_90d"] > 0
-                                        or row["device_90d"] > 0)),
+                                   and (row["network_90d"] > 0 or row["device_90d"] > 0)),
+        "streaming": bool((row.get("streaming_hours_3m_avg", 0) or 0) >= CONFIG["PERK_MIN_STREAMING_HOURS"]
+                          and not (row.get("has_streaming_addon", 0) or 0)),
+        "kid_line": bool((row.get("n_kid_lines", 0) or 0) > 0),   # REAL: lines.member_role child/teen
     }
+    # shopping as the TOP driver only matters for an at-risk account: port-out inquiry, or Model A's #1 reason is
+    # shopping AND risk >= MIN_CREDIT_P_CHURN (Model A names "shopping" #1 even at <1% risk)
+    d["top_driver_shopping"] = bool(row["port_out_inquiry"] == 1 or (
+        SHOP_REASON.search(str(row.get("risk_reason_1", "") or ""))
+        and row["p_churn_90d"] >= CONFIG["MIN_CREDIT_P_CHURN"]))
+    return d
 
 
 ON_TARGET = {  # action -> drivers it addresses
     "care_credit": ["billing_pain", "service_pain"],
     "loyalty_credit": ["shopping", "billing_pain"],
     "keep_your_phone": ["billing_pain", "shopping"],
+    "variant_switch": ["overpay", "billing_pain"],
     "right_size": ["overpay", "billing_pain"],
     "step_up": ["outgrowing", "life_event"],
+    "family_upgrade": ["outgrowing", "device_pain", "free_to_leave"],
     "device_upgrade": ["device_pain", "free_to_leave"],
     "fix_first": ["network_pain", "fixable_unresolved"],
+    "bill_shock_price_lock": ["billing_pain"],
+    "check_in": ["shopping", "quiet"],
+    "perk_reminder": ["streaming"],
+    "home_internet_bundle": [],
 }
-CREDIT_ACTIONS = ("care_credit", "loyalty_credit", "keep_your_phone")
+
+
+def lock_value(p90: float, lock_months: float, existing_months: float, monthly_margin: float,
+               p_accept: float) -> float:
+    """Retention value of NEW lock-in (promo credits / financing paying out). SYNTHETIC.
+
+    Spec formula p_accept*[(1-h(1-cut))^L - (1-h)^L]*margin*24 multiplies the survival gap AT month L by 24
+    full months of margin (and L=36 runs past the 24-month horizon), so it overstates. Corrected: sum the
+    monthly survival gap over the value horizon, with the cut active only for months beyond the lock the
+    customer already has (existing financing / promo months), i.e. no double count with current lock-in.
+    h = monthly hazard from p_churn_90d."""
+    if lock_months <= 0 or p_accept <= 0:
+        return 0.0
+    h = 1 - (1 - min(max(p90, 0.0), 0.999)) ** (1 / 3)
+    hc = h * (1 - CONFIG["LOCK_CUT"])
+    H = CONFIG["VALUE_HORIZON_MONTHS"]
+    m = max(0.0, float(existing_months or 0))
+    gap, s_new, s_base = 0.0, 1.0, 1.0
+    for t in range(1, H + 1):
+        s_base *= (1 - h)
+        s_new *= (1 - hc) if (m < t <= lock_months) else (1 - h)
+        gap += s_new - s_base
+    return p_accept * gap * monthly_margin
 
 
 def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) -> dict:
     C = CONFIG
     d = drivers(row)
     p = float(row["p_churn_90d"])
-    value = row["service_revenue_cents"] / 100 * C["SERVICE_MARGIN"] * C["VALUE_HORIZON_MONTHS"]
-    pain = d["billing_pain"] or d["unresolved"]
+    margin_mo = row["service_revenue_cents"] / 100 * C["SERVICE_MARGIN"]
+    value = margin_mo * C["VALUE_HORIZON_MONTHS"]
+    W = C["CUSTOMER_BENEFIT_WEIGHT"]
+    plan_idx = plans.set_index("sku")
+    cur_plan = plan_idx.loc[row["plan_sku"]]
+    guarantee = int(cur_plan["price_guarantee_years"]) if pd.notna(cur_plan["price_guarantee_years"]) else 0
+    existing_lock = row.get("contract_or_financing_months_remaining", row["max_financing_months_left"]) or 0
     res: dict[str, dict] = {"do_nothing": {"ev": 0.0, "eligible": True, "detail": "", "save_rate": 0.0,
-                                           "cost": 0.0, "annoyance": 0.0, "gain": 0.0, "save_value": 0.0}}
-
+                                           "cost": 0.0, "annoyance": 0.0, "gain": 0.0, "save_value": 0.0,
+                                           "customer_benefit": 0.0, "lock_value": 0.0, "skus": "",
+                                           "lock_in_months": 0}}
     relief = C["BILL_SHOCK_RELIEF"]
-    shock_relief = d["bill_shock_recent"] and relief["enabled"]
+    shock_relief = d["bill_shock_recent"] and relief["enabled"] and C["BILL_SHOCK_RELIEF_OVERRIDE"]
+
+    def pa(action):
+        return C["P_ACCEPT"].get(action, 0.0)
 
     def sr(action):
         if action == "care_credit_fix_first":
@@ -348,185 +518,462 @@ def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) 
             r = rates["billing_only"]
         else:
             r = rates["off_target"]
-        if action in CREDIT_ACTIONS and shock_relief:
+        if action in ("care_credit", "loyalty_credit", "keep_your_phone") and shock_relief:
             r += relief["credit_save_boost"]
         return r
 
-    def add(action, eligible, cost, gain=0.0, detail="", why_not=""):
+    def add(action, eligible, cost, gain=0.0, detail="", why_not="", benefit=0.0, lock=0.0, lock_gross=0.0,
+            skus="", lock_months=0):
+        f_ann = C["COMBO_ANNOYANCE"] if action == "care_credit_fix_first" else C["ANNOYANCE"][action]
+        base = {"forced_save_rate": sr(action), "forced_cost": cost, "forced_annoyance": f_ann,
+                "forced_gain": gain, "skus": skus, "lock_in_months": lock_months}
         if not eligible:
-            # "forced" terms let policy simulations (uplift.py) price a blanket offer to ineligible accounts
-            f_ann = C["COMBO_ANNOYANCE"] if action == "care_credit_fix_first" else C["ANNOYANCE"][action]
-            res[action] = {"ev": None, "eligible": False, "detail": why_not,
-                           "save_rate": None, "cost": None, "annoyance": None,
-                           "forced_save_rate": sr(action), "forced_cost": cost, "forced_annoyance": f_ann,
-                           "forced_gain": gain}
+            res[action] = {"ev": None, "eligible": False, "detail": why_not, "save_rate": None, "cost": None,
+                           "annoyance": None, "customer_benefit": None, "lock_value": None, **base}
             return
-        ann = C["COMBO_ANNOYANCE"] if action == "care_credit_fix_first" else C["ANNOYANCE"][action]
-        if action in ("step_up", "device_upgrade") and pain:
-            ann += C["UPSELL_AFTER_PAIN_PENALTY"]
-        ev = p * sr(action) * value + gain - cost - ann
+        ann = f_ann
+        sv = p * sr(action) * value
+        ev = sv + gain + benefit + lock - cost - ann
         res[action] = {"ev": round(ev, 2), "eligible": True, "detail": detail, "save_rate": sr(action),
-                       "forced_save_rate": sr(action), "forced_cost": cost, "forced_annoyance": ann,
-                       "forced_gain": gain,
                        "cost": round(cost, 2), "annoyance": round(ann, 2), "gain": round(gain, 2),
-                       "save_value": round(p * sr(action) * value, 2)}
+                       "save_value": round(sv, 2), "customer_benefit": round(benefit, 2),
+                       "lock_value": round(lock, 2), "ev_gross_lock": round(ev - lock + lock_gross, 2), **base}
 
-    # $25 care credit: PROMO-STUB-CARE-CREDIT (tenure >= 6, >= 3 support contacts in 90d), $25 x 1 month
+    credit_block = (f"guardrail: no bill credits below {C['MIN_CREDIT_P_CHURN']:.0%} churn risk "
+                    f"(this account {p:.1%})") if p < C["MIN_CREDIT_P_CHURN"] else ""
+
+    # ---- $25 care credit: PROMO-STUB-CARE-CREDIT (tenure >= 6, >= 3 support contacts in 90d), $25 x 1
     pr = promos.loc["PROMO-STUB-CARE-CREDIT"]
     ok, why = promo_rule_ok(pr, row)
     cc_detail = "$25 one-time goodwill credit"
     if not ok and shock_relief:
         relaxed = pr.copy()
         relaxed["min_support_contacts_90d"] = relief["care_credit_min_contacts"]
-        ok2, _ = promo_rule_ok(relaxed, row)
-        if ok2:
+        if promo_rule_ok(relaxed, row)[0]:
             ok, cc_detail = True, ("$25 goodwill credit via bill-shock relief override "
                                    f"(sandbox rule needs {int(pr['min_support_contacts_90d'])}+ contacts)")
     care_cost = pr["value_cents"] / 100 * (pr["payout_months"] or 1)
-    add("care_credit", ok, care_cost, detail=cc_detail, why_not=why)
-    care_ok = ok
+    care_rule_ok = ok
+    # bill-shock relief replaces the standalone credit on More/Beyond (it IS the credit plus the explanation)
+    lock_ok = bool(d["bill_shock_recent"] and guarantee >= 5 and care_rule_ok and not credit_block)
+    add("care_credit", ok and not credit_block and not lock_ok, care_cost, detail=cc_detail,
+        why_not=why or credit_block or "replaced by bill-shock relief (same $25 credit plus the explanation)",
+        skus="PROMO-STUB-CARE-CREDIT")
+    care_ok = ok and not credit_block
 
-    # loyalty credit: PROMO-STUB-LOYALTY-CREDIT (tenure >= 36), $5/mo ongoing valued over 12 months
-    pr = promos.loc["PROMO-STUB-LOYALTY-CREDIT"]
-    ok, why = promo_rule_ok(pr, row)
-    mo = pr["value_cents"] / 100
-    add("loyalty_credit", ok, mo * C["LOYALTY_CREDIT_MONTHS"],
-        detail=f"${mo:.0f}/mo loyalty credit", why_not=why)
+    # ---- loyalty credit: PROMO-STUB-LOYALTY-CREDIT (tenure >= 36), $5/mo valued over 12 months
+    pl = promos.loc["PROMO-STUB-LOYALTY-CREDIT"]
+    ok, why = promo_rule_ok(pl, row)
+    loy_mo = pl["value_cents"] / 100
+    add("loyalty_credit", ok and not credit_block, loy_mo * C["LOYALTY_CREDIT_MONTHS"],
+        detail=f"${loy_mo:.0f}/mo loyalty credit", why_not=why or credit_block, skus="PROMO-STUB-LOYALTY-CREDIT")
 
-    # keep-your-phone: PROMO-STUB-KEEP-YOUR-PHONE is $20/mo but only for a NEW ported-in BYOD Saver line.
-    pr = promos.loc["PROMO-STUB-KEEP-YOUR-PHONE"]
-    mo = pr["value_cents"] / 100
+    # ---- keep-your-phone (adapted; real promo needs a new ported-in BYOD Saver line)
+    pk = promos.loc["PROMO-STUB-KEEP-YOUR-PHONE"]
+    mo = pk["value_cents"] / 100
     if C["STRICT_PROMO_RULES"]:
         add("keep_your_phone", False, 0, why_not="sandbox rule needs a new ported-in BYOD line on Essentials Saver")
     else:
         ok = bool(d["free_to_leave"] and (row["any_paid_off_device"] or row["n_byod"] > 0))
-        add("keep_your_phone", ok, mo * C["KYP_MONTHS"],
+        add("keep_your_phone", ok and not credit_block, mo * C["KYP_MONTHS"],
             detail=f"${mo:.0f}/mo for {C['KYP_MONTHS']} months to keep a paid-off phone (adapted)",
-            why_not="still paying off a phone" if not ok else "")
+            why_not=("still paying off a phone" if not ok else credit_block), skus="PROMO-STUB-KEEP-YOUR-PHONE")
 
-    # right-size plan (flagged scope question)
+    # ---- customer-first: discount variant (same features) and right-size down
+    vs = variant_option(row, plans) if C["ENABLE_RIGHT_SIZE"] else None
+    if vs is not None:
+        plan, save = vs
+        pav = pa("variant_switch")
+        add("variant_switch", True, save * C["RIGHT_SIZE_REVENUE_MONTHS"] * pav * (1 - W),
+            benefit=W * save * 12 * pav, detail=f"move to {plan['name']} (same features, saves ${save:.0f}/mo)",
+            skus=plan["sku"])
+        res["variant_switch"].update(plan_name=plan["name"], plan_sku=plan["sku"], save=save)
+    else:
+        add("variant_switch", False, 0, why_not="disabled by ENABLE_RIGHT_SIZE" if not C["ENABLE_RIGHT_SIZE"]
+            else "no cheaper discount variant / 4-line offer they qualify for")
     rs = right_size_option(row, plans) if C["ENABLE_RIGHT_SIZE"] else None
-    if rs is not None:
-        plan, save = rs
-        add("right_size", True, save * C["RIGHT_SIZE_REVENUE_MONTHS"] * C["P_ACCEPT"]["right_size"],
-            detail=f"move to {plan['name']} (saves ${save:.0f}/mo)")
-        res["right_size"]["plan_name"], res["right_size"]["save"] = plan["name"], save
+    if rs is not None and (d["unresolved"] or d["network_pain"]):
+        # batch 7: a plan move is marketing; while a ticket / network issue is open we fix first
+        add("right_size", False, 0, why_not="open support or network issue: fix first, plan savings after it closes")
+    elif rs is not None:
+        plan, save, kind = rs
+        par = pa("right_size")
+        add("right_size", True, save * C["RIGHT_SIZE_REVENUE_MONTHS"] * par * (1 - W),
+            benefit=W * save * 12 * par, detail=f"move to {plan['name']} (saves ${save:.0f}/mo; {kind})",
+            skus=plan["sku"])
+        res["right_size"].update(plan_name=plan["name"], plan_sku=plan["sku"], save=save, kind=kind)
     else:
         add("right_size", False, 0, why_not="disabled by ENABLE_RIGHT_SIZE" if not C["ENABLE_RIGHT_SIZE"]
-            else "no cheaper allowed plan fits their usage")
+            else "no cheaper plan fits their usage (or not a light user)")
 
-    # step-up plan
+    # ---- upsell guardrails
+    blocks = []
+    if d["bill_shock_recent"]:
+        blocks.append(f"bill-shock guardrail (bill rose {int(row['days_since_bill_shock'])} days ago, "
+                      f"window {C['UPSELL_BLOCK_DAYS_AFTER_BILL_SHOCK']} days)")
+    if d["unresolved"]:
+        blocks.append("open support issue")
+    if vs is not None:
+        blocks.append("a cheaper eligible version of their plan exists")
+    if d["top_driver_shopping"]:
+        blocks.append("top driver is shopping / port-out")
+    upsell_block = "blocked: " + "; ".join(blocks) if blocks else ""
+
+    # ---- step-up
     su = step_up_option(row, plans)
-    shock_block = (f"blocked by bill-shock guardrail (bill rose {int(row['days_since_bill_shock'])} days ago, "
-                   f"window {C['UPSELL_BLOCK_DAYS_AFTER_BILL_SHOCK']} days)") if d["bill_shock_recent"] else ""
-    if su is not None and shock_block:
-        add("step_up", False, 0, why_not=shock_block)
+    bill = max(float(row["last_bill_cents"] or 0) / 100, 1.0)
+
+    def afford_block(delta):
+        lim = C["AFFORDABILITY_MAX_BILL_INCREASE_OVER_CAP"] if row["um_over_plan_cap"] \
+            else C["AFFORDABILITY_MAX_BILL_INCREASE"]
+        return (f"blocked: affordability (+${delta:.0f}/mo is {delta / bill:.0%} of the ${bill:.0f} bill, "
+                f"limit {lim:.0%})") if delta / bill > lim else ""
+    if su is not None and (upsell_block or afford_block(su[1])):
+        add("step_up", False, 0, why_not=upsell_block or afford_block(su[1]))
     elif su is not None:
         plan, delta = su
-        gain = C["P_ACCEPT"]["step_up"] * delta * C["STEP_UP_MARGIN"] * C["VALUE_HORIZON_MONTHS"] * (1 - p)
-        add("step_up", True, 0.0, gain=gain, detail=f"move to {plan['name']} (+${delta:.0f}/mo)")
-        res["step_up"]["plan_name"], res["step_up"]["delta"] = plan["name"], delta
+        gain = pa("step_up") * delta * C["STEP_UP_MARGIN"] * C["VALUE_HORIZON_MONTHS"] * (1 - p)
+        add("step_up", True, 0.0, gain=gain, detail=f"move to {plan['name']} (+${delta:.0f}/mo)", skus=plan["sku"])
+        res["step_up"].update(plan_name=plan["name"], plan_sku=plan["sku"], delta=delta)
     else:
-        add("step_up", False, 0, why_not="not outgrowing the plan and no life event")
+        add("step_up", False, 0, why_not="no usage need (near/over data cap or hotspot the plan lacks)")
 
-    # device upgrade: a line that is upgrade-eligible per sandbox stub rule (owned 12+ months, trade-in
-    # eligible) and paid off. Credit = best real promo it meets: OLD-PHONE-UPGRADE ($150, phone 36+ months,
-    # trade-in) or TRADEIN-ANY ($200, any trade-in, Essentials/More/Beyond). Credit only paid if accepted.
-    if row["n_upgrade_ready_lines"] > 0 and shock_block:
-        add("device_upgrade", False, 0, why_not=shock_block)
+    # ---- family upgrade (batch 7, UNBUNDLED): the plan move only, for a family plan with a real child/teen line
+    #      (lines.member_role) AND a usage need. The TRADEIN-ANY credit is never bundled in: a phone trade-in is
+    #      its own device_upgrade option. When this applies it replaces the generic step-up for that account.
+    anyt = promos.loc["PROMO-STUB-TRADEIN-ANY"]
+    gate_ok = bool(row.get("in_top15", True))
+    gate_why = f"upgrade gate: not in the no-income upgrade model's top 15% (pct {row.get('upgrade_pct', float('nan')):.0f})"
+    fam_ok = bool(row.get("is_family_plan", 0) and row["n_lines"] >= 2 and d["kid_line"]
+                  and row["plan_family"] in ("essentials", "experience_more") and su is not None)
+    if fam_ok and (upsell_block or afford_block(su[1])):
+        add("family_upgrade", False, 0, why_not=upsell_block or afford_block(su[1]))
+    elif fam_ok:
+        plan, delta = su
+        paf = pa("family_upgrade")
+        gain = paf * delta * C["STEP_UP_MARGIN"] * C["VALUE_HORIZON_MONTHS"] * (1 - p)
+        add("family_upgrade", True, 0.0, gain=gain,
+            detail=f"move the family to {plan['name']} (+${delta:.0f}/mo; usage need; no trade-in bundled)",
+            skus=plan["sku"])
+        res["family_upgrade"].update(plan_name=plan["name"], plan_sku=plan["sku"], delta=delta)
+    else:
+        why = ("not a family plan" if not row.get("is_family_plan", 0) else
+               "no child/teen line (lines.member_role)" if not d["kid_line"] else
+               "already on the top plan family" if row["plan_family"] not in ("essentials", "experience_more") else
+               "no usage need (near/over data cap or hotspot the plan lacks)")
+        add("family_upgrade", False, 0, why_not=why)
+    if fam_ok and res.get("step_up", {}).get("eligible"):
+        add("step_up", False, 0, why_not="family plan with a child/teen line: the same move is the family upgrade")
+
+    # ---- device upgrade (paid-off, trade-in eligible, 12+ months); lock-in = promo payout months
+    if row["n_upgrade_ready_lines"] > 0 and not gate_ok:
+        add("device_upgrade", False, 0, why_not=gate_why)
+    elif row["n_upgrade_ready_lines"] > 0 and upsell_block:
+        add("device_upgrade", False, 0, why_not=upsell_block)
     elif row["n_upgrade_ready_lines"] > 0:
         options = []
         old = promos.loc["PROMO-STUB-OLD-PHONE-UPGRADE"]
         if row["n_old_upgrade_lines"] > 0 and promo_rule_ok(old, row)[0]:
             options.append(old)
-        anyt = promos.loc["PROMO-STUB-TRADEIN-ANY"]
         if row["plan_family"] in str(anyt["plan_families"]).split(","):
             options.append(anyt)
         best = max(options, key=lambda r: r["value_cents"])
         credit = best["value_cents"] / 100
-        pa = C["P_ACCEPT"]["device_upgrade"]
-        add("device_upgrade", True, pa * credit, gain=pa * C["DEVICE_UPGRADE_MARGIN"],
-            detail=f"upgrade with {best['name']} (${credit:.0f})")
+        pad = pa("device_upgrade")
+        L = int(best["payout_months"]) if pd.notna(best["payout_months"]) else 0
+        add("device_upgrade", True, pad * credit, gain=pad * C["DEVICE_UPGRADE_MARGIN"],
+            lock=lock_value(p, L, existing_lock, margin_mo, pad), lock_gross=lock_value(p, L, 0, margin_mo, pad),
+            detail=f"upgrade with {best['name']} (${credit:.0f})", skus=best["sku"], lock_months=L)
         res["device_upgrade"]["promo"] = best["sku"]
     else:
         add("device_upgrade", False, 0, why_not="no paid-off, trade-in-eligible phone owned 12+ months")
 
-    # fix-first callback: unresolved contacts or repeated network complaints; no discount
+    # ---- fix-first callback
     ok = bool(d["unresolved"] or d["network_pain"])
     add("fix_first", ok, C["FIX_FIRST_CALLBACK_COST"], detail="agent callback to fix the open issue",
         why_not="no open or network issue")
     fix_ok = ok
-
-    # combined: care credit + fix-first callback (both must be eligible on their own)
     add("care_credit_fix_first", care_ok and fix_ok, care_cost + C["FIX_FIRST_CALLBACK_COST"],
         detail="$25 goodwill credit plus an agent callback to fix the issue",
-        why_not="needs both the care credit and a fix-first issue")
+        why_not=credit_block or "needs both the care credit and a fix-first issue", skus="PROMO-STUB-CARE-CREDIT")
 
+    # ---- bill-shock relief: More/Beyond only; $25 care credit (+ $5/mo loyalty at 36+ months); the 5-year
+    #      guarantee is stated as a FACT, never as a new lock -> lock_in 0
+    with_loyalty = bool(row["tenure_months"] >= (pl["min_tenure_months"] or 36))
+    cost = care_cost + (loy_mo * C["LOYALTY_CREDIT_MONTHS"] if with_loyalty else 0)
+    why = ("no bill shock in the last 90 days" if not d["bill_shock_recent"] else
+           "Essentials has no price guarantee: credits / right-size instead" if guarantee < 5 else
+           credit_block or "care-credit rule not met")
+    add("bill_shock_price_lock", lock_ok, cost,
+        detail="explain the promo end + $25 credit" + (" + $5/mo loyalty" if with_loyalty else "")
+               + f"; {cur_plan['name']} price guaranteed {guarantee} years (fact)",
+        why_not=why, skus="PROMO-STUB-CARE-CREDIT" + (";PROMO-STUB-LOYALTY-CREDIT" if with_loyalty else "")
+                          + f";{row['plan_sku']}")
+    if lock_ok:
+        res["bill_shock_price_lock"].update(with_loyalty=with_loyalty, guarantee=guarantee)
+
+    # ---- check-in / plan review (no $): shopping, port-out or went quiet, nothing open
+    ok = bool((d["shopping"] or d["quiet"]) and not d["unresolved"])
+    add("check_in", ok, C["CHECK_IN_COST"], detail="plan review, no offer" +
+        (f"; {cur_plan['name']} price guarantee stated as a fact" if guarantee >= 5 else ""),
+        why_not="open support issue (fix first)" if d["unresolved"] else "no shopping / port-out / quiet signal",
+        skus=row["plan_sku"] if guarantee >= 5 else "")
+    # ---- perk reminder (no $, no brand names)
+    ok = bool(d["streaming"] and isinstance(cur_plan["perks"], str) and "streaming-video-ads" in cur_plan["perks"]
+              and p >= C["MIN_CREDIT_P_CHURN"])
+    add("perk_reminder", ok, 0.0, detail="remind them their plan includes a streaming video perk",
+        why_not="no unused streaming perk / risk below 5%", skus=row["plan_sku"])
+    # ---- Home Internet bundle (BUNDLE-HINT $15/mo with Home Internet Basic)
+    hint = promos.loc["PROMO-STUB-BUNDLE-HINT"]
+    ok = bool(not row["has_home_internet"] and row["n_lines"] >= 2)
+    if ok and upsell_block:
+        add("home_internet_bundle", False, 0, why_not=upsell_block)
+    elif ok:
+        pah = pa("home_internet_bundle")
+        hb, hc = 50.0, hint["value_cents"] / 100
+        add("home_internet_bundle", True, pah * hc * 12, gain=pah * (hb - hc) * C["HINT_MARGIN"] * C["VALUE_HORIZON_MONTHS"],
+            detail=f"Home Internet Basic ${hb:.0f}/mo with ${hc:.0f}/mo bundle credit",
+            skus="TMO-STUB-ADD-HINT-BASIC;PROMO-STUB-BUNDLE-HINT")
+    else:
+        add("home_internet_bundle", False, 0, why_not="already has Home Internet or single line")
     return {"res": res, "drivers": d, "value": value}
 
 
-def reason_text(action: str, row: pd.Series, ev: dict, best_other: tuple | None) -> str:
-    d, r = ev["drivers"], ev["res"]
+def driver_list(row: pd.Series, d: dict) -> str:
+    """`group:signal` list (commerce / customer / live / enrichment(simulated))."""
+    out = []
+    if d["bill_shock_recent"]:
+        out.append("live:bill_shock_promo_expired" if row["um_promo_expired"] else "live:bill_jump")
+    if d["unresolved"]:
+        out.append("live:unresolved_support")
+    if row["network_90d"] >= 1:
+        out.append("live:network_complaints")
+    if row["port_out_inquiry"] == 1:
+        out.append("live:port_out_inquiry")
+    if row["competitor_research_score"] >= 0.6:
+        out.append("live:competitor_research")
+    if d["quiet"]:
+        out.append("live:app_use_dropped")
+    if row["um_near_plan_limit"]:
+        out.append("live:near_data_cap")
+    if row["um_usage_growth"]:
+        out.append("live:usage_growth")
+    if row["any_paid_off_device"]:
+        out.append("commerce:device_paid_off")
+    if row["um_old_device"]:
+        out.append("commerce:old_device")
+    if (row["max_financing_months_left"] or 0) > 0:
+        out.append(f"commerce:financing_{int(row['max_financing_months_left'])}m_left")
+    if row["all_low_use_premium_any"]:
+        out.append("commerce:premium_plan_light_use")
+    if row.get("_variant_ok"):
+        out.append("commerce:cheaper_variant_eligible")
+    out.append(f"customer:tenure_{int(row['tenure_months'])}m")
+    out.append(f"customer:lines_{int(row['n_lines'])}")
+    if d.get("kid_line") and (row.get("n_kid_lines", 0) or 0) > 0:
+        out.append("customer:kid_line")
+    if isinstance(row["discount_group"], str) and row["discount_group"]:
+        out.append(f"customer:discount_group_{row['discount_group']}")
+    tag = "enrichment(simulated)[not used]"
+    if row.get("recent_job_change", 0) == 1:
+        out.append(f"{tag}:job_change_90d")
+    if isinstance(row.get("income_band"), str) and row.get("income_band"):
+        out.append(f"{tag}:income_band_{row['income_band']}")
+    if isinstance(row.get("kid_age_band"), str) and row.get("kid_age_band") not in ("", "none"):
+        out.append(f"{tag}:kid_age_band_{row['kid_age_band']}")
+    return ";".join(out)
+
+
+def _pct(row):
     pv = row["p_churn_90d"] * 100
-    pct = f"{pv:.1f}%" if pv >= 1 else f"{pv:.2f}%"
+    return f"{pv:.1f}%" if pv >= 1 else f"{pv:.2f}%"
+
+
+def do_nothing_reason(row: pd.Series, ev: dict) -> tuple[str, str]:
+    """Batch 7: honest do-nothing reason (code, sentence), built only from real sandbox fields, in priority order.
+    "Happy" is only said when nothing contradicts it (no open ticket, no wait verdict, no complaints, no shopping)."""
+    d, r = ev["drivers"], ev["res"]
+    pct = _pct(row)
+    if row["unresolved_90d"] > 0 or (row.get("network_unresolved_90d", 0) or 0) > 0:
+        return "open_ticket", "Open ticket with support; no marketing until it's closed."
+    happy_caller = bool(row["avg_sentiment_90d"] > 0.2 and (row.get("support_90d", 0) or 0) > 0
+                        and not d["shopping"] and not d["bill_shock_recent"])
+
+    def happy():
+        n_sup = int(row.get("support_90d", 0) or 0)
+        parts = ([f"every recent support contact ({n_sup}) was resolved"] if n_sup
+                 else ["no support contacts in 90 days"])
+        parts.append("no port-out inquiry")
+        if row["app_sessions_30d"] >= 10:
+            parts.append(f"{int(row['app_sessions_30d'])} app sessions in 30 days")
+        return "happy", f"Happy customer: {', '.join(parts)}, so we leave them alone."
+    if happy_caller:
+        return happy()
+    if d["bill_shock_recent"]:
+        return "bill_shock_low_risk", (f"Their bill went up recently but their risk is low ({pct}): no credit below "
+                                       f"{CONFIG['MIN_CREDIT_P_CHURN']:.0%} and no upsell for 90 days.")
+    if d["shopping"]:
+        return "shopping_low_risk", (f"They're comparing options but their risk is low ({pct}); a pitch now could "
+                                     "backfire, so we hold off.")
+    if (row["neg_contacts_90d"] or 0) >= 2 or (row["network_90d"] or 0) >= 1:
+        return "recent_complaints", "Recent service complaints are closed; we keep watching instead of selling."
+    if d["outgrowing"]:
+        blk = next((r[a]["detail"] for a in ("family_upgrade", "step_up")
+                    if not r[a]["eligible"] and str(r[a]["detail"]).startswith("blocked")), "")
+        return "usage_need_held", ("Their usage is near the plan's limit, but a bigger plan isn't worth pushing now"
+                                   + (f" ({blk.replace('blocked: ', '')})" if blk else "") + ".")
+    # only when a line really has line_tradein's wait verdict and nothing stronger applies
+    if (row.get("n_wait_lines", 0) or 0) > 0:
+        return "wait_payoff", ("Their phone is still being paid off, so the honest advice is to wait; "
+                               "we won't push an upgrade.")
+    if row["app_sessions_30d"] >= 10 or row["avg_sentiment_90d"] > 0.2:
+        return happy()
+    if row["p_churn_90d"] >= CONFIG["MIN_CREDIT_P_CHURN"]:
+        return "nothing_helps", "Nothing we could offer right now would genuinely help, so we'll hold off and keep listening."
+    return "low_risk", f"Risk is low ({pct}) and nothing needs fixing, so we leave them alone."
+
+
+def customer_monthly_delta(a: str, v: dict, promos: pd.DataFrame | None = None) -> float:
+    """Customer's $/month change if they accept (negative = they save). One-time credits are 0/mo. SYNTHETIC."""
+    if not v.get("eligible") and a not in ("do_nothing",):
+        pass
+    if a in ("variant_switch", "right_size"):
+        return -round(float(v.get("save", 0) or 0), 2)
+    if a in ("step_up", "family_upgrade"):
+        return round(float(v.get("delta", 0) or 0), 2)
+    if a == "loyalty_credit":
+        return -5.0
+    if a == "bill_shock_price_lock":
+        return -5.0 if v.get("with_loyalty") else 0.0
+    if a == "keep_your_phone":
+        return -20.0
+    if a == "home_internet_bundle":
+        return 35.0   # Home Internet Basic $50 - $15 bundle credit (a new service)
+    if a == "device_upgrade":
+        return float("nan")   # depends on the phone picked; credits are per month over the payout
+    return 0.0
+
+
+def why_lost(a: str, v: dict, chosen: str, chosen_ev: float, override: str, row: pd.Series) -> str:
+    """Plain 'why it lost' sentence for an allowed-but-losing option (batch 7)."""
+    if a == "do_nothing":
+        if override == "port_out":
+            return "Lost: they asked about leaving, so we always reach out."
+        if override == "same_coverage":
+            return "Lost: they qualify for the same plan for less, and we tell customers about savings."
+        return f"Lost: {ACTION_LABEL[chosen]} is expected to do better than staying silent (EV ${chosen_ev:.2f} vs $0)."
+    if override == "same_coverage" and a not in PROBLEM_ACTIONS:
+        return "Lost: a cheaper version of their own plan comes first (same-coverage rule)."
+    if v["ev"] < 0:
+        if v.get("save_value", 0) < (v.get("cost", 0) or 0) + (v.get("annoyance", 0) or 0) and row["p_churn_90d"] < 0.05:
+            return (f"Lost: their risk is only {_pct(row)}, so the cost and the interruption outweigh what it "
+                    "would save (EV below zero).")
+        return f"Lost: it costs more than it is expected to return (EV ${v['ev']:.2f} < 0)."
+    if override == "port_out":
+        return f"Lost: we lead with a no-pressure check-in for a port-out inquiry (this option's EV ${v['ev']:.2f})."
+    return (f"Lost: {ACTION_LABEL[chosen]} is worth more (EV ${chosen_ev:.2f} vs ${v['ev']:.2f}).")
+
+
+def why_this_offer(action: str, row: pd.Series, ev: dict) -> str:
+    """One customer-facing sentence (operator math goes in `reason`)."""
+    d, r = ev["drivers"], ev["res"]
+    if action == "do_nothing":
+        return do_nothing_reason(row, ev)[1]
+    m = {
+        "fix_first": "Something is still broken for them, so we fix it first instead of offering a discount.",
+        "care_credit_fix_first": "We fix what's broken first and add a $25 goodwill credit for the trouble.",
+        "care_credit": "They've had a rough stretch with us, so a one-time $25 credit says sorry.",
+        "bill_shock_price_lock": "Their bill rose because a promo ended, so we explain it, add $25, and remind them their plan price is guaranteed.",
+        "loyalty_credit": "They've been with us a long time, so a small monthly thank-you credit.",
+        "keep_your_phone": "Their phone is paid off, so a monthly credit to keep using it.",
+        "variant_switch": f"They qualify for the same plan for ${r['variant_switch'].get('save', 0):.0f}/month less, so we tell them.",
+        "right_size": f"They pay for more than they use; a plan that fits saves them ${r['right_size'].get('save', 0):.0f}/month.",
+        "step_up": "Their usage has outgrown the plan, so a plan that fits avoids slowdowns and surprise costs."
+                   if d["outgrowing"] else "Their plan setup is about to change, so a plan that lets them add lines is timely.",
+        "family_upgrade": "The family's usage has outgrown the plan, so a plan that fits every line (no trade-in bundled in).",
+        "device_upgrade": "Their phone is paid off and ready to trade in, so a real trade-in credit makes upgrading worth it.",
+        "check_in": ("They asked about leaving, so a no-strings plan check-in (no offer, no pressure)."
+                     if row["port_out_inquiry"] == 1 else "A long-time customer has gone quiet, so a no-strings plan check-in."),
+        "perk_reminder": "They stream a lot and haven't used a perk their plan already includes.",
+        "home_internet_bundle": "Adding Home Internet to their phone lines comes with a monthly bundle credit.",
+    }
+    return m.get(action, "")
+
+
+def reason_text(action: str, row: pd.Series, ev: dict, best_other: tuple | None) -> str:
+    """Operator line with the math (synthetic)."""
+    d, r = ev["drivers"], ev["res"]
+    pct = _pct(row)
     if action == "do_nothing":
         if best_other is None:
-            return f"Simulated churn risk is {pct} and no eligible offer applies, so we leave them alone."
-        return (f"Simulated churn risk is {pct}, so even the best option ({ACTION_LABEL[best_other[0]]}) "
-                f"costs more than it saves; we leave them alone.")
-    if action == "fix_first":
-        if d["network_pain"]:
-            return (f"They've logged {row['network_90d']} network complaints in 90 days, so an agent callback "
-                    "to fix coverage beats a discount.")
-        if row["billing_90d"] >= 1 and d["billing_pain"]:
-            bump = f" after their bill rose {row['bill_increase_pct']*100:.0f}%" if row["bill_increase_pct"] >= 0.05 else ""
-            return (f"Their billing questions{bump} are still unresolved, so an agent callback to fix the bill "
-                    "beats a discount they don't qualify for yet.")
-        return (f"They have {row['unresolved_90d']} unresolved support contacts, so an agent callback to fix the "
-                "problem beats a discount.")
-    if action == "care_credit_fix_first":
-        issue = f"{int(row['network_90d'])} network complaints" if d["network_pain"] else "unresolved support issues"
-        if row["um_promo_expired"]:
-            price = " and a bill that jumped after a promo ended"
-        elif d["billing_pain"]:
-            price = " and billing frustration"
-        else:
-            price = ""
-        return f"They have {issue}{price}, so we fix the problem first and add a $25 goodwill credit."
-    if action == "care_credit" and d["bill_shock_recent"]:
-        return (f"Their bill went up {row['bill_increase_pct']*100:.0f}% after a promo ended and they reached out, "
-                "so a $25 goodwill credit (not an upsell) is the best value.")
-    if action == "care_credit":
-        why = "their bill jumped after a promo ended" if d["billing_pain"] else "they've had a rough run with support"
-        return f"They've contacted us {int(row['support_90d'])} times in 90 days and {why}, so a $25 goodwill credit is the best value."
-    if action == "loyalty_credit":
-        return f"After {int(row['tenure_months'])} months with us they're showing signs of shopping around, so a $5/mo loyalty credit is the best value."
-    if action == "keep_your_phone":
-        return "Their phone is paid off, so nothing keeps them here; a monthly credit to keep their phone is the best value."
-    if action == "right_size":
-        return f"They're paying for more plan than they use; moving to {r['right_size']['plan_name']} saves ${r['right_size']['save']:.0f}/mo and lowers their risk."
-    if action == "step_up":
-        why = "they're graduating and will lose the student setup" if d["life_event"] and not d["outgrowing"] \
-            else "their usage is outgrowing their plan"
-        return f"{why[0].upper() + why[1:]}, so {r['step_up']['plan_name']} is a timely step-up."
-    if action == "device_upgrade":
-        return "Their phone is paid off and old enough to trade in, so an upgrade with a real trade-in credit is the best value."
-    return ""
+            return f"Simulated churn risk {pct}; no eligible action applies. EV 0."
+        return (f"Simulated churn risk {pct}; best eligible option ({ACTION_LABEL[best_other[0]]}) has EV "
+                f"${best_other[1]:.2f} < 0, so restraint (EV 0).")
+    v = r[action]
+    parts = [f"save value ${v['save_value']:.2f}"]
+    if v.get("gain"):
+        parts.append(f"upsell ${v['gain']:.2f}")
+    if v.get("customer_benefit"):
+        parts.append(f"customer benefit ${v['customer_benefit']:.2f}")
+    if v.get("lock_value"):
+        parts.append(f"lock-in ${v['lock_value']:.2f}")
+    return (f"Risk {pct}; {v['detail']}. EV = {' + '.join(parts)} - cost ${v['cost']:.2f} - annoyance "
+            f"${v['annoyance']:.2f} = ${v['ev']:.2f} (synthetic).")
 
 
-def candidate_reason(a: str, v: dict, chosen: str) -> str:
+def candidate_reason(a: str, v: dict, chosen: str, chosen_ev: float = 0.0, override: str = "",
+                     row: pd.Series | None = None) -> str:
     if not v["eligible"]:
         return f"Not eligible: {v['detail']}."
+    lost = why_lost(a, v, chosen, chosen_ev, override, row) + " " if (row is not None and a != chosen) else ""
     if a == "do_nothing":
-        return "Baseline: no contact, no cost (EV 0)."
+        return lost + "Baseline: no contact, no cost (EV 0)."
     parts = f"save value ${v['save_value']:.2f}"
     if v.get("gain"):
         parts += f" + upsell ${v['gain']:.2f}"
+    if v.get("customer_benefit"):
+        parts += f" + customer benefit ${v['customer_benefit']:.2f}"
+    if v.get("lock_value"):
+        parts += f" + lock-in ${v['lock_value']:.2f}"
     tail = "chosen" if a == chosen else ("below zero" if v["ev"] < 0 else "lower EV than the chosen action")
-    return f"Eligible ({v['detail']}): {parts} - cost ${v['cost']:.2f} - annoyance ${v['annoyance']:.2f}; {tail}."
+    return (f"{lost}Eligible ({v['detail']}): {parts} - cost ${v['cost']:.2f} - annoyance ${v['annoyance']:.2f}; "
+            f"{tail}.")
 
 
 DETAILS: dict[str, dict] = {}  # account_id -> evaluate_account() output from the last run (used by uplift.py)
+
+
+PICK_OVERRIDE = [""]  # override applied by the last pick(): "", "same_coverage" or "port_out"
+
+
+def pick(res: dict, key: str = "ev", exclude: tuple = (), port_out: bool = False
+         ) -> tuple[str, float, tuple | None, tuple | None]:
+    """Chooser: best eligible EV > 0 else do nothing; then the same-coverage rule. Returns
+    (action, ev, runner_up, best_other)."""
+    scored = sorted(((a, v[key]) for a, v in res.items()
+                     if v["eligible"] and a != "do_nothing" and a not in exclude),
+                    key=lambda t: (-t[1], ACTIONS.index(t[0])))
+    best_other = scored[0] if scored else None
+    if best_other and best_other[1] > 0:
+        action, evv = best_other
+    else:
+        action, evv = "do_nothing", 0.0
+    vs = res.get("variant_switch", {})
+    override = ""
+    if (CONFIG["SAME_COVERAGE_RULE"] and vs.get("eligible") and "variant_switch" not in exclude
+            and action not in PROBLEM_ACTIONS and action not in ("variant_switch", "right_size")):
+        action, evv, override = "variant_switch", vs[key], "same_coverage"
+    # batch 7: a port-out inquiry never gets silence: check-in, or fix-first when a ticket is open
+    if port_out and CONFIG["PORT_OUT_ALWAYS_CONTACT"] and action == "do_nothing":
+        for alt in ("check_in", "fix_first"):
+            if res.get(alt, {}).get("eligible") and alt not in exclude:
+                action, evv, override = alt, res[alt][key], "port_out"
+                break
+    rest = [s for s in scored if s[0] != action]
+    runner = ("do_nothing", 0.0) if action != "do_nothing" and (not rest or rest[0][1] < 0) else \
+        (rest[0] if rest else None)
+    PICK_OVERRIDE[0] = override
+    return action, evv, runner, best_other
 
 
 def choose(df: pd.DataFrame, promos: pd.DataFrame, plans: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -536,18 +983,25 @@ def choose(df: pd.DataFrame, promos: pd.DataFrame, plans: pd.DataFrame) -> tuple
         ev = evaluate_account(row, promos, plans)
         DETAILS[row["account_id"]] = ev
         res = ev["res"]
-        scored = sorted(((a, v["ev"]) for a, v in res.items() if v["eligible"] and a != "do_nothing"),
-                        key=lambda t: (-t[1], ACTIONS.index(t[0])))
-        best_other = scored[0] if scored else None
-        if best_other and best_other[1] > 0:
-            action, evv = best_other
-            runner = ("do_nothing", 0.0) if len(scored) < 2 or scored[1][1] < 0 else scored[1]
-        else:
-            action, evv, runner = "do_nothing", 0.0, best_other
+        po = bool(row["port_out_inquiry"] == 1)
+        # balance-netting check: winner if lock-in were NOT netted against existing financing
+        gross_res = {a: ({**v, "ev": v.get("ev_gross_lock", v["ev"])} if v["eligible"] else v) for a, v in res.items()}
+        gross_action = pick(gross_res, port_out=po)[0]
+        action, evv, runner, best_other = pick(res, port_out=po)
+        override = PICK_OVERRIDE[0]
+        row = row.copy()
+        row["_variant_ok"] = res["variant_switch"]["eligible"]
         out = {
             "account_id": row["account_id"], "action": ACTION_LABEL[action], "action_code": action,
             "expected_value": round(evv, 2), "reason": reason_text(action, row, ev, best_other),
+            "offer_segment": SEGMENT[action], "why_this_offer": why_this_offer(action, row, ev),
+            "lock_in_months": int(res[action].get("lock_in_months", 0) or 0) if res[action]["eligible"] else 0,
+            "drivers": driver_list(row, ev["drivers"]),
+            "promo_skus": res[action].get("skus", "") if action != "do_nothing" else "",
             "action_detail": res[action]["detail"],
+            "do_nothing_reason": do_nothing_reason(row, ev)[0] if action == "do_nothing" else "",
+            "pick_override": override,
+            "customer_monthly_delta": customer_monthly_delta(action, res[action]),
             "runner_up_action": ACTION_LABEL[runner[0]] if runner else "",
             "runner_up_ev": round(runner[1], 2) if runner else np.nan,
             "p_churn_90d": row["p_churn_90d"], "risk_rank": row["risk_rank"],
@@ -557,23 +1011,36 @@ def choose(df: pd.DataFrame, promos: pd.DataFrame, plans: pd.DataFrame) -> tuple
             "bill_shock_recent": ev["drivers"]["bill_shock_recent"],
             "days_since_bill_shock": row["days_since_bill_shock"],
             "eligible_actions": ";".join(a for a in ACTIONS if res[a]["eligible"]),
+            "action_if_lock_not_netted": gross_action,
         }
         for a in ACTIONS[1:]:
             out[f"ev_{a}"] = res[a]["ev"]
         rows.append(out)
-        for a in ACTIONS:
+        ranked = sorted(ACTIONS, key=lambda a: (not res[a]["eligible"],
+                                                -(res[a]["ev"] if res[a]["eligible"] else 0), ACTIONS.index(a)))
+        for rank, a in enumerate(ranked, 1):
             v = res[a]
             cands.append({
-                "account_id": row["account_id"], "action": ACTION_LABEL[a], "eligible": bool(v["eligible"]),
+                "account_id": row["account_id"], "action": ACTION_LABEL[a], "action_code": a,
+                "eligible": bool(v["eligible"]), "rank": rank if v["eligible"] else np.nan,
                 "expected_value": v["ev"], "offer_cost": v["cost"], "save_rate": v["save_rate"],
-                "annoyance": v["annoyance"],
-                "reason": out["reason"] if a == action else candidate_reason(a, v, action),
+                "annoyance": v["annoyance"], "save_value": v.get("save_value"), "upsell_gain": v.get("gain"),
+                "customer_benefit": v.get("customer_benefit"), "lock_value": v.get("lock_value"),
+                "lock_in_months": v.get("lock_in_months", 0), "promo_skus": v.get("skus", ""),
+                "blocked_or_ineligible_reason": "" if v["eligible"] else v["detail"],
+                "reason": out["reason"] if a == action else candidate_reason(a, v, action, evv, override, row),
                 "is_chosen": a == action,
+                "customer_monthly_delta": customer_monthly_delta(a, v) if v["eligible"] else np.nan,
             })
     return pd.DataFrame(rows), pd.DataFrame(cands)
 
 
-def main() -> pd.DataFrame:
+_CACHE: dict = {}
+
+
+def prepare(write_line_tradein: bool = True):
+    """Build the account frame offers.py scores (facts + features + churn + gate + line trade-in). Returns
+    (df, catalog, conn, line_tradein)."""
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     conn = det.connect_ro()
     cat = det.load_catalog(conn)
@@ -581,6 +1048,8 @@ def main() -> pd.DataFrame:
 
     facts, feat_note = det.apply_features_csv(facts, OUT_DIR / "features.csv")
     print(f"features: {feat_note}")
+    facts, enr_note = det.apply_enrichment(facts, OUT_DIR / "enrichment.csv")
+    print(f"household/enrichment: {enr_note}; ENRICHMENT_IN_DECISIONS={CONFIG['ENRICHMENT_IN_DECISIONS']}")
     churn, source = load_churn_scores(facts)
     df = facts.merge(churn, on="account_id", how="left")
     if df["p_churn_90d"].isna().any():
@@ -588,16 +1057,43 @@ def main() -> pd.DataFrame:
         print(f"WARNING: {n} accounts missing p_churn_90d; filled with the median")
         df["p_churn_90d"] = df["p_churn_90d"].fillna(df["p_churn_90d"].median())
     print(f"churn scores: {source}")
+    _CACHE["source"] = source
 
-    # finalise um_plan_overpay: sandbox misfit rule OR a cheaper plan fits (search runs regardless of flag)
     plans = cat["plans"]
     df["all_low_use_premium_any"] = df["um_plan_overpay"]  # sandbox misfit rule (all lines < 5 GB on premium)
-    df["um_plan_overpay"] = [bool(r["um_plan_overpay"] or right_size_option(r, plans) is not None)
-                             for _, r in df.iterrows()]
+    df["um_plan_overpay"] = [bool(r["um_plan_overpay"] or right_size_option(r, plans) is not None
+                                  or variant_option(r, plans) is not None) for _, r in df.iterrows()]
     df["upgrade_moment"] = df[det.UPGRADE_MOMENT_COLS].any(axis=1)
+    # upgrade gate: tm-bench NO-INCOME upgrade model, top 15% (upgrade_gate.py); detectors AND gate
+    import upgrade_gate as ug
+    gs = ug.load() if CONFIG["UPGRADE_GATE"] else None
+    if gs is not None:
+        df = df.merge(gs[["account_id", "upgrade_pct", "in_top15"]], on="account_id", how="left")
+        df["in_top15"] = df["in_top15"].fillna(False).astype(bool)
+        print(f"upgrade gate: {int(df.in_top15.sum())} accounts in the no-income model's top 15%")
+    else:
+        df["upgrade_pct"], df["in_top15"] = np.nan, True
+    df["upgrade_candidate"] = df["upgrade_moment"] & df["in_top15"]
+    # timekeeper now-vs-wait per line (also feeds family_upgrade: phones with trade-in value after balance)
+    lt = det.build_line_tradein(conn, cat["promotions"], df.set_index("account_id")["plan_family"])
+    if write_line_tradein:
+        lt.to_csv(OUT_DIR / "line_tradein.csv", index=False)
+    tv = lt[(lt["net_now_cents"] > 0) | ((lt["financing_balance_cents"] == 0) & (lt["tradein_value_now_cents"] > 0))]
+    df["n_tradein_value_lines"] = df["account_id"].map(tv.groupby("account_id").size()).fillna(0).astype(int)
+    # lines still being paid off with a wait_until_payoff verdict (do-nothing reason must match the trade-in card)
+    wcol = next((c for c in ("decision", "wait_verdict") if c in lt.columns), None)
+    if wcol is not None:
+        w = lt[lt[wcol].astype(str) == "wait_until_payoff"] if wcol == "decision" else lt[lt[wcol] == "wait"]
+        df["n_wait_lines"] = df["account_id"].map(w.groupby("account_id").size()).fillna(0).astype(int)
+    else:
+        df["n_wait_lines"] = 0
+    return df, cat, conn, lt
 
+
+def main() -> pd.DataFrame:
+    df, cat, conn, lt = prepare()
+    plans = cat["plans"]
     offers, cands = choose(df, cat["promotions"], plans)
-    # deterministic SMS templates for the chosen action (no LLM); see offer_messages.py
     fx = df.set_index("account_id")
     for lang in ("en", "es"):
         offers[f"message_{lang}"] = [
@@ -606,19 +1102,21 @@ def main() -> pd.DataFrame:
     offers["message_status"] = np.where(
         offers["action_code"] == "keep_your_phone", "suppressed_adapted_promo",
         np.where(offers["action_code"] == "do_nothing", "no_contact", "ok"))
-    val = om.validate_messages(offers, df, cat["promotions"], plans)
+    val = om.validate_messages(offers, df, cat["promotions"], plans, cat.get("addons"))
     val.to_csv(OUT_DIR / "message_validation.csv", index=False)
-    print(f"messages: {int(val.passed.sum())}/{len(val)} accounts pass the sandbox-amount validator "
+    print(f"messages: {int(val.passed.sum())}/{len(val)} accounts pass the validator "
           f"({int((offers.message_en != '').sum())} with a message)")
-    offers = offers.merge(df[["account_id", "upgrade_moment"] + det.UPGRADE_MOMENT_COLS], on="account_id")
-    offers["churn_source"] = "real" if source.startswith("real") else "mock"
+    offers = offers.merge(df[["account_id", "upgrade_moment", "upgrade_pct", "upgrade_candidate"]
+                             + det.UPGRADE_MOMENT_COLS], on="account_id")
+    offers["churn_source"] = "real" if _CACHE.get("source", "").startswith("real") else "mock"
+    offers["enrichment_in_decisions"] = CONFIG["ENRICHMENT_IN_DECISIONS"]
     offers["data_note"] = "synthetic/simulated"
-    first = ["account_id", "action", "expected_value", "reason", "runner_up_action", "runner_up_ev",
+    first = ["account_id", "action", "expected_value", "reason", "offer_segment", "why_this_offer", "lock_in_months",
+             "drivers", "promo_skus", "runner_up_action", "runner_up_ev",
              "upgrade_moment"] + det.UPGRADE_MOMENT_COLS + ["message_en", "message_es"]
     offers = offers[first + [c for c in offers.columns if c not in first]].sort_values("risk_rank")
     offers.to_csv(OUT_DIR / "offers.csv", index=False)
     cands["data_note"] = "synthetic/simulated"
-    # integrity: exactly one chosen per account, matching offers.csv
     chosen = cands[cands.is_chosen].set_index("account_id")["action"]
     assert chosen.index.is_unique and len(chosen) == len(offers), "candidates: not exactly one chosen per account"
     assert (chosen.reindex(offers["account_id"]).values == offers["action"].values).all(), "candidates != offers"

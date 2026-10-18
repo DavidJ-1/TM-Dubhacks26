@@ -1,16 +1,16 @@
 comparison,metric,mean_diff,ci_low,ci_high,separates,replicates_A_wins
-Model B EV chooser minus oracle (true effects; reference only),churners_saved_dr,-7.92,-18.78,2.94,False,6
-Model B EV chooser minus oracle (true effects; reference only),net_no_upsell_dr,-22286.39,-46239.27,1666.5,False,6
-Model B EV chooser minus oracle (true effects; reference only),net_with_upsell_dr,-22525.25,-46481.74,1431.24,False,6
-Model B EV chooser minus Model C uplift policy,churners_saved_dr,10.56,-0.71,21.82,False,12
-Model B EV chooser minus Model C uplift policy,net_no_upsell_dr,3639.62,-24231.04,31510.28,False,9
-Model B EV chooser minus Model C uplift policy,net_with_upsell_dr,3621.16,-24245.82,31488.14,False,9
-Model C uplift policy minus oracle (true effects; reference only),churners_saved_dr,-18.48,-29.05,-7.91,True,5
-Model C uplift policy minus oracle (true effects; reference only),net_no_upsell_dr,-25926.01,-52528.07,676.06,False,9
-Model C uplift policy minus oracle (true effects; reference only),net_with_upsell_dr,-26146.4,-52751.17,458.36,False,9
-Model B EV chooser minus offer to everyone (best eligible offer),churners_saved_dr,-12.68,-24.92,-0.44,True,7
-Model B EV chooser minus offer to everyone (best eligible offer),net_no_upsell_dr,335682.63,313400.43,357964.82,True,20
-Model B EV chooser minus offer to everyone (best eligible offer),net_with_upsell_dr,305996.63,283706.4,328286.86,True,20
-Model B EV chooser minus 3+ calls rule -> $25 care credit,churners_saved_dr,51.86,34.29,69.44,True,19
-Model B EV chooser minus 3+ calls rule -> $25 care credit,net_no_upsell_dr,172693.83,135854.52,209533.13,True,19
-Model B EV chooser minus 3+ calls rule -> $25 care credit,net_with_upsell_dr,473540.57,436866.15,510214.98,True,20
+Model B EV chooser minus oracle (true effects; reference only),churners_saved_dr,-16.51,-25.98,-7.04,True,3
+Model B EV chooser minus oracle (true effects; reference only),net_no_upsell_dr,-92616.81,-113456.56,-71777.05,True,0
+Model B EV chooser minus oracle (true effects; reference only),net_with_upsell_dr,-98018.69,-118855.25,-77182.13,True,0
+Model B EV chooser minus Model C uplift policy,churners_saved_dr,20.48,7.11,33.85,True,16
+Model B EV chooser minus Model C uplift policy,net_no_upsell_dr,-8226.72,-37241.8,20788.36,False,8
+Model B EV chooser minus Model C uplift policy,net_with_upsell_dr,-14115.05,-43133.31,14903.21,False,7
+Model C uplift policy minus oracle (true effects; reference only),churners_saved_dr,-36.99,-46.58,-27.4,True,1
+Model C uplift policy minus oracle (true effects; reference only),net_no_upsell_dr,-84390.09,-110747.01,-58033.17,True,2
+Model C uplift policy minus oracle (true effects; reference only),net_with_upsell_dr,-83903.64,-110265.03,-57542.25,True,3
+Model B EV chooser minus offer to everyone (best eligible offer),churners_saved_dr,-10.38,-16.61,-4.14,True,5
+Model B EV chooser minus offer to everyone (best eligible offer),net_no_upsell_dr,87075.07,72988.37,101161.76,True,20
+Model B EV chooser minus offer to everyone (best eligible offer),net_with_upsell_dr,47762.54,33655.47,61869.61,True,18
+Model B EV chooser minus 3+ calls rule -> $25 care credit,churners_saved_dr,80.79,65.1,96.47,True,19
+Model B EV chooser minus 3+ calls rule -> $25 care credit,net_no_upsell_dr,91134.04,59114.22,123153.85,True,18
+Model B EV chooser minus 3+ calls rule -> $25 care credit,net_with_upsell_dr,225058.66,193044.94,257072.38,True,20

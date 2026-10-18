@@ -18,11 +18,11 @@ import pandas as pd
 
 # --- where the read-only sandbox lives ------------------------------------------------------
 _SANDBOX_CANDIDATES = [
-    os.environ.get("TM_SANDBOX_DB"),
-    os.environ.get("DUBHACKS_DB"),
+    os.environ.get("DUBHACKS_DB"),       # project-wide name (top-level README + Makefile)
+    os.environ.get("TM_SANDBOX_DB"),     # legacy names, still accepted
+    os.environ.get("SANDBOX_DB"),
     str(Path(__file__).resolve().parents[1] / "vendor" / "dubhacks" / "data" / "sandbox.db"),  # repo Makefile
-    str(Path(__file__).resolve().parents[2] / "dubhacks" / "data" / "sandbox.db"),  # /workspace/tmobile/dubhacks
-    "/workspace/tmobile/dubhacks/data/sandbox.db",
+    str(Path(__file__).resolve().parents[2] / "dubhacks" / "data" / "sandbox.db"),  # sibling clone <repo>/../dubhacks
     "/tmp/dubhacks-ro/data/sandbox.db",
 ]
 
@@ -47,7 +47,7 @@ def find_sandbox_db() -> str:
     for cand in _SANDBOX_CANDIDATES:
         if cand and Path(cand).is_file():
             return cand
-    raise FileNotFoundError("sandbox.db not found; set TM_SANDBOX_DB or clone the sandbox read-only")
+    raise FileNotFoundError("sandbox.db not found; run `make setup` or set DUBHACKS_DB=/path/to/sandbox.db")
 
 
 def connect_ro(path: str | None = None) -> sqlite3.Connection:
@@ -76,6 +76,7 @@ def load_catalog(conn: sqlite3.Connection) -> dict[str, pd.DataFrame]:
         "promotions": pd.read_sql("SELECT * FROM promotions", conn).set_index("sku", drop=False),
         "devices": pd.read_sql("SELECT * FROM devices", conn),
         "tradein_curves": pd.read_sql("SELECT * FROM tradein_curves", conn),
+        "addons": pd.read_sql("SELECT * FROM addons", conn).set_index("sku", drop=False),
     }
 
 
@@ -107,6 +108,7 @@ def build_account_facts(conn: sqlite3.Connection) -> pd.DataFrame:
                                    & (lines["financing_months_remaining"] == 0))
     lines["old_upgrade_line"] = lines["upgrade_ready_line"] & (lines["device_age_m"] >= OLD_DEVICE_MONTHS)
     lines["payoff_soon"] = lines["financing_months_remaining"].between(1, PAYOFF_SOON_MONTHS)
+    lines["kid_line"] = lines["member_role"].isin(["child", "teen"])          # REAL: lines.member_role
 
     # ---- usage per line: last 3 months vs first 3 months
     usage = usage.sort_values(["line_id", "month"])
@@ -149,6 +151,7 @@ def build_account_facts(conn: sqlite3.Connection) -> pd.DataFrame:
         "any_over_cap": g["over_cap"].any(),
         "any_usage_growth": g["usage_growth"].any(),
         "all_low_use_premium": g["low_use_premium"].all(),
+        "n_kid_lines_role": g["kid_line"].sum(),
     })
     la["plan_price_cents"] = [
         plan_price_cents(*plans.set_index("sku").loc[sku, ["line_prices", "extra_line_cents"]], n)
@@ -235,7 +238,68 @@ FEATURES_MAP = {
     "n_lines_device_36m_plus": "n_lines_device_36m_plus", "n_lines_over_cap_3m": "n_lines_over_cap_3m",
     "n_lines_usage_up_30pct": "n_lines_usage_up_30pct", "n_lines_light_on_premium": "n_lines_light_on_premium",
     "is_persona": "is_persona", "data_growth_pct": "data_growth_pct",
+    "streaming_hours_3m_avg": "streaming_hours_3m_avg", "has_streaming_addon": "has_streaming_addon",
+    "n_connected_lines": "n_connected_lines", "n_tradein_eligible_lines": "n_tradein_eligible_lines",
+    "segment": "segment",
 }
+
+# tm-data household / enrichment columns (6f7927a, harness/out/enrichment.csv for the 5,042 real accounts,
+# out/scaled/household_scaled.csv for scaled data). Names used exactly as published.
+# REAL = derived from the carrier's own sandbox account data (lines, member_role, billing, financing).
+# SIMULATED = per-account synthetic draws; only used in decisions when offers.CONFIG["ENRICHMENT_IN_DECISIONS"].
+ENRICHMENT_REAL_COLS = ["is_family_plan", "n_kid_lines", "promo_months_remaining",
+                        "contract_or_financing_months_remaining", "next_plan_sku", "next_plan_price_cents",
+                        "step_up_cost_cents"]
+ENRICHMENT_SIM_COLS = ["recent_job_change", "household_income_usd", "income_band", "likely_kid_flag",
+                       "kid_age_band", "step_up_cost_pct_income", "area_median_income_usd", "income_geo_level"]
+
+
+def apply_enrichment(facts: pd.DataFrame, path) -> tuple[pd.DataFrame, str]:
+    """Merge tm-data's enrichment.csv by its exact column names. Missing file/columns fall back to sandbox facts
+    (kid lines from lines.member_role child/teen, financing months), never to invented values."""
+    path = Path(path)
+    df = facts.copy()
+    have = []
+    if path.exists():
+        e = pd.read_csv(path)
+        cols = [c for c in ENRICHMENT_REAL_COLS + ENRICHMENT_SIM_COLS if c in e.columns]
+        df = df.drop(columns=[c for c in cols if c in df.columns]).merge(e[["account_id"] + cols],
+                                                                         on="account_id", how="left")
+        have = cols
+    fb = []
+    if "n_kid_lines" not in df or df["n_kid_lines"].isna().all():
+        df["n_kid_lines"] = df["n_kid_lines_role"]; fb.append("n_kid_lines<-lines.member_role")
+    df["n_kid_lines"] = df["n_kid_lines"].fillna(df["n_kid_lines_role"]).astype(int)
+    if "is_family_plan" not in df:
+        df["is_family_plan"] = (df["n_lines"] >= 2).astype(int); fb.append("is_family_plan<-n_lines>=2")
+    if "contract_or_financing_months_remaining" not in df:
+        df["contract_or_financing_months_remaining"] = df["max_financing_months_left"]
+        fb.append("contract_or_financing_months_remaining<-max_financing_months_left")
+    for c, dflt in [("promo_months_remaining", 0), ("likely_kid_flag", 0), ("kid_age_band", "none"),
+                    ("recent_job_change", 0), ("household_income_usd", np.nan), ("income_band", ""),
+                    ("step_up_cost_pct_income", np.nan), ("next_plan_sku", "")]:
+        if c not in df:
+            df[c] = dflt; fb.append(f"{c}=default")
+    df["is_family_plan"] = df["is_family_plan"].fillna(0).astype(int)
+    df["contract_or_financing_months_remaining"] = df["contract_or_financing_months_remaining"].fillna(
+        df["max_financing_months_left"]).fillna(0)
+    note = f"enrichment.csv columns used: {have}" if have else "enrichment.csv not found"
+    return df, note + (f"; fallbacks: {fb}" if fb else "")
+
+
+def build_line_tradein(conn: sqlite3.Connection, promos: pd.DataFrame, plan_family: pd.Series,
+                       wait_min_gain_cents: int | None = None) -> pd.DataFrame:
+    """Per-line keep / wait-until / upgrade-now trade-in math. SYNTHETIC numbers.
+
+    Moved to harness/tradein_wait.py (fixes the old delta_cents, which counted the remaining balance as money
+    saved by waiting even though it is owed either way). Kept here so offers.py's call site is unchanged.
+    """
+    try:
+        from . import tradein_wait as tw  # type: ignore
+    except ImportError:
+        import tradein_wait as tw  # harness/ on sys.path
+    kw = {} if wait_min_gain_cents is None else {"wait_min_gain_cents": wait_min_gain_cents}
+    return tw.build_line_tradein(conn, promos, plan_family, **kw)
 
 
 def apply_features_csv(facts: pd.DataFrame, path) -> tuple[pd.DataFrame, str]:

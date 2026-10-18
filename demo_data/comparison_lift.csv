@@ -1,0 +1,5 @@
+method,auc,top10_capture,top10_lift_x,data_note
+Our churn model (out-of-fold),0.853,0.62,6.204,SYNTHETIC/SIMULATED
+Support-call count (naive rule),0.834,0.54,5.401,SYNTHETIC/SIMULATED
+Random,0.5,0.1,1.0,SYNTHETIC/SIMULATED
+Oracle: hidden true probability (ceiling),0.864,0.642,6.423,SYNTHETIC/SIMULATED

@@ -289,13 +289,13 @@ def chart_calibration(df):
 
 
 # ------------------------------------------------------------------ 04/05 Model C
-# Model C is final (tm-offers 6705fb9). Charts are drawn from harness/model_c_artifacts/ whenever the CSVs exist.
+# Model C charts: harness/model_c_artifacts/ (simulated 50k trial by default). Drawn whenever the CSVs exist.
 # Set TM_MODELC_PLACEHOLDER=1 to force placeholders (e.g. while tm-offers reruns). TM_MODELC_FINAL is no longer needed.
 import os  # noqa: E402
 MODEL_C_FORCE_PLACEHOLDER = os.environ.get("TM_MODELC_PLACEHOLDER") == "1"
 MODELB_PINK, MODELC_COL, MODELA_COL, RULE_COL = MAGENTA, "#1F5FAD", "#9A9A9A", "#3A3A3A"
-CIRC_NOTE = ("PROVISIONAL: test split too small to rank policies reliably; figures may change. Simulated randomized trial on the test split: effects are grounded in our own save-rate assumptions "
-             "(partly circular), not measured lift.")
+CIRC_NOTE = ("Simulated 50k trial (35k train / 15k test x re-randomized cohorts): a simulated randomized trial; "
+             "effects are grounded in our own save-rate assumptions (partly circular), not measured lift.")
 POLICY_ORDER = ["Model B EV chooser", "Model C T-learner", "Offer to everyone", "3+ calls rule", "Random", "Do nothing",
                 "Oracle (reference)"]
 
@@ -346,12 +346,16 @@ def chart_qini():
     if xc is None or yc is None or gc is None:
         return placeholder("04_modelC_qini.png", title, "Model C CSV found, columns not recognized", f"{p.name}: {list(q.columns)}")
     auuc = {}
+    share_oracle = {}
     ap = p.parent / "uplift_auuc.csv"
     if ap.exists():
         a = pd.read_csv(ap)
         ac, av = _col(a, "policy_or_model", "model", "policy"), _col(a, "qini_area_ipw", "qini_area", "auuc")
+        ashare = _col(a, "share_of_oracle_true", "share_of_oracle", "qini_share_oracle")
         if ac and av:
             auuc = {short_policy(k): float(v) for k, v in zip(a[ac], a[av])}
+        if ac and ashare:
+            share_oracle = {short_policy(k): float(v) for k, v in zip(a[ac], a[ashare])}
     style = {  # name: (color, lw, ls, zorder)
         "Model B EV chooser": (MODELB_PINK, 3.0, "-", 6), "Model C T-learner": (MODELC_COL, 2.6, "-", 5),
         "Model A risk ranking": (MODELA_COL, 1.8, "-", 3), "3+ calls rule": (RULE_COL, 1.8, "-", 4),
@@ -369,7 +373,10 @@ def chart_qini():
         col, lw, ls, z = style.get(name, (GREY, 1.5, "-", 2))
         lab = name.replace("3+ calls rule", "3+ support calls rule").replace("Model C T-learner", "Model C uplift (T-learner)")
         if name in auuc:
-            lab += f"  (Qini area {auuc[name]:.1f})"
+            lab += f"  (Qini area {auuc[name]:.1f}"
+            if name in share_oracle and name != "Oracle (reference)":
+                lab += f", {share_oracle[name]:.0%} of oracle"
+            lab += ")"
         ax.plot(xs, s[yc], color=col, lw=lw, ls=ls, zorder=z, label=lab)
         curves[name] = dict(at10=float(np.interp(0.1, xs, s[yc])), at20=float(np.interp(0.2, xs, s[yc])), max=float(s[yc].max()))
     ax.axhline(0, color=GREY, lw=0.6, alpha=0.6)
@@ -377,11 +384,11 @@ def chart_qini():
     ax.xaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1.0))
     ax.set_xlabel("Share of test accounts targeted (each policy's own ranking)")
     ax.set_ylabel("Cumulative incremental saves\n(IPW estimate, simulated trial)")
-    ax.set_title("Who is persuadable? Incremental saves by share targeted (provisional)")
+    ax.set_title("Who is persuadable? Incremental saves (simulated 50k trial)")
     ax.legend(frameon=False, loc="lower right", fontsize=9)
     f.subplots_adjust(left=0.11, right=0.97, top=0.88)
     save(f, "04_modelC_qini.png", esc(f"{CIRC_NOTE} Qini area = IPW, from uplift_auuc.csv. Source: {p.parent.name}/{p.name} (tm-offers)."))
-    return {"file": str(p), "y": yc, "auuc_ipw": auuc, "curves": curves}
+    return {"file": str(p), "y": yc, "auuc_ipw": auuc, "share_of_oracle_true": share_oracle, "curves": curves}
 
 
 def chart_policy():
@@ -400,10 +407,17 @@ def chart_policy():
     t["_o"] = t.name.map(lambda n: POLICY_ORDER.index(n) if n in POLICY_ORDER else 50)
     t = t.sort_values("_o").reset_index(drop=True)
     main_c, up_c = "net_value_no_upsell_dr_usd", "net_value_with_upsell_dr_usd"
+    # CI columns from simulated 50k trial (inspect headers; do not invent names)
+    ci_no_lo = "net_no_upsell_dr_ci_low" if "net_no_upsell_dr_ci_low" in t.columns else None
+    ci_no_hi = "net_no_upsell_dr_ci_high" if "net_no_upsell_dr_ci_high" in t.columns else None
+    ci_up_lo = "net_with_upsell_dr_ci_low" if "net_with_upsell_dr_ci_low" in t.columns else None
+    ci_up_hi = "net_with_upsell_dr_ci_high" if "net_with_upsell_dr_ci_high" in t.columns else None
+    has_ci = all(c is not None for c in (ci_no_lo, ci_no_hi, ci_up_lo, ci_up_hi))
     f, ax = fig()
     y = np.arange(len(t))
     h = 0.38
     rows = []
+    err_kw = dict(ecolor=DARK, elinewidth=1.0, capsize=2.5, capthick=1.0, zorder=4, alpha=0.85)
     for i, r in t.iterrows():
         n = r["name"]
         if n == "Model B EV chooser":
@@ -417,12 +431,30 @@ def chart_policy():
         ax.barh(i - h / 2, r[main_c], h, color=col, hatch=hatch, edgecolor=ec, lw=0.6, zorder=3)
         ax.barh(i + h / 2, r[up_c], h, color=col, alpha=0.35 if not n.startswith("Oracle") else 1.0, hatch=hatch,
                 edgecolor=ec, lw=0.6, zorder=3)
-        rows.append(dict(policy=r.policy, label=n, net_value_no_upsell_dr_usd=r[main_c], net_value_with_upsell_dr_usd=r[up_c],
-                         churners_saved_dr=r.churners_saved_dr, cost_per_save_dr_usd=r.cost_per_save_dr_usd,
-                         n_contacted=r.get("n_contacted")))
-    lo = min(0, t[[main_c, up_c]].min().min())
-    hi = max(0, t[[main_c, up_c]].max().max())
-    span = hi - lo
+        if has_ci:
+            # Asymmetric xerr for retention-only and with-upsell bars
+            no_lo, no_hi = float(r[ci_no_lo]), float(r[ci_no_hi])
+            up_lo, up_hi = float(r[ci_up_lo]), float(r[ci_up_hi])
+            ax.errorbar(r[main_c], i - h / 2,
+                        xerr=[[max(0.0, r[main_c] - no_lo)], [max(0.0, no_hi - r[main_c])]],
+                        fmt="none", **err_kw)
+            ax.errorbar(r[up_c], i + h / 2,
+                        xerr=[[max(0.0, r[up_c] - up_lo)], [max(0.0, up_hi - r[up_c])]],
+                        fmt="none", **err_kw)
+        row = dict(policy=r.policy, label=n, net_value_no_upsell_dr_usd=r[main_c], net_value_with_upsell_dr_usd=r[up_c],
+                   churners_saved_dr=r.churners_saved_dr, cost_per_save_dr_usd=r.cost_per_save_dr_usd,
+                   n_contacted=r.get("n_contacted"))
+        if has_ci:
+            row.update(net_no_upsell_dr_ci_low=float(r[ci_no_lo]), net_no_upsell_dr_ci_high=float(r[ci_no_hi]),
+                       net_with_upsell_dr_ci_low=float(r[ci_up_lo]), net_with_upsell_dr_ci_high=float(r[ci_up_hi]))
+        rows.append(row)
+    # Axis limits must cover CI tips as well as point estimates
+    vals = list(t[main_c]) + list(t[up_c])
+    if has_ci:
+        vals += list(t[ci_no_lo]) + list(t[ci_no_hi]) + list(t[ci_up_lo]) + list(t[ci_up_hi])
+    lo = min(0, min(vals))
+    hi = max(0, max(vals))
+    span = hi - lo if hi != lo else 1.0
     xtxt = hi + span * 0.04
     for i, r in t.iterrows():
         if r["name"] == "Do nothing":
@@ -431,6 +463,9 @@ def chart_policy():
             cps = f"${r.cost_per_save_dr_usd:,.0f}/save" if pd.notna(r.cost_per_save_dr_usd) else "n/a"
             lab = (f"{_money(r[main_c])}  |  {_money(r[up_c])} w/ upsell\n"
                    f"{r.churners_saved_dr:.1f} saves · {cps}")
+            if has_ci and r["name"] == "Model B EV chooser":
+                # Keep labels compact; CIs are on the bars. Note inseparability in footnote.
+                pass
         ax.text(xtxt, i, esc(lab), va="center", ha="left", fontsize=8.6, color=DARK, linespacing=1.25,
                 fontweight="bold" if r["name"] == "Model B EV chooser" else "normal")
     ax.set_yticks(y, t.name)
@@ -445,17 +480,24 @@ def chart_policy():
     ax.set_xticks([v for v in ax.get_xticks() if lo - span * 0.04 <= v <= hi * 1.001])
     ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: _money(v, plus=False) if v else "$0"))
     ax.set_xlabel("Net value, 24-month margin minus offer cost (doubly-robust estimate)")
-    ax.set_title("Targeted offers vs blanket policies (provisional)")
+    ax.set_title("Targeted offers vs blanket policies (simulated 50k trial)")
     from matplotlib.patches import Patch
-    ax.legend(handles=[Patch(color="#7A7A7A", label="Retention only"), Patch(color="#7A7A7A", alpha=0.35, label="With upsell")],
-              frameon=False, loc="lower left", fontsize=8, handlelength=1.2, borderaxespad=0.2)
+    handles = [Patch(color="#7A7A7A", label="Retention only"),
+               Patch(color="#7A7A7A", alpha=0.35, label="With upsell")]
+    if has_ci:
+        from matplotlib.lines import Line2D
+        handles.append(Line2D([0], [0], color=DARK, lw=1.0, label="95% CI (re-randomized cohorts)"))
+    ax.legend(handles=handles, frameon=False, loc="lower left", fontsize=8, handlelength=1.2, borderaxespad=0.2)
     f.subplots_adjust(left=0.25, right=0.98, top=0.9)
     n_test = int(t.n_test_accounts.iloc[0]) if "n_test_accounts" in t else None
     reps = int(t.trial_replicates.iloc[0]) if "trial_replicates" in t else None
+    close_note = (" Model B, Model C and the oracle are not separable on net value "
+                  "(paired 95% CIs cross 0; close to the best possible), so do not claim Model B beats the oracle.")
     save(f, "05_modelC_policy_value.png",
-         esc(f"{CIRC_NOTE} DR estimates, {n_test:,} test accounts x {reps} re-randomized cohorts. "
+         esc(f"{CIRC_NOTE}{close_note} DR estimates with 95% CIs, "
+             f"{n_test:,} test accounts x {reps} re-randomized cohorts. "
              f"Oracle uses the hidden simulated effects (reference only). Source: {p.parent.name}/{p.name} (tm-offers)."))
-    return {"file": str(p), "estimator": "doubly_robust", "table": rows}
+    return {"file": str(p), "estimator": "doubly_robust", "has_ci": has_ci, "table": rows}
 
 
 # ------------------------------------------------------------------ 06 learning curve

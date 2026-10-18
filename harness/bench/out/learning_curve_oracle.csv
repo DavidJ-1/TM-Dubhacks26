@@ -21,3 +21,5 @@ upgrade_90d,real_5k,8,0.81255,0.25288,0.38272
 upgrade_90d,real_5k,9,0.77670,0.20218,0.31250
 churn_90d,synthetic_50k,0,0.86387,0.29094,0.64234
 upgrade_90d,synthetic_50k,0,0.80767,0.26617,0.37578
+churn_90d,synthetic_250k,0,0.86387,0.29094,0.64234
+upgrade_90d,synthetic_250k,0,0.80767,0.26617,0.37578

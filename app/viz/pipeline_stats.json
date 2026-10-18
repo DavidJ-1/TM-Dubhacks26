@@ -1,0 +1,916 @@
+{
+ "note": "All customers and numbers are synthetic. Counts computed from harness/out CSVs at build time.",
+ "built_at": "2026-10-17 19:49:33 America/Los_Angeles",
+ "inputs": {
+  "churn_scores": {
+   "path": "/workspace/tmobile/TM-Dubhacks26/harness/out/churn_scores.csv",
+   "mtime": "2026-10-17 19:47:28"
+  },
+  "offers": {
+   "path": "/workspace/tmobile/TM-Dubhacks26/harness/out/offers.csv",
+   "mtime": "2026-10-17 19:49:31"
+  },
+  "offer_candidates": {
+   "path": "/workspace/tmobile/TM-Dubhacks26/harness/out/offer_candidates.csv",
+   "mtime": "2026-10-17 19:49:31"
+  },
+  "features": {
+   "path": "/workspace/tmobile/TM-Dubhacks26/harness/out/features.csv",
+   "mtime": "2026-10-17 18:12:38"
+  },
+  "enrichment": {
+   "path": "/workspace/tmobile/TM-Dubhacks26/harness/out/enrichment.csv",
+   "mtime": "2026-10-17 19:26:15"
+  }
+ },
+ "sandbox": {
+  "db": "/workspace/tmobile/dubhacks/data/sandbox.db",
+  "tables_all": {
+   "account_addons": 2374,
+   "account_signals": 5042,
+   "accounts": 5042,
+   "addons": 31,
+   "billing_history": 53098,
+   "devices": 62,
+   "line_addons": 3091,
+   "lines": 11944,
+   "metadata": 6,
+   "personas": 50,
+   "plans": 11,
+   "promotions": 21,
+   "support_interactions": 11214,
+   "tradein_curves": 3782,
+   "usage_monthly": 125829
+  },
+  "tables_used": {
+   "accounts": 5042,
+   "account_signals": 5042,
+   "lines": 11944,
+   "plans": 11,
+   "devices": 62,
+   "usage_monthly": 125829,
+   "billing_history": 53098,
+   "support_interactions": 11214,
+   "account_addons": 2374,
+   "line_addons": 3091,
+   "addons": 31,
+   "promotions": 21,
+   "tradein_curves": 3782
+  },
+  "n_tables_used": 13,
+  "rows_used": 221541,
+  "source": "row counts read read-only from sandbox.db",
+  "kid_lines": {
+   "child_lines": 1544,
+   "teen_lines": 1538,
+   "accounts_with_kid_lines": 1526
+  },
+  "stub_promos": [
+   "PROMO-STUB-LOYALTY-CREDIT",
+   "PROMO-STUB-CARE-CREDIT",
+   "PROMO-STUB-OLD-PHONE-UPGRADE"
+  ]
+ },
+ "enrichment": {
+  "columns": [
+   "recent_job_change",
+   "household_income_usd",
+   "income_band",
+   "area_median_income_usd",
+   "income_geo_level",
+   "next_plan_sku",
+   "next_plan_price_cents",
+   "step_up_cost_cents",
+   "step_up_cost_pct_income",
+   "n_lines",
+   "is_family_plan",
+   "likely_kid_flag",
+   "n_kid_lines",
+   "kid_age_band",
+   "promo_months_remaining",
+   "contract_or_financing_months_remaining"
+  ],
+  "recent_job_change": 478,
+  "family_plan": 2623,
+  "likely_kid": 1527,
+  "kid_age_band": {
+   "none": 3515,
+   "0-12": 1083,
+   "13-17": 443,
+   "18-24": 1
+  },
+  "income_band": {
+   "$100-150k": 888,
+   "$25-50k": 844,
+   "$50-75k": 776,
+   "<$25k": 737,
+   "$200k+": 676,
+   "$75-100k": 636,
+   "$150-200k": 485
+  },
+  "future_consented_simulated_not_used": [
+   "recent_job_change",
+   "income_band"
+  ],
+  "provenance": "harness/enrichment.py docstring: job change + income synthetic (BLS JOLTS / ACS B19001 marginals); family plan + kid lines/age band derived from real sandbox lines.member_role."
+ },
+ "features": {
+  "n_accounts": 5042,
+  "n_columns": 68
+ },
+ "heldout": {
+  "top10_caught": 0.62,
+  "oracle_top10": 0.64,
+  "rule_rank_top10": 0.53,
+  "auc": 0.853
+ },
+ "ev": {
+  "n_actions": 15,
+  "actions": [
+   "$25 care credit",
+   "$25 care credit + fix-first callback",
+   "Home Internet bundle",
+   "bill-shock relief ($25 credit, price-guarantee fact)",
+   "check-in / plan review",
+   "device upgrade",
+   "do nothing",
+   "family upgrade",
+   "fix-first callback",
+   "keep-your-phone credit",
+   "loyalty credit",
+   "perk reminder",
+   "right-size plan",
+   "step-up plan",
+   "switch to discount plan variant"
+  ],
+  "n_candidate_rows": 75630,
+  "n_eligible_rows": 9988
+ },
+ "funnel": {
+  "all_accounts": 5042,
+  "regular_accounts": 5000,
+  "persona_accounts": 42,
+  "flag_definition": "p_churn_90d >= 90th percentile of the 5,000 regular (non-persona) accounts; same 'high = top 10%' cut as harness/churn_model.py persona check",
+  "flag_cut": 0.052127100000000016,
+  "flagged": 505,
+  "flagged_regular": 500,
+  "not_flagged": 4537,
+  "offered": 1061,
+  "do_nothing": 3981,
+  "offered_flagged": 471,
+  "offered_not_flagged": 590,
+  "by_action": {
+   "do_nothing": 3981,
+   "fix_first": 372,
+   "care_credit_fix_first": 260,
+   "right_size": 141,
+   "variant_switch": 96,
+   "check_in": 89,
+   "step_up": 77,
+   "family_upgrade": 16,
+   "care_credit": 5,
+   "bill_shock_price_lock": 4,
+   "home_internet_bundle": 1
+  },
+  "by_action_flagged": {
+   "care_credit_fix_first": 258,
+   "fix_first": 166,
+   "do_nothing": 34,
+   "check_in": 17,
+   "right_size": 15,
+   "care_credit": 5,
+   "variant_switch": 5,
+   "bill_shock_price_lock": 4,
+   "step_up": 1
+  },
+  "by_action_not_flagged": {
+   "do_nothing": 3947,
+   "fix_first": 206,
+   "right_size": 126,
+   "variant_switch": 91,
+   "step_up": 76,
+   "check_in": 72,
+   "family_upgrade": 16,
+   "care_credit_fix_first": 2,
+   "home_internet_bundle": 1
+  },
+  "offered_by_segment": {
+   "family": 432,
+   "single": 199,
+   "couple": 179,
+   "smb": 109,
+   "student": 83,
+   "senior": 59
+  },
+  "col3_source": "offers.csv 'segment'",
+  "col3_head": "OFFER SEGMENT",
+  "offered_by_col3": {
+   "fix first": 372,
+   "fix first + goodwill": 260,
+   "save money (right-size)": 141,
+   "save money (same plan, discount variant)": 96,
+   "check-in": 89,
+   "better-fitting plan (step-up)": 77,
+   "family upgrade": 16,
+   "goodwill credit": 5,
+   "bill-shock relief": 4,
+   "bundle": 1
+  },
+  "action_by_segment": {
+   "bill_shock_price_lock": {
+    "couple": 2,
+    "student": 1,
+    "smb": 1
+   },
+   "care_credit": {
+    "single": 2,
+    "family": 2,
+    "student": 1
+   },
+   "care_credit_fix_first": {
+    "family": 103,
+    "couple": 55,
+    "single": 54,
+    "smb": 21,
+    "student": 14,
+    "senior": 13
+   },
+   "check_in": {
+    "family": 44,
+    "couple": 16,
+    "smb": 15,
+    "single": 10,
+    "student": 3,
+    "senior": 1
+   },
+   "family_upgrade": {
+    "family": 16
+   },
+   "fix_first": {
+    "family": 143,
+    "couple": 77,
+    "single": 56,
+    "smb": 43,
+    "student": 36,
+    "senior": 17
+   },
+   "home_internet_bundle": {
+    "smb": 1
+   },
+   "right_size": {
+    "single": 60,
+    "student": 23,
+    "senior": 21,
+    "couple": 20,
+    "family": 14,
+    "smb": 3
+   },
+   "step_up": {
+    "family": 31,
+    "single": 17,
+    "smb": 9,
+    "couple": 9,
+    "senior": 6,
+    "student": 5
+   },
+   "variant_switch": {
+    "family": 79,
+    "smb": 16,
+    "senior": 1
+   }
+  },
+  "messaged_definition": "offers.csv message_status == 'ok' (message drafted and validated against sandbox amounts; nothing is sent)",
+  "messaged": 1061,
+  "message_status_counts": {
+   "no_contact": 3981,
+   "ok": 1061
+  },
+  "messaged_by_language": {
+   "en": 902,
+   "es": 113,
+   "other": 46
+  },
+  "offered_not_messaged": 0
+ },
+ "sankey_links": [
+  {
+   "from": "All accounts  5,042",
+   "to": "Flagged at-risk  505",
+   "value": 505
+  },
+  {
+   "from": "All accounts  5,042",
+   "to": "Not flagged  4,537",
+   "value": 4537
+  },
+  {
+   "from": "Flagged at-risk  505",
+   "to": "Retention offer (from flagged)  471",
+   "value": 471
+  },
+  {
+   "from": "Flagged at-risk  505",
+   "to": "Do nothing (flagged)  34",
+   "value": 34
+  },
+  {
+   "from": "Not flagged  4,537",
+   "to": "Upgrade / fix offer (from the rest, EV-positive)  590",
+   "value": 590
+  },
+  {
+   "from": "Not flagged  4,537",
+   "to": "Do nothing (rest)  3,947",
+   "value": 3947
+  },
+  {
+   "from": "Retention offer (from flagged)  471",
+   "to": "$25 credit + fix-first\u2020  260",
+   "value": 258
+  },
+  {
+   "from": "Retention offer (from flagged)  471",
+   "to": "Fix-first callback  372",
+   "value": 166
+  },
+  {
+   "from": "Retention offer (from flagged)  471",
+   "to": "$25 care credit\u2020  5",
+   "value": 5
+  },
+  {
+   "from": "Retention offer (from flagged)  471",
+   "to": "Step-up plan  77",
+   "value": 1
+  },
+  {
+   "from": "Retention offer (from flagged)  471",
+   "to": "Right-size plan  141",
+   "value": 15
+  },
+  {
+   "from": "Retention offer (from flagged)  471",
+   "to": "bill-shock relief ($25 credit, price-guarantee fact)  4",
+   "value": 4
+  },
+  {
+   "from": "Retention offer (from flagged)  471",
+   "to": "check-in / plan review  89",
+   "value": 17
+  },
+  {
+   "from": "Retention offer (from flagged)  471",
+   "to": "switch to discount plan variant  96",
+   "value": 5
+  },
+  {
+   "from": "Upgrade / fix offer (from the rest, EV-positive)  590",
+   "to": "$25 credit + fix-first\u2020  260",
+   "value": 2
+  },
+  {
+   "from": "Upgrade / fix offer (from the rest, EV-positive)  590",
+   "to": "Fix-first callback  372",
+   "value": 206
+  },
+  {
+   "from": "Upgrade / fix offer (from the rest, EV-positive)  590",
+   "to": "Step-up plan  77",
+   "value": 76
+  },
+  {
+   "from": "Upgrade / fix offer (from the rest, EV-positive)  590",
+   "to": "Right-size plan  141",
+   "value": 126
+  },
+  {
+   "from": "Upgrade / fix offer (from the rest, EV-positive)  590",
+   "to": "check-in / plan review  89",
+   "value": 72
+  },
+  {
+   "from": "Upgrade / fix offer (from the rest, EV-positive)  590",
+   "to": "family upgrade  16",
+   "value": 16
+  },
+  {
+   "from": "Upgrade / fix offer (from the rest, EV-positive)  590",
+   "to": "Home Internet bundle  1",
+   "value": 1
+  },
+  {
+   "from": "Upgrade / fix offer (from the rest, EV-positive)  590",
+   "to": "switch to discount plan variant  96",
+   "value": 91
+  },
+  {
+   "from": "$25 credit + fix-first\u2020  260",
+   "to": "fix first + goodwill  260",
+   "value": 260
+  },
+  {
+   "from": "Fix-first callback  372",
+   "to": "fix first  372",
+   "value": 372
+  },
+  {
+   "from": "$25 care credit\u2020  5",
+   "to": "goodwill credit  5",
+   "value": 5
+  },
+  {
+   "from": "Step-up plan  77",
+   "to": "better-fitting plan (step-up)  77",
+   "value": 77
+  },
+  {
+   "from": "Right-size plan  141",
+   "to": "save money (right-size)  141",
+   "value": 141
+  },
+  {
+   "from": "bill-shock relief ($25 credit, price-guarantee fact)  4",
+   "to": "bill-shock relief  4",
+   "value": 4
+  },
+  {
+   "from": "check-in / plan review  89",
+   "to": "check-in  89",
+   "value": 89
+  },
+  {
+   "from": "family upgrade  16",
+   "to": "family upgrade  16",
+   "value": 16
+  },
+  {
+   "from": "Home Internet bundle  1",
+   "to": "bundle  1",
+   "value": 1
+  },
+  {
+   "from": "switch to discount plan variant  96",
+   "to": "save money (same plan, discount variant)  96",
+   "value": 96
+  },
+  {
+   "from": "fix first  372",
+   "to": "Message ready, English  902",
+   "value": 310
+  },
+  {
+   "from": "fix first  372",
+   "to": "Message ready, Spanish  113",
+   "value": 43
+  },
+  {
+   "from": "fix first  372",
+   "to": "Message ready, other (English default)*  46",
+   "value": 19
+  },
+  {
+   "from": "fix first + goodwill  260",
+   "to": "Message ready, English  902",
+   "value": 228
+  },
+  {
+   "from": "fix first + goodwill  260",
+   "to": "Message ready, Spanish  113",
+   "value": 26
+  },
+  {
+   "from": "fix first + goodwill  260",
+   "to": "Message ready, other (English default)*  46",
+   "value": 6
+  },
+  {
+   "from": "save money (right-size)  141",
+   "to": "Message ready, English  902",
+   "value": 124
+  },
+  {
+   "from": "save money (right-size)  141",
+   "to": "Message ready, Spanish  113",
+   "value": 12
+  },
+  {
+   "from": "save money (right-size)  141",
+   "to": "Message ready, other (English default)*  46",
+   "value": 5
+  },
+  {
+   "from": "save money (same plan, discount variant)  96",
+   "to": "Message ready, English  902",
+   "value": 82
+  },
+  {
+   "from": "save money (same plan, discount variant)  96",
+   "to": "Message ready, Spanish  113",
+   "value": 7
+  },
+  {
+   "from": "save money (same plan, discount variant)  96",
+   "to": "Message ready, other (English default)*  46",
+   "value": 7
+  },
+  {
+   "from": "check-in  89",
+   "to": "Message ready, English  902",
+   "value": 73
+  },
+  {
+   "from": "check-in  89",
+   "to": "Message ready, Spanish  113",
+   "value": 12
+  },
+  {
+   "from": "check-in  89",
+   "to": "Message ready, other (English default)*  46",
+   "value": 4
+  },
+  {
+   "from": "better-fitting plan (step-up)  77",
+   "to": "Message ready, English  902",
+   "value": 64
+  },
+  {
+   "from": "better-fitting plan (step-up)  77",
+   "to": "Message ready, Spanish  113",
+   "value": 8
+  },
+  {
+   "from": "better-fitting plan (step-up)  77",
+   "to": "Message ready, other (English default)*  46",
+   "value": 5
+  },
+  {
+   "from": "family upgrade  16",
+   "to": "Message ready, English  902",
+   "value": 13
+  },
+  {
+   "from": "family upgrade  16",
+   "to": "Message ready, Spanish  113",
+   "value": 3
+  },
+  {
+   "from": "goodwill credit  5",
+   "to": "Message ready, English  902",
+   "value": 4
+  },
+  {
+   "from": "goodwill credit  5",
+   "to": "Message ready, Spanish  113",
+   "value": 1
+  },
+  {
+   "from": "bill-shock relief  4",
+   "to": "Message ready, English  902",
+   "value": 3
+  },
+  {
+   "from": "bill-shock relief  4",
+   "to": "Message ready, Spanish  113",
+   "value": 1
+  },
+  {
+   "from": "bundle  1",
+   "to": "Message ready, English  902",
+   "value": 1
+  },
+  {
+   "from": "Do nothing (flagged)  34",
+   "to": "No message  3,981",
+   "value": 34
+  },
+  {
+   "from": "Do nothing (rest)  3,947",
+   "to": "No message  3,981",
+   "value": 3947
+  }
+ ],
+ "standin_actions": [
+  "care_credit",
+  "loyalty_credit"
+ ],
+ "whatif": {
+  "n_accounts": 5042,
+  "n_offered": 1061,
+  "expected_churners_all": 137.68254800000003,
+  "expected_churners_offered": 92.72353100000001,
+  "baseline_churn_rate": 0.027307129710432372,
+  "averted_at_100": 41.6973054625,
+  "retained_value_at_100": 82747.62088173359,
+  "offer_cost_at_100": 41186.2,
+  "grid": [
+   {
+    "accept": 0.0,
+    "averted": 0.0,
+    "churn_rate": 0.027307129710432372,
+    "retained_value": 0.0,
+    "offer_cost": 0.0
+   },
+   {
+    "accept": 0.05,
+    "averted": 2.084865273125,
+    "churn_rate": 0.02689363005293039,
+    "retained_value": 4137.381044086679,
+    "offer_cost": 2059.31
+   },
+   {
+    "accept": 0.1,
+    "averted": 4.16973054625,
+    "churn_rate": 0.026480130395428406,
+    "retained_value": 8274.762088173358,
+    "offer_cost": 4118.62
+   },
+   {
+    "accept": 0.15,
+    "averted": 6.254595819374999,
+    "churn_rate": 0.026066630737926425,
+    "retained_value": 12412.143132260038,
+    "offer_cost": 6177.929999999999
+   },
+   {
+    "accept": 0.2,
+    "averted": 8.3394610925,
+    "churn_rate": 0.02565313108042444,
+    "retained_value": 16549.524176346717,
+    "offer_cost": 8237.24
+   },
+   {
+    "accept": 0.25,
+    "averted": 10.424326365625,
+    "churn_rate": 0.025239631422922456,
+    "retained_value": 20686.905220433397,
+    "offer_cost": 10296.55
+   },
+   {
+    "accept": 0.3,
+    "averted": 12.509191638749998,
+    "churn_rate": 0.024826131765420475,
+    "retained_value": 24824.286264520077,
+    "offer_cost": 12355.859999999999
+   },
+   {
+    "accept": 0.35,
+    "averted": 14.594056911874999,
+    "churn_rate": 0.02441263210791849,
+    "retained_value": 28961.667308606753,
+    "offer_cost": 14415.169999999998
+   },
+   {
+    "accept": 0.4,
+    "averted": 16.678922185,
+    "churn_rate": 0.023999132450416506,
+    "retained_value": 33099.04835269343,
+    "offer_cost": 16474.48
+   },
+   {
+    "accept": 0.45,
+    "averted": 18.763787458124998,
+    "churn_rate": 0.023585632792914524,
+    "retained_value": 37236.42939678011,
+    "offer_cost": 18533.79
+   },
+   {
+    "accept": 0.5,
+    "averted": 20.84865273125,
+    "churn_rate": 0.02317213313541254,
+    "retained_value": 41373.81044086679,
+    "offer_cost": 20593.1
+   },
+   {
+    "accept": 0.55,
+    "averted": 22.933518004375,
+    "churn_rate": 0.022758633477910555,
+    "retained_value": 45511.19148495347,
+    "offer_cost": 22652.41
+   },
+   {
+    "accept": 0.6,
+    "averted": 25.018383277499996,
+    "churn_rate": 0.022345133820408574,
+    "retained_value": 49648.57252904015,
+    "offer_cost": 24711.719999999998
+   },
+   {
+    "accept": 0.65,
+    "averted": 27.103248550625,
+    "churn_rate": 0.02193163416290659,
+    "retained_value": 53785.95357312683,
+    "offer_cost": 26771.03
+   },
+   {
+    "accept": 0.7,
+    "averted": 29.188113823749998,
+    "churn_rate": 0.021518134505404605,
+    "retained_value": 57923.334617213506,
+    "offer_cost": 28830.339999999997
+   },
+   {
+    "accept": 0.75,
+    "averted": 31.272979096874998,
+    "churn_rate": 0.021104634847902624,
+    "retained_value": 62060.715661300186,
+    "offer_cost": 30889.649999999998
+   },
+   {
+    "accept": 0.8,
+    "averted": 33.35784437,
+    "churn_rate": 0.02069113519040064,
+    "retained_value": 66198.09670538687,
+    "offer_cost": 32948.96
+   },
+   {
+    "accept": 0.85,
+    "averted": 35.442709643125,
+    "churn_rate": 0.020277635532898658,
+    "retained_value": 70335.47774947355,
+    "offer_cost": 35008.27
+   },
+   {
+    "accept": 0.9,
+    "averted": 37.527574916249996,
+    "churn_rate": 0.019864135875396677,
+    "retained_value": 74472.85879356023,
+    "offer_cost": 37067.58
+   },
+   {
+    "accept": 0.95,
+    "averted": 39.61244018937499,
+    "churn_rate": 0.019450636217894692,
+    "retained_value": 78610.2398376469,
+    "offer_cost": 39126.88999999999
+   },
+   {
+    "accept": 1.0,
+    "averted": 41.6973054625,
+    "churn_rate": 0.019037136560392708,
+    "retained_value": 82747.62088173359,
+    "offer_cost": 41186.2
+   }
+  ],
+  "default": 0.25,
+  "definition": "averted(a) = a x sum over offered accounts of p_churn_90d (Model A) x save_rate of the chosen action (Model B); value(a) = a x sum p x save_rate x customer_value_usd; cost(a) = a x sum offer_cost. Linear in a by assumption."
+ },
+ "household_in_decisions": true,
+ "traced_customer": {
+  "account_id": "ACC-PERSONA-04",
+  "rank": 132,
+  "n": 5042,
+  "p": 0.197466,
+  "flagged": true,
+  "cut": 0.052127100000000016,
+  "risk": [
+   "3 unresolved support contacts in 90 days",
+   "5 unhappy support contacts in 90 days",
+   "Shopping other carriers (score 0.85)"
+  ],
+  "stay": [
+   "Paying off 1 phone (2 mo left)",
+   "Long-time customer (3 yrs)",
+   "3 lines on account"
+  ],
+  "drivers": [
+   [
+    "live",
+    "bill_shock_promo_expired"
+   ],
+   [
+    "live",
+    "unresolved_support"
+   ],
+   [
+    "live",
+    "network_complaints"
+   ],
+   [
+    "live",
+    "competitor_research"
+   ],
+   [
+    "commerce",
+    "device_paid_off"
+   ],
+   [
+    "commerce",
+    "financing_2m_left"
+   ],
+   [
+    "customer",
+    "tenure_40m"
+   ],
+   [
+    "customer",
+    "lines_3"
+   ]
+  ],
+  "household": [
+   "Family plan: yes \u00b7 3 lines",
+   "Kid lines: 0 \u00b7 youngest kid band: none (from line role)",
+   "Promo months remaining: 0",
+   "Contract or financing months remaining: 2",
+   "Next plan up: Beyond, +$45/mo"
+  ],
+  "elig": [
+   [
+    "do nothing",
+    0.0,
+    false
+   ],
+   [
+    "loyalty credit (judge-provided stand-in)",
+    10.17,
+    false
+   ],
+   [
+    "perk reminder",
+    32.43,
+    false
+   ],
+   [
+    "bill-shock relief ($25 credit, price-guarantee fact)",
+    41.13,
+    false
+   ],
+   [
+    "fix-first callback",
+    131.65,
+    false
+   ],
+   [
+    "$25 care credit + fix-first callback (judge-provided stand-in)",
+    189.59,
+    true
+   ]
+  ],
+  "inel": [
+   [
+    "$25 care credit",
+    "replaced by bill-shock relief (same $25 credit plus the explanation)."
+   ],
+   [
+    "keep-your-phone credit",
+    "still paying off a phone."
+   ],
+   [
+    "switch to discount plan variant",
+    "no cheaper discount variant / 4-line offer they qualify for."
+   ],
+   [
+    "right-size plan",
+    "no cheaper plan fits their usage (or not a light user)."
+   ],
+   [
+    "step-up plan",
+    "not outgrowing the plan and no life event."
+   ],
+   [
+    "family upgrade",
+    "upgrade gate: not in the no-income upgrade model's top 15% (pct 4)."
+   ],
+   [
+    "device upgrade",
+    "upgrade gate: not in the no-income upgrade model's top 15% (pct 4)."
+   ],
+   [
+    "check-in / plan review",
+    "open support issue (fix first)."
+   ],
+   [
+    "Home Internet bundle",
+    "blocked: bill-shock guardrail (bill rose 61 days ago, window 90 days); open support issue; top driver is shopping / port-out."
+   ]
+  ],
+  "chosen": "$25 care credit + fix-first callback (judge-provided stand-in)",
+  "chosen_code": "care_credit_fix_first",
+  "ev": 189.59,
+  "runner": "fix-first callback",
+  "runner_ev": 131.65,
+  "reason": "Risk 19.7%; $25 goodwill credit plus an agent callback to fix the issue. EV = save value $234.59 - cost $40.00 - annoyance $5.00 = $189.59 (synthetic).",
+  "message_en": "Hi there. We noticed you've reported 2 network issues lately. A specialist will call you to fix it, and we'll add a one-time $25 credit to your next bill. Reply YES to schedule the call. Reply STOP to opt out.",
+  "message_es": "Hola. Notamos que nos ha reportado 2 problemas de red recientemente. Un especialista le llamar\u00e1 para resolverlo y le daremos un cr\u00e9dito \u00fanico de $25 en su pr\u00f3xima factura. Responda S\u00cd para programar la llamada. Responda STOP para no recibir mensajes.",
+  "message_status": "ok",
+  "language": "en",
+  "contact_pref": "app",
+  "customer_value": 2179.8,
+  "household_in_decisions": true,
+  "signals_shown": [
+   "Couple household, 3 lines, 40 months with us",
+   "Plan More, last bill $207.90 (+14% vs prior avg), promo just ended",
+   "5 support contacts in 90 days (3 unresolved, 2 network), avg sentiment -0.60",
+   "Competitor research score 0.85 \u00b7 7 app sessions in 30 days",
+   "Prefers app \u00b7 language EN",
+   "Kid lines on the account: 0 child, 0 teen  [sandbox lines.member_role]"
+  ],
+  "enrichment_shown": [
+   "Family plan: yes \u00b7 3 lines",
+   "Kid lines: 0 \u00b7 youngest kid band: none (from line role)",
+   "Promo months remaining: 0",
+   "Contract or financing months remaining: 2",
+   "Next plan up: Beyond, +$45/mo",
+   "Never written into the message."
+  ]
+ }
+}

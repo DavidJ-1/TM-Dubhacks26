@@ -28,7 +28,7 @@ Public surface (re-exported by model_harness):
     compare_policies(df)          do nothing / treat everyone / top-k by churn risk / random / pick_* / oracle
     simulate_uplift_frame(...)    SYNTHETIC randomized multi-arm data with known true uplift (same schema)
     load_orange_belgium(path)     public Orange Belgium churn-uplift RCT (OpenML 45580, CC BY-NC-ND; read in
-                                  place from /workspace/tmobile/raw, never copied or committed)
+                                  place from <repo>/../raw or $MH_ORANGE_ARFF, never copied or committed)
     run_all(out_dir)              everything above -> out/uplift_eval_summary.json/.md
 """
 from __future__ import annotations
@@ -54,7 +54,7 @@ HERE = Path(__file__).resolve().parent
 UPLIFT_CONFIG = {
     "uplift_path": os.environ.get("MH_UPLIFT_CSV", str(HERE / "out" / "uplift.csv")),
     "orange_path": os.environ.get("MH_ORANGE_ARFF",
-                                  "/workspace/tmobile/raw/orange_belgium_churn_uplift_openml45580.arff"),
+                                  str(HERE.parent.parent / "raw" / "orange_belgium_churn_uplift_openml45580.arff")),
     "churn_scores_path": os.environ.get("MH_CHURN_SCORES", str(HERE / "out" / "churn_scores.csv")),
     "outcome_col": "outcome_stay_90d",
     "higher_is_better": True,

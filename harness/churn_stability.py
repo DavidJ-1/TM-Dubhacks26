@@ -17,13 +17,14 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from churn_features import leak_columns, prepare  # noqa: E402
-from churn_model import OUT, PERSONA_PREFIX, PERSONAS_HIGH, PERSONAS_LOW, SEED, ModelA  # noqa: E402
+from churn_model import OUT, PERSONA_HIGH_PCT, PERSONA_PREFIX, PERSONAS_HIGH, PERSONAS_LOW, SEED, ModelA  # noqa: E402
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=200)
     ap.add_argument("--label", default="churn_90d")
+    ap.add_argument("--high-pct", type=float, default=PERSONA_HIGH_PCT)
     a = ap.parse_args(argv)
     feats, labels = pd.read_csv(OUT / "features.csv"), pd.read_csv(OUT / "labels.csv")
     barred = set(labels.columns) - {"account_id"}
@@ -39,7 +40,7 @@ def main(argv=None):
         m = ModelA().fit(Xtr.iloc[idx], ytr.iloc[idx])
         p = pd.Series(m.predict_proba(X), index=X.index)
         reg = p[~persona]
-        hi, lo = reg.quantile(0.90), reg.quantile(0.50)
+        hi, lo = reg.quantile(a.high_pct / 100), reg.quantile(0.50)
         ex = m.explain(X.loc[[pid for pid, _ in pids]], k=3, raw=feats.set_index("account_id").loc[[pid for pid, _ in pids]].reset_index()).set_index("account_id")
         out = []
         for pid, want in pids:
@@ -77,7 +78,7 @@ def main(argv=None):
     all_pass = df.groupby("boot")["pass"].all().mean()
     md = ["# Model A stability check - SYNTHETIC", "",
           f"{a.n} stratified bootstrap refits of Model A on the {len(ytr)} regular accounts (label `{a.label}`). "
-          "High personas must land in the top 10% of regular accounts and low personas below the median.", "",
+          f"High personas must land in the top {100 - a.high_pct:g}% of regular accounts and low personas below the median.", "",
           f"**All 6 personas pass together in {all_pass:.0%} of refits.**", "",
           "| persona | want | pass rate | percentile (5th / median / 95th) | same #1 reason | #1 reason still in top 3 | #1 reason (full fit) |",
           "|---|---|---|---|---|---|---|"]

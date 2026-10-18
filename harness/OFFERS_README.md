@@ -10,7 +10,8 @@
 python harness/offers.py                    # writes harness/out/offers.csv and offer_candidates.csv
 TM_ENABLE_RIGHT_SIZE=0 python harness/offers.py   # same run with right-sizing turned off
 ```
-The sandbox is found at `$TM_SANDBOX_DB`, then `/workspace/tmobile/dubhacks/data/sandbox.db`. It is opened
+The sandbox is found at `$DUBHACKS_DB` (the project-wide DB variable), then `vendor/dubhacks/data/sandbox.db`
+(`make setup`), then a sibling `../dubhacks/data/sandbox.db` clone. It is opened
 **read-only** (`file:...?mode=ro`). A full run takes about 20 s.
 
 ## Inputs
@@ -100,3 +101,76 @@ These are deterministic templates, not LLM output. Each message is under 300 cha
 
 ## Model C
 See `UPLIFT_README.md`. `python harness/uplift.py` is the single command that rebuilds Model B and Model C.
+
+## Batch 4-6 additions (Sat 10/17 ~8:10 PM PDT; all numbers synthetic)
+
+**New actions:** `variant_switch` (55+/partner/community discount variant or Essentials 4-Line Offer: same features,
+cheaper; sandbox `plans.eligibility` == `accounts.discount_group`), `right_size` now = move DOWN only (sandbox misfit
+<5 GB/line, or Beyond with every line <15 GB and <2 GB hotspot, no connected lines, no streaming add-on or Home
+Internet -> More), `family_upgrade` (next plan + PROMO-STUB-TRADEIN-ANY $200/phone over 36 months; real fields only:
+child/teen line roles, n_lines, phones with trade-in value after balance, a real moment), `bill_shock_price_lock`
+(label "bill-shock relief": More/Beyond only, $25 care credit [+ $5/mo loyalty at 36+ mo], the 5-Year Price Guarantee
+stated as a fact, no lock-in), `check_in` (no $; shopping / port-out / quiet app use, nothing open), `perk_reminder`
+(no $, no brand names), `home_internet_bundle` (HINT Basic $50 + PROMO-STUB-BUNDLE-HINT $15).
+
+**Customer-benefit term:** customer-first actions add `CUSTOMER_BENEFIT_WEIGHT x savings x 12 x p_accept` and count
+lost margin x (1 - W) (W = 0.5). `SAME_COVERAGE_RULE`: an eligible same-features variant beats do-nothing, upsells,
+check-ins and cross-sells (problem-solving actions still win).
+
+**Lock-in value** (`lock_value()`): only from new promo-credit payout / financing months. Spec formula multiplied the
+survival gap at month L by 24 months of margin; corrected to the sum of monthly survival gaps over the 24-month
+horizon, cut active only beyond the lock the customer already has (`contract_or_financing_months_remaining`).
+`action_if_lock_not_netted` shows the pick without netting. Model A already uses financing features, so no extra
+switching-cost adjustment to p_churn.
+
+**Guardrails:** no bill credits when p_churn_90d < 5%; upsells blocked within 90 days of bill shock, with an open
+support issue, when a cheaper eligible variant exists, when the top driver is shopping/port-out (port-out inquiry or
+risk >= 5%), or when the increase is > 25% of the current bill (40% if a line is already over its cap). Never income.
+`ENRICHMENT_IN_DECISIONS` is permanently False (tm-strategy A/B): income / job change / kid age band / likely_kid_flag
+appear only in `drivers` as `enrichment(simulated)[not used]`.
+
+**Upgrade gate** (`upgrade_gate.py`): device / family upgrade only for accounts in the top 15% of tm-bench's NO-INCOME
+upgrade model (tier "a features.csv + domain", lr_tuned, trained on synthetic 250k; bench top-15% capture 44%).
+`TM_UPGRADE_GATE=0` drops it. `BILL_SHOCK_RELIEF_OVERRIDE` (default True, OPEN DECISION) is the one switch for the
+care-credit 1-contact relief (`TM_BILL_SHOCK_RELIEF_OVERRIDE=0`).
+
+**Texts:** no "We noticed"; upsells carry "Happy as is? No need to do anything."; downgrades list what you give up;
+guarantee only as "covered by your 5-Year Price Guarantee" on a plan that has it; device credits as bill credits over
+payout months; graduation is never a trigger or in text. Validator blocklist (word-prefix regex, en + es): school,
+graduat, job, promot, income, kid, child, competitor, switch, port, AutoPay, public-only offers, "lock", "guaranteed
+for N years", "we noticed".
+
+**New outputs:** offers.csv adds `segment` (offer segment), `why_this_offer` (customer-facing), `lock_in_months`,
+`drivers`, `promo_skus`, `upgrade_pct`, `upgrade_candidate`, `action_if_lock_not_netted`; offer_candidates.csv adds
+`rank, action_code, save_value, upsell_gain, customer_benefit, lock_value, lock_in_months, promo_skus,
+blocked_or_ineligible_reason`; `out/line_tradein.csv` (per-line now-vs-wait); `out/upgrade_scores.csv`.
+Persona golden tests: `tests/test_persona_golden.py` (42 personas).
+
+## Batch 7 (Sat 10/17 ~8:50 PM PDT; all numbers synthetic)
+- **Upsells need a usage reason.** Step-up / family upgrade only when a line is near or over its data cap, or uses
+  hotspot the plan lacks (Essentials: any; More: > 45 GB). Usage growth alone no longer triggers (removes the
+  More -> Beyond "250 GB hotspot" pitches).
+- **Family upgrade unbundled.** It is the plan move only (family plan + real child/teen line + usage need); the
+  TRADEIN-ANY credit is never bundled. A phone trade-in stays a separate `device_upgrade` option. On those accounts
+  the family upgrade replaces the generic step-up.
+- **Savings ladder gaps closed** (`right_size` kinds in `action_detail`): `more_to_4line` (4+ lines on standard More,
+  no hotspot / perks / connected lines / Home Internet, every line fits 50 GB -> Essentials 4 Line Offer, persona 37
+  -$100/mo) and `essentials_saver` (1-2 light lines, every line's peak <= 10 GB -> Essentials Saver, persona 08
+  -$10/mo). Texts list what the customer gives up (hotspot, 5-Year Price Guarantee, watch/tablet lines, line limit).
+  No right-size while a support ticket or network issue is open (fix first; it is marketing).
+- **Port-out floor.** A port-out inquiry never gets do nothing: check-in, or the fix-first callback when a ticket is
+  open (`pick_override = port_out`). `PORT_OUT_ALWAYS_CONTACT` switch.
+- **Honest do-nothing reasons** (`do_nothing_reason` code + `why_this_offer` sentence, real fields only): open_ticket
+  ("Open ticket with support; no marketing until it's closed."), wait_payoff (only when a line has line_tradein's
+  wait_until_payoff verdict and nothing stronger applies), low_risk ("Risk is low and nothing needs fixing"),
+  bill_shock_low_risk, shopping_low_risk, recent_complaints, usage_need_held, happy (built from support / port-out /
+  app fields, e.g. persona 24), nothing_helps.
+- **offer_candidates.csv:** every allowed-but-losing option's `reason` now starts with a plain "Lost: ..." sentence;
+  new `customer_monthly_delta` ($/mo change for the customer if accepted; negative = saves; persona 38 = -40).
+  Existing columns unchanged.
+- **offers.csv:** `segment` renamed `offer_segment`; new `do_nothing_reason`, `pick_override`, `customer_monthly_delta`.
+- `upgrade_gate.load()` falls back to `$TM_OUT_DIR` then `demo_data/upgrade_scores.csv` (refresh.py copies it).
+- `offers.prepare()` builds the scored frame (main() uses it); `offer_api._engine()` mirrors it (adds `n_wait_lines`).
+- Tests: golden pins (exact action + SKU) for personas 04, 06, 10, 19, 21, 24, 28, 37, 38; persona 38's -$40/mo;
+  persona 24's reason; wait personas 29/31/33; open-ticket wording; offer_api toggles for persona 21. Golden tests read
+  `demo_data/` when `harness/out/` is missing.
