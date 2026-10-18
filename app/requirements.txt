@@ -4,3 +4,6 @@ altair>=5.0
 matplotlib>=3.8
 plotly>=6.0
 kaleido>=1.0
+streamlit-extras>=0.4
+requests>=2.31
+python-dotenv>=1.0

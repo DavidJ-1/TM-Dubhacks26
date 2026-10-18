@@ -1,8 +1,10 @@
 """Data loading for the tm-ui lane.
 
-Prefers the real lane outputs (harness/out/*.csv per LANES.md) and falls back to
-app/mock/*.csv per file. A real file is only used if it has every contract column.
-Override the search with TM_OUT_DIR=/path/to/out; force mocks with TM_USE_MOCK=1.
+Search order per file: TM_OUT_DIR (if set) -> demo_data/ (tracked, tested copy of the real 5k sandbox run; the demo
+default) -> harness/out/ (only if demo_data/ is missing; may hold a work-in-progress run) -> app/mock/*.csv
+(48-account mock, flagged loudly).
+A real file is only used if it has every contract column; .csv.gz is read too. Force mocks with TM_USE_MOCK=1.
+ALL DATA IS SYNTHETIC.
 """
 from __future__ import annotations
 
@@ -27,6 +29,10 @@ CONTRACTS: dict[str, list[str]] = {
     "features": ["account_id"],
     "labels": ["account_id"],
 }
+# Optional extras (no mock): tm-offers' full option table and Model A out-of-fold predictions.
+OPTIONAL = {"offer_candidates": ["account_id", "action_code"], "churn_oof_pred": ["account_id", "p_churn_90d"],
+            # per-account logit contributions of the churn logistic regression (coef x standardized value)
+            "churn_contributions": ["account_id", "intercept_logit"]}
 
 
 def out_dirs() -> list[Path]:
@@ -35,7 +41,10 @@ def out_dirs() -> list[Path]:
     dirs = []
     if os.environ.get("TM_OUT_DIR"):
         dirs.append(Path(os.environ["TM_OUT_DIR"]))
-    dirs += [REPO / "harness" / "out", Path("/workspace/tmobile/harness/out")]
+    if (REPO / "demo_data").is_dir():
+        dirs.append(REPO / "demo_data")
+    else:
+        dirs.append(REPO / "harness" / "out")
     return dirs
 
 
@@ -48,11 +57,11 @@ class Loaded:
 
 
 def load_one(name: str) -> Loaded:
-    need = CONTRACTS[name]
+    need = CONTRACTS.get(name) or OPTIONAL[name]
     notes = []
     for d in out_dirs():
-        p = d / f"{name}.csv"
-        if p.exists():
+        p = next((q for q in (d / f"{name}.csv", d / f"{name}.csv.gz") if q.exists()), None)
+        if p is not None:
             try:
                 df = pd.read_csv(p)
             except Exception as e:  # noqa: BLE001
@@ -70,18 +79,15 @@ def load_one(name: str) -> Loaded:
 
 
 def load_all() -> dict[str, Loaded]:
+    # One churn number everywhere: churn_scores.csv p_churn_90d is the only churn probability the app shows.
+    # (No fallback to tm-offers' mock_churn_scores.csv any more; a mock is flagged by the banner instead.)
     data = {n: load_one(n) for n in CONTRACTS}
-    # Keep scores and offers consistent: if tm-offers' real offers.csv exists but tm-churn's
-    # churn_scores.csv doesn't, use the mock_churn_scores.csv that tm-offers scored against.
-    if data["churn_scores"].source != "real" and data["offers"].source == "real":
-        for d in out_dirs():
-            p = d / "mock_churn_scores.csv"
-            if p.exists():
-                df = pd.read_csv(p)
-                if all(c in df.columns for c in CONTRACTS["churn_scores"]):
-                    data["churn_scores"] = Loaded(df, "mock", str(p), "tm-offers' mock churn (paired with real offers.csv)")
-                    break
+    data.update({n: load_one(n) for n in OPTIONAL})
     return data
+
+
+def is_mock(data: dict[str, Loaded]) -> bool:
+    return any(data[k].source != "real" for k in CONTRACTS)
 
 
 def upgrade_flag_cols(offers: pd.DataFrame) -> list[str]:
@@ -98,7 +104,10 @@ def merged(data: dict[str, Loaded]) -> pd.DataFrame:
     df = data["churn_scores"].df.copy()
     for n in ("offers", "features"):
         other = data[n].df
+        if n == "offers" and "segment" in other:  # offers.segment is the OFFER segment; keep features' customer segment
+            other = other.rename(columns={"segment": "offer_segment"})
         if len(other):
+            # churn_scores wins on clashes (p_churn_90d, risk_rank): one churn number everywhere
             dup = [c for c in other.columns if c in df.columns and c != "account_id"]
             df = df.merge(other.drop(columns=dup), on="account_id", how="left")
     if "risk_rank" in df:
@@ -109,8 +118,9 @@ def merged(data: dict[str, Loaded]) -> pd.DataFrame:
 def persona_titles() -> dict[str, str]:
     """Persona titles from the judge sandbox (opened read-only). Empty if not on disk."""
     import sqlite3
-    for p in (os.environ.get("SANDBOX_DB", ""), str(REPO / "dubhacks" / "data" / "sandbox.db"),
-              str(REPO.parent / "dubhacks" / "data" / "sandbox.db")):
+    for p in (os.environ.get("DUBHACKS_DB", ""), os.environ.get("SANDBOX_DB", ""),
+              str(REPO / "vendor" / "dubhacks" / "data" / "sandbox.db"),
+              str(REPO / "dubhacks" / "data" / "sandbox.db"), str(REPO.parent / "dubhacks" / "data" / "sandbox.db")):
         if p and Path(p).exists():
             try:
                 con = sqlite3.connect(Path(p).resolve().as_uri() + "?mode=ro", uri=True)
@@ -120,3 +130,56 @@ def persona_titles() -> dict[str, str]:
             except sqlite3.Error:
                 return {}
     return {}
+
+
+# ---------------- stay-reason consistency filter ----------------
+def _num(r, c, default=0.0) -> float:
+    try:
+        v = float(r.get(c, default))
+        return default if pd.isna(v) else v
+    except (TypeError, ValueError):
+        return default
+
+
+def stay_conflict(stay: str, r, risks: list[str]) -> str | None:
+    """Why a stay reason contradicts the customer's facts or own risk reasons (None = consistent)."""
+    s, rk = str(stay).lower(), " | ".join(str(x).lower() for x in risks)
+    if s.startswith("no unresolved") and (_num(r, "unresolved_90d") > 0 or "unresolved" in rk):
+        return "has unresolved support contacts"
+    if s.startswith("steady bill") and (_num(r, "bill_change_3m_pct") > 0.05 or _num(r, "bill_increase_pct") > 0.05
+                                        or _num(r, "promo_expired_recent") > 0 or "bill up" in rk or "promo" in rk):
+        return "bill went up / promo ended"
+    if s.startswith("not shopping") and (_num(r, "competitor_research_score") >= 0.5 or _num(r, "port_out_inquiry") > 0
+                                         or "shopping" in rk or "porting" in rk):
+        return "is researching competitors or asked about transferring their number"
+    if s.startswith("positive experiences") and (_num(r, "negative_contacts_90d") > 0 or _num(r, "avg_sentiment_90d") < 0
+                                                 or "unhappy" in rk):
+        return "has unhappy support contacts"
+    if s.startswith("no complaints") and (_num(r, "support_90d") > 0 or _num(r, "network_contacts_90d") > 0
+                                          or "unhappy" in rk or "unresolved" in rk):
+        return "has support or network contacts"
+    if (s.startswith("low support") or s.startswith("few support")) and (_num(r, "support_90d") >= 3 or "support" in rk):
+        return "has many support contacts"
+    if s.startswith("long-time customer") and "new customer" in rk:
+        return "risk says new customer"
+    if "lines on account" in s and "single line" in rk:
+        return "risk says single line"
+    if s.startswith("newer phone") and "phone is" in rk:
+        return "risk says old phone"
+    if s.startswith("active app user") and "rarely uses the app" in rk:
+        return "risk says rarely uses the app"
+    return None
+
+
+def clean_stays(r) -> tuple[list[str], list[tuple[str, str]]]:
+    """(kept stay reasons, dropped [(reason, why)]) for one merged row."""
+    risks = [r.get(f"risk_reason_{i}") for i in (1, 2, 3)]
+    risks = [x for x in risks if isinstance(x, str) and x]
+    kept, dropped = [], []
+    for i in (1, 2, 3):
+        t = r.get(f"stay_reason_{i}")
+        if not (isinstance(t, str) and t):
+            continue
+        why = stay_conflict(t, r, risks)
+        (dropped.append((t, why)) if why else kept.append(t))
+    return kept, dropped
