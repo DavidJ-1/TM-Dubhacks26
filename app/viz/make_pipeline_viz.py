@@ -147,8 +147,18 @@ def funnel(d):
 
 
 # ----------------------------------------------------------------------------------------------- sankey
+XS = [0.001, 0.2, 0.4, 0.6, 0.8, 0.999]
+OTHER_LANG_SHORT = "Message ready, other (English default)*"
+OTHER_LANG_LONG = "* Message ready, other (English default, no template for this language)"
+
+
+def col_heads(stats):
+    return ["ACCOUNTS", "MODEL A FLAG", "OFFER OR NOT", "WHICH OFFER", stats["funnel"]["col3_head"], "MESSAGE"]
+
+
 def sankey_spec(m):
-    """Nodes/links in 5 columns: all -> flag -> action -> segment (offered only) -> message status."""
+    """6 columns: all -> flag -> offer split (retention from flagged / upgrade-fix from the rest / do nothing each)
+    -> specific action (offered only) -> segment (offered only) -> message status."""
     nodes, links = [], []  # node: dict(label, col, color, n) ; link: (src, tgt, value, stage, color)
 
     def node(label, col, color, n):
@@ -162,6 +172,16 @@ def sankey_spec(m):
     i_nflag = node(f"Not flagged  {n_all - nf:,}", 1, GREY, n_all - nf)
     links += [(i_all, i_flag, nf, 1, "rgba(226,0,116,0.45)"), (i_all, i_nflag, n_all - nf, 1, "rgba(138,123,132,0.25)")]
 
+    split = {}
+    for flag, i_src in ((True, i_flag), (False, i_nflag)):
+        sub = m[m["flagged"] == flag]
+        n_off, n_dn = int(sub["offered"].sum()), int((~sub["offered"]).sum())
+        lab = "Retention offer (from flagged)" if flag else "Upgrade / fix offer (from the rest, EV-positive)"
+        split[(flag, True)] = node(f"{lab}  {n_off:,}", 2, MAGENTA if flag else "#7FD1FF", n_off)
+        split[(flag, False)] = node(f"Do nothing ({'flagged' if flag else 'rest'})  {n_dn:,}", 2, EDGE, n_dn)
+        links.append((i_src, split[(flag, True)], n_off, 2, "rgba(226,0,116,0.45)" if flag else "rgba(127,209,255,0.30)"))
+        links.append((i_src, split[(flag, False)], n_dn, 2, "rgba(90,74,94,0.35)"))
+
     act_order = [a for a in ["care_credit_fix_first", "fix_first", "care_credit", "step_up", "loyalty_credit",
                              "keep_your_phone", "right_size", "device_upgrade"] if (m["action_code"] == a).any()]
     act_order += [a for a in sorted(m["action_code"].unique()) if a not in act_order and a != "do_nothing"]
@@ -169,65 +189,61 @@ def sankey_spec(m):
                  "step_up": "#7FD1FF", "loyalty_credit": "#C9A0FF", "keep_your_phone": "#8BE0B0",
                  "right_size": "#FFD27F", "device_upgrade": "#7FFFD4"}
     i_act = {}
-    for a in act_order + ["do_nothing"]:
+    for a in act_order:
         n = int((m["action_code"] == a).sum())
-        col = EDGE if a == "do_nothing" else act_color.get(a, EXTRA_COLORS[len(i_act) % len(EXTRA_COLORS)])
-        i_act[a] = node(f"{alabel(a)}  {n:,}", 2, col, n)
-    for flag, i_src in ((True, i_flag), (False, i_nflag)):
-        sub = m[m["flagged"] == flag]
-        for a in act_order + ["do_nothing"]:
+        i_act[a] = node(f"{alabel(a)}  {n:,}", 3, act_color.get(a, EXTRA_COLORS[len(i_act) % len(EXTRA_COLORS)]), n)
+    for flag in (True, False):
+        sub = m[(m["flagged"] == flag) & m["offered"]]
+        for a in act_order:
             v = int((sub["action_code"] == a).sum())
             if v:
-                c = "rgba(90,74,94,0.35)" if a == "do_nothing" else (
-                    "rgba(226,0,116,0.45)" if flag else "rgba(127,209,255,0.30)")
-                links.append((i_src, i_act[a], v, 2, c))
+                links.append((split[(flag, True)], i_act[a], v, 3,
+                              "rgba(226,0,116,0.40)" if flag else "rgba(127,209,255,0.28)"))
 
     off = m[m["offered"]]
     seg_order = list(off["col3"].value_counts().index)
     i_seg = {}
-    for s in seg_order:
-        n = int((off["col3"] == s).sum())
-        i_seg[s] = node(f"{SEG_LABEL.get(s, s.replace('_', ' '))}  {n:,}", 3, "#C9A0DC", n)
+    for sg in seg_order:
+        n = int((off["col3"] == sg).sum())
+        i_seg[sg] = node(f"{SEG_LABEL.get(sg, sg.replace('_', ' '))}  {n:,}", 4, "#C9A0DC", n)
     for a in act_order:
         sub = off[off["action_code"] == a]
-        for s in seg_order:
-            v = int((sub["col3"] == s).sum())
+        for sg in seg_order:
+            v = int((sub["col3"] == sg).sum())
             if v:
-                links.append((i_act[a], i_seg[s], v, 3, "rgba(201,160,220,0.28)"))
+                links.append((i_act[a], i_seg[sg], v, 4, "rgba(201,160,220,0.28)"))
 
     msg = m[m["messaged"]]
     n_en, n_es = int((msg["language"] == "en").sum()), int((msg["language"] == "es").sum())
     n_other = len(msg) - n_en - n_es
-    i_en = node(f"Message ready, English  {n_en:,}", 4, MAGENTA, n_en)
-    i_es = node(f"Message ready, Spanish  {n_es:,}", 4, PINK, n_es)
-    i_other = node(f"Message ready, other  {n_other:,}", 4, PINK, n_other) if n_other else None
+    i_en = node(f"Message ready, English  {n_en:,}", 5, MAGENTA, n_en)
+    i_es = node(f"Message ready, Spanish  {n_es:,}", 5, PINK, n_es)
+    i_other = node(f"{OTHER_LANG_SHORT}  {n_other:,}", 5, PINK, n_other) if n_other else None
     nomsg = m[~m["messaged"]]
-    i_no = node(f"No message  {len(nomsg):,}", 4, EDGE, len(nomsg))
-    for s in seg_order:
-        sub = msg[(msg["col3"] == s)]
+    i_no = node(f"No message  {len(nomsg):,}", 5, EDGE, len(nomsg))
+    for sg in seg_order:
+        sub = msg[(msg["col3"] == sg)]
         for lang, i_t in (("en", i_en), ("es", i_es)):
             v = int((sub["language"] == lang).sum())
             if v:
-                links.append((i_seg[s], i_t, v, 4, "rgba(226,0,116,0.40)"))
+                links.append((i_seg[sg], i_t, v, 5, "rgba(226,0,116,0.40)"))
         if i_other is not None:
             v = int((~sub["language"].isin(["en", "es"])).sum())
             if v:
-                links.append((i_seg[s], i_other, v, 4, "rgba(226,0,116,0.40)"))
-    # offered but not messaged (validation failed) -> No message, via segment
-    for s in seg_order:
-        v = int(((off["col3"] == s) & (~off["messaged"])).sum())
+                links.append((i_seg[sg], i_other, v, 5, "rgba(226,0,116,0.40)"))
+        v = int(((off["col3"] == sg) & (~off["messaged"])).sum())  # offered but message failed validation
         if v:
-            links.append((i_seg[s], i_no, v, 4, "rgba(90,74,94,0.35)"))
-    v = int(((m["action_code"] == "do_nothing") & (~m["messaged"])).sum())
-    if v:
-        links.append((i_act["do_nothing"], i_no, v, 4, "rgba(90,74,94,0.35)"))
-    v = int(((m["action_code"] == "do_nothing") & (m["messaged"])).sum())
-    if v:  # should be 0: do-nothing has no message
-        links.append((i_act["do_nothing"], i_en, v, 4, "rgba(255,0,0,0.6)"))
+            links.append((i_seg[sg], i_no, v, 5, "rgba(90,74,94,0.35)"))
+    for flag in (True, False):
+        sub = m[(m["flagged"] == flag) & ~m["offered"]]
+        v = int((~sub["messaged"]).sum())
+        if v:
+            links.append((split[(flag, False)], i_no, v, 5, "rgba(90,74,94,0.30)"))
+        v = int(sub["messaged"].sum())
+        if v:  # should be 0: do-nothing has no message
+            links.append((split[(flag, False)], i_en, v, 5, "rgba(255,0,0,0.6)"))
 
-    # fixed positions: x per column, y stacked by size with padding (centres, 0..1 from top)
-    xs = {0: 0.001, 1: 0.24, 2: 0.48, 3: 0.72, 4: 0.999}
-    for col in range(5):
+    for col in range(len(XS)):
         idx = [i for i, nd in enumerate(nodes) if nd["col"] == col]
         tot = sum(max(nodes[i]["n"], 1) for i in idx)
         pad = 0.035
@@ -235,7 +251,7 @@ def sankey_spec(m):
         y = 0.02
         for i in idx:
             h = avail * max(nodes[i]["n"], 1) / tot
-            nodes[i]["x"], nodes[i]["y"] = xs[col], min(max(y + h / 2, 0.001), 0.999)
+            nodes[i]["x"], nodes[i]["y"] = XS[col], min(max(y + h / 2, 0.001), 0.999)
             y += h + pad
     return nodes, links
 
@@ -264,12 +280,14 @@ def sankey_trace(nodes, links, stage, domain=None, font_size=13):
 
 
 STAGE_TITLES = [
-    "1 · 5,042 sandbox accounts",
+    "1 · Every sandbox account",
     "2 · Model A flags the riskiest 10%",
-    "3 · EV engine: best offer vs do nothing",
-    "4 · Who gets an offer, by household",
-    "5 · Message drafted in their language",
+    "3 · Offer or not: offered = any EV-positive action, not only flagged",
+    "4 · Which offer the EV engine picked",
+    "5 · Who gets an offer",
+    "6 · Message drafted in their language",
 ]
+N_STAGES = len(STAGE_TITLES)
 
 
 ANN_DEFAULTS = dict(xref="paper", yref="paper", x=0, y=0, xanchor="left", yanchor="top", text="", showarrow=False,
@@ -319,7 +337,7 @@ def strip_shapes(stats, y0, y1, x0=0.0, x1=1.0, highlight=None, compact=False, p
         ("DATA", "Judge sandbox + enrichment",
          f"{st['sandbox']['n_tables_used']} sandbox tables · {st['sandbox']['rows_used']:,} rows<br>"
          f"accounts, lines (incl. {st['sandbox'].get('kid_lines', {}).get('child_lines', 0) + st['sandbox'].get('kid_lines', {}).get('teen_lines', 0):,} kid lines),<br>usage, bills, support, signals, plans, promos<br>"
-         f"+ {st['enrichment']['card_text']}"),
+         f"household: family plan, kid lines + band,<br>promo / financing months (real tables)"),
         ("FEATURES", "One row per account",
          f"{st['features']['n_accounts']:,} accounts × {st['features']['n_columns']} features<br>"
          f"support contacts & sentiment, bill shock,<br>promo expiry, plan fit, device age,<br>competitor research, tenure"),
@@ -329,7 +347,7 @@ def strip_shapes(stats, y0, y1, x0=0.0, x1=1.0, highlight=None, compact=False, p
          f"of churners (oracle {st['heldout']['oracle_top10']:.0%}, rule {st['heldout']['rule_rank_top10']:.0%}) · AUC {st['heldout']['auc']:.3f}"),
         ("EV ENGINE", "Offers vs do nothing (Model B)",
          f"{st['ev']['n_actions']} actions scored per account<br>EV = save value − cost − annoyance<br>"
-         f"eligibility from sandbox promo rules<br>do nothing wins for {st['funnel']['do_nothing']:,}"),
+         f"offered = any EV-positive action,<br>not only flagged · do nothing wins for {st['funnel']['do_nothing']:,}"),
         ("MESSAGE", "Personalized text, EN / ES",
          f"{st['funnel']['messaged']:,} messages drafted + validated<br>amounts re-checked vs sandbox<br>"
          f"no income, job or kid details in text<br>reply STOP to opt out"),
@@ -354,6 +372,13 @@ def strip_shapes(stats, y0, y1, x0=0.0, x1=1.0, highlight=None, compact=False, p
             ann.append(dict(xref="paper", yref="paper", x=cx0 + 0.008, y=y1 - 62 / plot_h, xanchor="left", yanchor="top",
                             text=body, showarrow=False, align="left",
                             font=dict(color=MUTED, size=11, family=FONT), opacity=op))
+        if k == 0 and not compact:  # simulated enrichment: context only, dashed + greyed
+            by0, by1 = y0 + 8 / plot_h, y0 + 46 / plot_h
+            shapes.append(dict(type="rect", xref="paper", yref="paper", x0=cx0 + 0.006, x1=cx0 + w - 0.006, y0=by0, y1=by1,
+                               fillcolor="rgba(0,0,0,0)", line=dict(color=GREY, width=1, dash="dash")))
+            ann.append(dict(xref="paper", yref="paper", x=cx0 + 0.011, y=by1 - 5 / plot_h, xanchor="left", yanchor="top",
+                            text=st["enrichment"]["card_text"], showarrow=False, align="left",
+                            font=dict(color="#8A7A8E", size=10, family=FONT), opacity=op))
         if k < n - 1:
             ax = cx0 + w
             shapes += arrow_shapes(ax + 0.002, ax + gap - 0.002, (y0 + y1) / 2)
@@ -441,21 +466,28 @@ def customer_story(d, m, cut):
                 grp, sig = item.split(":", 1)
                 drivers.append((grp.strip(), sig.strip()))
     ecols = set(en.index) if en is not None else set()
-    enrich = []
-    if "recent_job_change" in ecols:
-        enrich.append(f"Recent job change: {'yes' if int(g(en, 'recent_job_change', 0)) == 1 else 'no'}  [enrichment (simulated), BLS base rate]")
-    else:
-        enrich.append("Recent job change: planned enrichment (not in enrichment.csv yet)")
-    if "income_band" in ecols:
-        enrich.append(f"Income band: {g(en, 'income_band')}  [enrichment (simulated), ACS national distribution]")
-    else:
-        enrich.append("Income band: planned enrichment (not in enrichment.csv yet)")
-    enrich.append("Finer kid age band: planned enrichment (kid lines themselves are real sandbox data, step 1)")
+    household = []   # derived from REAL sandbox tables
+    if "is_family_plan" in ecols:
+        household.append(f"Family plan: {'yes' if int(g(en, 'is_family_plan', 0)) == 1 else 'no'}"
+                         + (f" · {int(g(en, 'n_lines', 0))} lines" if "n_lines" in ecols else ""))
+    if "n_kid_lines" in ecols:
+        household.append(f"Kid lines: {int(g(en, 'n_kid_lines', 0))}"
+                         + (f" · youngest kid band: {g(en, 'kid_age_band')} (from line role)" if "kid_age_band" in ecols else ""))
+    elif "likely_kid_flag" in ecols:
+        household.append(f"Likely kid on account: {'yes' if int(g(en, 'likely_kid_flag', 0)) == 1 else 'no'}")
+    if "promo_months_remaining" in ecols:
+        household.append(f"Promo months remaining: {int(g(en, 'promo_months_remaining', 0))}")
+    if "contract_or_financing_months_remaining" in ecols:
+        household.append(f"Contract or financing months remaining: {int(g(en, 'contract_or_financing_months_remaining', 0))}")
     if "next_plan_sku" in ecols and pd.notna(g(en, "next_plan_sku", None)):
-        enrich.append(f"Next plan up: {str(g(en, 'next_plan_sku')).replace('TMO-STUB-PLAN-', '').title()}"
-                      + (f", +${float(g(en, 'step_up_cost_cents', 0)) / 100:,.0f}/mo" if g(en, 'step_up_cost_cents', None) is not None else "")
-                      + "  [sandbox plans table]")
-    enrich.append("Used only to pick the offer. Never written into the message.")
+        household.append(f"Next plan up: {str(g(en, 'next_plan_sku')).replace('TMO-STUB-PLAN-', '').title()}"
+                         + (f", +${float(g(en, 'step_up_cost_cents', 0)) / 100:,.0f}/mo" if g(en, 'step_up_cost_cents', None) is not None else ""))
+    simulated = []
+    if "recent_job_change" in ecols:
+        simulated.append(f"Recent job change: {'yes' if int(g(en, 'recent_job_change', 0)) == 1 else 'no'}  (BLS base rate)")
+    if "income_band" in ecols:
+        simulated.append(f"Income band: {g(en, 'income_band')}  (ACS national distribution)")
+    enrich = household + ["Never written into the message."]
     oc["label"] = oc["action"]
     elig = oc[oc["eligible"] == True].sort_values("expected_value")  # noqa: E712
     inel = oc[oc["eligible"] != True]  # noqa: E712
@@ -463,7 +495,7 @@ def customer_story(d, m, cut):
         account_id=a, rank=rank, n=len(d["churn_scores"]), p=p, flagged=bool(flagged), cut=cut,
         risk=[cs[f"risk_reason_{i}"] for i in (1, 2, 3) if pd.notna(cs.get(f"risk_reason_{i}"))],
         stay=[cs[f"stay_reason_{i}"] for i in (1, 2, 3) if pd.notna(cs.get(f"stay_reason_{i}"))],
-        signals=signals, enrich=enrich, drivers=drivers,
+        signals=signals, enrich=enrich, drivers=drivers, household=household, simulated=simulated,
         elig=[(standin_text(r["action"]), float(r["expected_value"]), bool(r["is_chosen"])) for _, r in elig.iterrows()],
         inel=[(r["action"], str(r["reason"]).replace("Not eligible: ", "")) for _, r in inel.iterrows()],
         chosen=standin_text(of["action"]), chosen_code=str(of["action_code"]), ev=float(of["expected_value"]),
@@ -476,7 +508,7 @@ def customer_story(d, m, cut):
     return story
 
 
-CUST_STEPS = ["Signals", "Enrichment", "Model A", "EV engine", "Message"]
+CUST_STEPS = ["Signals", "Household", "Model A", "EV engine", "Message"]
 
 
 def customer_frame(story, step):
@@ -526,10 +558,19 @@ def customer_frame(story, step):
                             text="<b>Tagged drivers (tm-offers)</b><br>" + wrap(txt, 200), showarrow=False, align="left",
                             font=dict(color=INK, size=12, family=FONT)))
     elif step == 1:
-        head("Enrichment", "context for choosing the deal")
-        lines(s["enrich"][:-1], size=14)
-        ann.append(dict(xref="paper", yref="paper", x=0.035, y=0.16, xanchor="left", yanchor="top",
-                        text=f"<b>{s['enrich'][-1]}</b>", showarrow=False, font=dict(color=MAGENTA, size=14, family=FONT)))
+        head("Household context", "derived from real sandbox tables: line roles, plans, financing")
+        lines(s["household"], y=0.62, size=14)
+        # simulated enrichment: dashed, greyed, context only
+        shapes.append(dict(type="rect", xref="paper", yref="paper", x0=0.035, x1=0.62, y0=0.18, y1=0.33,
+                           fillcolor="rgba(0,0,0,0)", line=dict(color=GREY, width=1.5, dash="dash")))
+        ann.append(dict(xref="paper", yref="paper", x=0.045, y=0.315, xanchor="left", yanchor="top",
+                        text="<b>Enrichment (simulated) · context only, not used in decision</b><br>"
+                             + ("<br>".join(f"• {t}" for t in s["simulated"]) or "• none in enrichment.csv")
+                             + "<br><i>tm-offers ENRICHMENT_IN_DECISIONS is off by default</i>",
+                        showarrow=False, align="left", font=dict(color="#8A7A8E", size=13, family=FONT)))
+        ann.append(dict(xref="paper", yref="paper", x=0.035, y=0.40, xanchor="left", yanchor="top",
+                        text="<b>Real sandbox signals feed the decision. Nothing here is written into the message.</b>",
+                        showarrow=False, font=dict(color=MAGENTA, size=13, family=FONT)))
     elif step == 2:
         head("Model A: churn score + reasons", "tm-churn churn_scores.csv, synthetic labels")
         ann.append(dict(xref="paper", yref="paper", x=0.035, y=0.60, xanchor="left", yanchor="top",
@@ -677,32 +718,35 @@ def funnel_fig(nodes, links, stats, animated=True):
     title = ("Who we text, and why: 5,042 synthetic accounts through the pipeline "
              f"<span style='font-size:15px;color:{MUTED}'>(synthetic)</span>")
     foot = footnote(f"Flagged = Model A p(churn 90d) ≥ {stats['funnel']['flag_cut']:.4f}, the top 10% of the 5,000 regular "
-                    "accounts (churn lane's cut; 42 personas scored on the same cut). Offer = offers.csv action ≠ do nothing. "
+                    "accounts (churn lane's cut; 42 personas scored on the same cut). Offered = any EV-positive action, not only flagged (offers.csv action ≠ do nothing).<br>"
                     "Message ready = message_status 'ok' (drafted + validated, nothing sent). Language = account preference.<br>"
                     f"Model A = tm-churn churn_scores.csv · actions = Model B (tm-offers offers.csv) · column 4 = {stats['funnel']['col3_source']} · "
-                    "† judge-provided stand-in credit (sandbox promo source 'stub').")
+                    "† judge-provided stand-in credit (sandbox promo source 'stub'). " + OTHER_LANG_LONG + ".")
     lay = base_layout(title)
+    lay.margin.b = 86
+    foot["yshift"] = -82
     stage_ann = lambda k: [dict(xref="paper", yref="paper", x=0.02, y=1.0, yshift=18, xanchor="left", yanchor="bottom",
                                 text=STAGE_TITLES[k], showarrow=False, font=dict(color=MAGENTA, size=16, family=FONT))]
     stage_heads = lambda k: [dict(xref="paper", yref="paper", x=x, y=1.0, yshift=-2, xanchor=xa, yanchor="bottom",
                                   text=t, showarrow=False, font=dict(color=MUTED if i > k else INK, size=12, family=FONT))
-                             for i, (x, xa, t) in enumerate([(0.0, "left", "ACCOUNTS"), (0.24, "center", "MODEL A FLAG"),
-                                                             (0.48, "center", "CHOSEN ACTION"), (0.72, "center", stats["funnel"]["col3_head"]),
-                                                             (1.0, "right", "MESSAGE")])]
+                             for i, (x, xa, t) in enumerate(
+                                 [(XS[c] if 0 < c < len(XS) - 1 else (0.0 if c == 0 else 1.0),
+                                   "left" if c == 0 else ("right" if c == len(XS) - 1 else "center"), h)
+                                  for c, h in enumerate(col_heads(stats))])]
     if not animated:
-        lay.update(annotations=banner() + [foot] + stage_heads(4))
-        return go.Figure(data=[sankey_trace(nodes, links, 4, domain=dict(x=[0, 1], y=[0, 0.96]))], layout=lay)
+        lay.update(annotations=banner() + [foot] + stage_heads(N_STAGES - 1))
+        return go.Figure(data=[sankey_trace(nodes, links, N_STAGES - 1, domain=dict(x=[0, 1], y=[0, 0.96]))], layout=lay)
     frames = [go.Frame(name=str(k), data=[sankey_trace(nodes, links, k, domain=dict(x=[0, 1], y=[0, 0.96]))],
-                       layout=go.Layout(annotations=norm_ann(banner() + [foot] + stage_ann(k) + stage_heads(k), 8)))
-              for k in range(5)]
+                       layout=go.Layout(annotations=norm_ann(banner() + [foot] + stage_ann(k) + stage_heads(k), 10)))
+              for k in range(N_STAGES)]
     lay.update(annotations=frames[-1].layout.annotations,
                updatemenus=[dict(type="buttons", showactive=False, x=0.98, y=1.0, yanchor="bottom", xanchor="right", pad=dict(b=22),
                                  direction="left", bgcolor=PANEL, bordercolor=MAGENTA, font=dict(color=INK),
                                  buttons=[dict(label="▶  Play", method="animate",
-                                               args=[[str(k) for k in range(5)], dict(frame=dict(duration=1600, redraw=True),
+                                               args=[[str(k) for k in range(N_STAGES)], dict(frame=dict(duration=1600, redraw=True),
                                                                 transition=dict(duration=0), mode="immediate")]),
                                           dict(label="Show all", method="animate",
-                                               args=[["4"], dict(mode="immediate", frame=dict(duration=0, redraw=True))])])])
+                                               args=[[str(N_STAGES - 1)], dict(mode="immediate", frame=dict(duration=0, redraw=True))])])])
     fig = go.Figure(data=frames[-1].data, layout=lay, frames=frames)
     return fig
 
@@ -719,25 +763,32 @@ def slide_fig(nodes, links, stats, story):
     lay = base_layout("From sandbox to SMS: one retention pipeline "
                       f"<span style='font-size:15px;color:{MUTED}'>(all synthetic)</span>", top=95)
     sh, an = strip_shapes(stats, 0.70, 0.99, plot_h=733)
-    tr = sankey_trace(nodes, links, 4, domain=dict(x=[0.0, 0.70], y=[0.0, 0.58]), font_size=11)
+    tr = sankey_trace(nodes, links, N_STAGES - 1, domain=dict(x=[0.0, 0.70], y=[0.0, 0.58]), font_size=10)
     bub = [wrap(story["message_en"], 32)] if story["message_en"] else []
     ps, pa = phone_shapes(0.80, 0.0, 0.19, 0.62, bub, lang_tags=[f"{story['account_id']} (synthetic)"], plot_w=1540, plot_h=733)
     heads = [dict(xref="paper", yref="paper", x=x, y=0.615, xanchor=xa, yanchor="bottom", text=t, showarrow=False,
                   font=dict(color=MUTED, size=11, family=FONT))
-             for x, xa, t in [(0.0, "left", "ACCOUNTS"), (0.168, "center", "MODEL A FLAG"), (0.336, "center", "CHOSEN ACTION"),
-                              (0.504, "center", stats["funnel"]["col3_head"]), (0.70, "right", "MESSAGE")]]
+             for x, xa, t in [(0.0 if c == 0 else (0.70 if c == len(XS) - 1 else XS[c] * 0.70),
+                               "left" if c == 0 else ("right" if c == len(XS) - 1 else "center"), h)
+                              for c, h in enumerate(col_heads(stats))]]
     foot = footnote(f"Synthetic. Model A = tm-churn churn_scores.csv; flagged = its top 10% (p ≥ {stats['funnel']['flag_cut']:.3f}). Actions = Model B (tm-offers). "
-                    "Message ready = drafted + validated, nothing sent. † judge-provided stand-in credit.<br>Held-out Model A: top 10% catches 62% of "
+                    "Offered = any EV-positive action, not only flagged. Message ready = drafted + validated, nothing sent. † stand-in credit. "
+                    "* other language: English default, no template.<br>Held-out Model A: top 10% catches 62% of "
                     "churners (oracle 64%, 3+ calls rule 53%), AUC 0.853.")
     lay.update(shapes=sh + ps + arrow_shapes(0.725, 0.79, 0.31), annotations=an + pa + heads + banner() + [foot])
     return go.Figure(data=[tr], layout=lay)
 
 
+SIM_ENRICH = {"recent_job_change": "job change", "income_band": "income band"}
+REAL_HOUSEHOLD = ["n_lines", "is_family_plan", "likely_kid_flag", "n_kid_lines", "kid_age_band", "promo_months_remaining",
+                  "contract_or_financing_months_remaining"]
+
+
 def enrich_card_text(e):
-    c = set(e.columns)
-    have = [n for k, n in (("recent_job_change", "job change"), ("income_band", "income band")) if k in c]
-    txt = "enrichment (simulated): " + ", ".join(have) if have else "enrichment: planned"
-    return txt + ";<br>finer kid age band: planned"
+    have = [n for k, n in SIM_ENRICH.items() if k in e.columns]
+    if not have:
+        return "enrichment (simulated): none in enrichment.csv"
+    return "<i>Enrichment (simulated): " + ", ".join(have) + "<br>context only, not used in decision</i>"
 
 
 def whatif_data(d, m):

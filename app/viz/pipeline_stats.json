@@ -1,6 +1,6 @@
 {
  "note": "All customers and numbers are synthetic. Counts computed from harness/out CSVs at build time.",
- "built_at": "2026-10-17 19:38:25 America/Los_Angeles",
+ "built_at": "2026-10-17 19:42:39 America/Los_Angeles",
  "inputs": {
   "churn_scores": {
    "path": "/workspace/tmobile/TM-Dubhacks26/harness/out/churn_scores.csv",
@@ -108,7 +108,7 @@
    "$75-100k": 636,
    "$150-200k": 485
   },
-  "card_text": "enrichment (simulated): job change, income band;<br>finer kid age band: planned",
+  "card_text": "<i>Enrichment (simulated): job change, income band<br>context only, not used in decision</i>",
   "provenance": "harness/enrichment.py docstring: job change + income synthetic (BLS JOLTS / ACS B19001 marginals); family plan + kid lines/age band derived from real sandbox lines.member_role."
  },
  "features": {
@@ -248,53 +248,63 @@
   },
   {
    "from": "Flagged at-risk  505",
-   "to": "$25 credit + fix-first\u2020  274",
-   "value": 259
+   "to": "Retention offer (from flagged)  457",
+   "value": 457
   },
   {
    "from": "Flagged at-risk  505",
-   "to": "Fix-first callback  359",
-   "value": 171
-  },
-  {
-   "from": "Flagged at-risk  505",
-   "to": "$25 care credit\u2020  26",
-   "value": 14
-  },
-  {
-   "from": "Flagged at-risk  505",
-   "to": "Step-up plan  356",
-   "value": 13
-  },
-  {
-   "from": "Flagged at-risk  505",
-   "to": "Do nothing  4,027",
+   "to": "Do nothing (flagged)  48",
    "value": 48
   },
   {
    "from": "Not flagged  4,537",
+   "to": "Upgrade / fix offer (from the rest, EV-positive)  558",
+   "value": 558
+  },
+  {
+   "from": "Not flagged  4,537",
+   "to": "Do nothing (rest)  3,979",
+   "value": 3979
+  },
+  {
+   "from": "Retention offer (from flagged)  457",
+   "to": "$25 credit + fix-first\u2020  274",
+   "value": 259
+  },
+  {
+   "from": "Retention offer (from flagged)  457",
+   "to": "Fix-first callback  359",
+   "value": 171
+  },
+  {
+   "from": "Retention offer (from flagged)  457",
+   "to": "$25 care credit\u2020  26",
+   "value": 14
+  },
+  {
+   "from": "Retention offer (from flagged)  457",
+   "to": "Step-up plan  356",
+   "value": 13
+  },
+  {
+   "from": "Upgrade / fix offer (from the rest, EV-positive)  558",
    "to": "$25 credit + fix-first\u2020  274",
    "value": 15
   },
   {
-   "from": "Not flagged  4,537",
+   "from": "Upgrade / fix offer (from the rest, EV-positive)  558",
    "to": "Fix-first callback  359",
    "value": 188
   },
   {
-   "from": "Not flagged  4,537",
+   "from": "Upgrade / fix offer (from the rest, EV-positive)  558",
    "to": "$25 care credit\u2020  26",
    "value": 12
   },
   {
-   "from": "Not flagged  4,537",
+   "from": "Upgrade / fix offer (from the rest, EV-positive)  558",
    "to": "Step-up plan  356",
    "value": 343
-  },
-  {
-   "from": "Not flagged  4,537",
-   "to": "Do nothing  4,027",
-   "value": 3979
   },
   {
    "from": "$25 credit + fix-first\u2020  274",
@@ -423,7 +433,7 @@
   },
   {
    "from": "Family  431",
-   "to": "Message ready, other  43",
+   "to": "Message ready, other (English default)*  43",
    "value": 25
   },
   {
@@ -438,7 +448,7 @@
   },
   {
    "from": "Couple  195",
-   "to": "Message ready, other  43",
+   "to": "Message ready, other (English default)*  43",
    "value": 7
   },
   {
@@ -453,7 +463,7 @@
   },
   {
    "from": "Single  157",
-   "to": "Message ready, other  43",
+   "to": "Message ready, other (English default)*  43",
    "value": 3
   },
   {
@@ -468,7 +478,7 @@
   },
   {
    "from": "Small business  109",
-   "to": "Message ready, other  43",
+   "to": "Message ready, other (English default)*  43",
    "value": 5
   },
   {
@@ -483,7 +493,7 @@
   },
   {
    "from": "Student  81",
-   "to": "Message ready, other  43",
+   "to": "Message ready, other (English default)*  43",
    "value": 1
   },
   {
@@ -498,13 +508,18 @@
   },
   {
    "from": "Senior  42",
-   "to": "Message ready, other  43",
+   "to": "Message ready, other (English default)*  43",
    "value": 2
   },
   {
-   "from": "Do nothing  4,027",
+   "from": "Do nothing (flagged)  48",
    "to": "No message  4,027",
-   "value": 4027
+   "value": 48
+  },
+  {
+   "from": "Do nothing (rest)  3,979",
+   "to": "No message  4,027",
+   "value": 3979
   }
  ],
  "standin_actions": [
@@ -690,6 +705,17 @@
    "3 lines on account"
   ],
   "drivers": [],
+  "household": [
+   "Family plan: yes \u00b7 3 lines",
+   "Kid lines: 0 \u00b7 youngest kid band: none (from line role)",
+   "Promo months remaining: 0",
+   "Contract or financing months remaining: 2",
+   "Next plan up: Beyond, +$45/mo"
+  ],
+  "simulated": [
+   "Recent job change: no  (BLS base rate)",
+   "Income band: $100-150k  (ACS national distribution)"
+  ],
   "elig": [
    [
     "do nothing",
@@ -756,11 +782,12 @@
    "Kid lines on the account: 0 child, 0 teen  [sandbox lines.member_role]"
   ],
   "enrichment_shown": [
-   "Recent job change: no  [enrichment (simulated), BLS base rate]",
-   "Income band: $100-150k  [enrichment (simulated), ACS national distribution]",
-   "Finer kid age band: planned enrichment (kid lines themselves are real sandbox data, step 1)",
-   "Next plan up: Beyond, +$45/mo  [sandbox plans table]",
-   "Used only to pick the offer. Never written into the message."
+   "Family plan: yes \u00b7 3 lines",
+   "Kid lines: 0 \u00b7 youngest kid band: none (from line role)",
+   "Promo months remaining: 0",
+   "Contract or financing months remaining: 2",
+   "Next plan up: Beyond, +$45/mo",
+   "Never written into the message."
   ]
  }
 }
