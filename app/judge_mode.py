@@ -143,7 +143,7 @@ def _metrics_row(h: dict) -> None:
     a, b, c, d = st.columns(4)
     a.metric("Customers scored", f"{h['accounts']:,}")
     b.metric("Expected to leave in 90 days", f"{h['rate']:.1%}", help="Simulated labels calibrated to T-Mobile's public ~1%/month postpaid churn.")
-    c.metric("Riskiest 10% hold", f"{h['top10_capture']:.0%} of leavers")
+    c.metric("Share of leavers in the riskiest 10%", f"{h['top10_capture']:.0%}")
     d.metric("Left alone on purpose", f"{h['quiet']:,}")
 
 
@@ -327,9 +327,12 @@ def why_this_customer(titles: dict) -> None:
         )
     with right:
         st.markdown(f"### {title_for(pick, titles)}")
-        m1, m2 = st.columns(2)
-        m1.metric("Risk of leaving, 90 days", _risk_text(risk))
-        m2.metric("Decision", action)
+        st.metric("Risk of leaving, 90 days", _risk_text(risk))
+        st.markdown(
+            f"<div style='font-size:1.25rem;font-weight:700;margin:4px 0 8px'>Decision: "
+            f"<span style='color:{COLORS['magenta']}'>{bubble_html(action)}</span></div>",
+            unsafe_allow_html=True,
+        )
         if why:
             st.write(why)
         shown = [r for r in risks if isinstance(r, str) and r]
@@ -430,7 +433,7 @@ def says_wait(titles: dict) -> None:
 # ---------- beat 4 --------------------------------------------------------------------------------
 
 
-def proof(strategy_figure) -> None:
+def proof(_strategy_figure=None) -> None:
     h = headline()
     st.subheader("Proof, and what it isn't")
     st.markdown(
@@ -445,7 +448,6 @@ def proof(strategy_figure) -> None:
     )
     compared = pd.read_csv(ROOT / "demo_data" / "comparison.csv")
     compared = compared.loc[~compared["strategy"].astype(str).str.match(r"^\s*\d+[a-z]\.")]
-    st.plotly_chart(strategy_figure(compared), width="stretch", config={"staticPlot": True, "displayModeBar": False})
     view = pd.DataFrame(
         {
             "Strategy": compared["strategy"].str.replace(r"^\d+\.\s*", "", regex=True),
@@ -455,13 +457,56 @@ def proof(strategy_figure) -> None:
             "Leavers reached": compared["churners_reached"].map(lambda v: f"{int(v)}"),
         }
     )
+    st.markdown("**Same assumptions, different strategies (simulated)**")
     st.dataframe(view, hide_index=True, width="stretch")
-    st.caption("Simulated, with the same assumptions for every strategy. Not measured lift.")
-    charts = ((ROOT / "app" / "charts" / "02_cumulative_gain.png", "Cumulative gain vs the 3+ calls rule"),
-              (ROOT / "app" / "charts" / "03_calibration.png", "Calibration: does 20% risk mean 20%?"))
-    cols = st.columns(2)
-    for col, (path, label) in zip(cols, charts):
-        with col:
-            st.markdown(f"**{label}**")
-            if path.exists():
-                st.image(str(path), width="stretch")
+    st.caption(
+        "Metrics that don't depend on an assumed save rate. Simulated net value for each strategy is in the appendix "
+        "(Model evidence). Not measured lift."
+    )
+    gain, calib = _gain_and_calibration()
+    left, right = st.columns(2)
+    with left:
+        fig = go.Figure()
+        for name, color in (("Our model", COLORS["magenta"]), ("3+ support calls rule", "#8A7B84"), ("Random", "#C8B8C2")):
+            part = gain.loc[gain["curve"] == name]
+            fig.add_trace(go.Scatter(x=part["contacted"], y=part["caught"], mode="lines", name=name,
+                                     line=dict(color=color, width=3 if name == "Our model" else 2,
+                                               dash="dot" if name == "Random" else None)))
+        fig.add_vline(x=0.10, line_dash="dot", line_color=COLORS["ink"])
+        fig.update_layout(title="Call 10% of customers, catch this share of leavers", legend=dict(orientation="h", y=-0.25))
+        fig.update_xaxes(tickformat=".0%", title="Share of customers contacted, riskiest first")
+        fig.update_yaxes(tickformat=".0%", title="Share of leavers caught")
+        chart(fig, height=380)
+    with right:
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=calib["group"], y=calib["predicted"], name="Predicted", marker_color=COLORS["magenta"]))
+        fig.add_trace(go.Bar(x=calib["group"], y=calib["actual"], name="Actual (simulated)", marker_color=COLORS["ink"]))
+        fig.update_layout(title="Does 20% risk mean 20%? (calibration)", barmode="group", legend=dict(orientation="h", y=-0.25))
+        fig.update_xaxes(title="Risk group, lowest to highest")
+        fig.update_yaxes(tickformat=".0%", title="90-day churn")
+        chart(fig, height=380)
+
+
+@st.cache_data(show_spinner=False)
+def _gain_and_calibration() -> tuple[pd.DataFrame, pd.DataFrame]:
+    oof = pd.read_csv(ROOT / "demo_data" / "churn_oof_pred.csv")
+    labels = pd.read_csv(ROOT / "demo_data" / "labels.csv")[["account_id", "churn_90d"]]
+    support = pd.read_csv(ROOT / "demo_data" / "features.csv", usecols=["account_id", "support_90d"])
+    joined = oof.merge(labels, on="account_id").merge(support, on="account_id", how="left")
+    total = max(float(joined["churn_90d"].sum()), 1.0)
+    rows = []
+    n = len(joined)
+    for name, order in (
+        ("Our model", joined.sort_values("p_churn_90d", ascending=False)),
+        ("3+ support calls rule", joined.sort_values(["support_90d", "p_churn_90d"], ascending=[False, True])),
+    ):
+        caught = order["churn_90d"].cumsum().to_numpy() / total
+        for step in range(0, 101):
+            k = int(round(step / 100 * n))
+            rows.append({"curve": name, "contacted": step / 100, "caught": float(caught[k - 1]) if k else 0.0})
+    for step in range(0, 101):
+        rows.append({"curve": "Random", "contacted": step / 100, "caught": step / 100})
+    ranked = joined.sort_values("p_churn_90d").reset_index(drop=True)
+    ranked["group"] = (ranked.index * 10 // n) + 1
+    calib = ranked.groupby("group").agg(predicted=("p_churn_90d", "mean"), actual=("churn_90d", "mean")).reset_index()
+    return pd.DataFrame(rows), calib

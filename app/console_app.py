@@ -592,7 +592,7 @@ def projections(console) -> None:
     upgrade_rate = c.slider("Upgrade acceptance among upgrade-now accounts", 0.0, 1.0, 0.2, 0.05)
     outcome = project(population, save_rate, 1.0, upgrade_rate)
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Sandbox reference score, 90-day churn", f"{outcome['baseline_rate']:.1%}")
+    m1.metric("Sandbox reference score", f"{outcome['baseline_rate']:.1%}")
     m2.metric("Projected, at this save rate", f"{outcome['projected_rate']:.1%}")
     m3.metric("Expected customers kept", f"{outcome['expected_saves']:.0f}")
     m4.metric("Projected upgrades", f"{outcome['projected_upgrades']:.0f}")
