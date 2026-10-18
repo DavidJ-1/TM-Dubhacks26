@@ -41,6 +41,7 @@ Every action a customer qualifies for is priced against doing nothing, which is 
 - Restraint you can check: most accounts get no text at all.
 - **The next version still pays at realistic save rates (simulated).** In the next version of the engine, we re-ran it assuming the roughly 10% save rate real retention campaigns report, texting retention offers only where they still pay off: 246 accounts. It breaks even at about 4.5%, below the roughly 6–11% that real retention campaigns have measured ([Verhelst et al. 2023](https://arxiv.org/abs/2312.07206); [Marketing Science 2018](https://doi.org/10.1287/mksc.2018.1099)). At 10% it comes out ahead in about 7 of 8 resamples, and at 5% it's a coin flip. When an offer isn't worth it, the engine picks doing nothing.
 - One customer moved to a cheaper plan with the same features.
+- **A fairness audit we'd run weekly (simulated).** In our synthetic test, texts reach accounts labeled senior or student about 3 points less often at the same risk. The savings receipt on the bill shows them a cheaper-plan line more often than others, because those matches skew their way. This is the audit we'd run weekly on real data.
 
 ## What we learned
 Contact can backfire, high risk isn't the same as persuadable, and a churn score is only an input. The useful part is choosing the action and explaining it.
