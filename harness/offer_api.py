@@ -2,7 +2,7 @@
 
     from offer_api import choose_offer, prepared_row
     row = prepared_row("ACC-PERSONA-21")          # engine-ready row (all fields evaluate_account needs)
-    row["port_out_inquiry_90d"] = False             # apply a UI toggle
+    row["port_out_inquiry"] = 0                     # apply a UI toggle
     out = choose_offer(row, p_churn=0.017)          # p_churn from churn_scorer.score_account on the toggled row
     out["action"], out["candidates"]                # chosen label + ranked candidate table (DataFrame)
 
@@ -59,6 +59,10 @@ def _engine():
     lt = pd.read_csv(_first("line_tradein.csv"))
     tv = lt[(lt["net_now_cents"] > 0) | ((lt["financing_balance_cents"] == 0) & (lt["tradein_value_now_cents"] > 0))]
     df["n_tradein_value_lines"] = df["account_id"].map(tv.groupby("account_id").size()).fillna(0).astype(int)
+    wcol = next((c for c in ("decision", "wait_verdict") if c in lt.columns), None)   # mirrors offers.prepare()
+    w = (lt[lt[wcol].astype(str) == "wait_until_payoff"] if wcol == "decision" else lt[lt[wcol] == "wait"]) \
+        if wcol else lt.iloc[0:0]
+    df["n_wait_lines"] = df["account_id"].map(w.groupby("account_id").size()).fillna(0).astype(int)
     return df.set_index("account_id", drop=False), cat["promotions"], plans
 
 

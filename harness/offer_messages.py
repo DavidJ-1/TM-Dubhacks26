@@ -72,7 +72,7 @@ def risk_phrase(f: pd.Series, action: str, lang: str) -> str:
             "care_credit_fix_first": ["network", "unresolved", "billing"],
             "fix_first": ["network", "unresolved", "billing"],
             "loyalty_credit": ["billing"], "right_size": ["billing"],
-            "step_up": ["usage"], "device_upgrade": ["device"], "family_upgrade": ["usage", "device"]}.get(action, [])
+            "step_up": ["usage"], "device_upgrade": ["device"], "family_upgrade": ["usage"]}.get(action, [])
     for k in pref:
         for kk, ph in cands:
             if kk == k:
@@ -110,6 +110,9 @@ def build_message(f: pd.Series, action: str, res: dict, promos: pd.DataFrame, pl
     why = risk_phrase(f, action, lang)
     why = why[:1].upper() + why[1:]
     calm = " Happy as is? No need to do anything." if en else " ¿Contento así? No tiene que hacer nada."
+    if action in ("step_up", "family_upgrade"):   # show the stay-as-is option (rubric R4 trade-off)
+        calm = (" Prefer to keep your plan? No need to do anything." if en
+                else " ¿Prefiere mantener su plan? No tiene que hacer nada.")
     P = plans.set_index("sku")
     cur = P.loc[f["plan_sku"]]
     n = int(f["n_lines"])
@@ -161,7 +164,7 @@ def build_message(f: pd.Series, action: str, res: dict, promos: pd.DataFrame, pl
         gives_en, gives_es = [], []
         if tgt["hotspot_high_speed_gb"] == 0 < cur["hotspot_high_speed_gb"]:
             gives_en.append("high-speed hotspot")
-            gives_es.append("el hotspot de alta velocidad")
+            gives_es.append("hotspot rápido")
         elif tgt["hotspot_high_speed_gb"] < cur["hotspot_high_speed_gb"]:
             gives_en.append(f"hotspot drops from {cur['hotspot_high_speed_gb']} GB to {tgt['hotspot_high_speed_gb']} GB")
             gives_es.append(f"hotspot de {cur['hotspot_high_speed_gb']} a {tgt['hotspot_high_speed_gb']} GB")
@@ -171,12 +174,20 @@ def build_message(f: pd.Series, action: str, res: dict, promos: pd.DataFrame, pl
         elif len(str(tgt["perks"] or "").split(",")) < len(str(cur["perks"] or "").split(",")):
             gives_en.append("some streaming perks")
             gives_es.append("algunos beneficios de streaming")
-        body = (f"You could pay {_money(diff)}/month less. {tgt['name']} has {_benefit(tgt, 'en')}, enough for how "
-                "you use it." + (f" What you'd give up: {', '.join(gives_en)}." if gives_en else "")
+        if pd.notna(cur.get("device_connection_cents")) and pd.isna(tgt.get("device_connection_cents")):
+            gives_en.append("watch/tablet lines")
+            gives_es.append("líneas de reloj/tableta")
+        if pd.notna(tgt["max_lines"]) and (pd.isna(cur["max_lines"]) or tgt["max_lines"] < cur["max_lines"]):
+            gives_en.append(f"more than {int(tgt['max_lines'])} lines")
+            gives_es.append(f"más de {int(tgt['max_lines'])} líneas")
+        body = (f"You could pay {_money(diff)}/month less: {tgt['name']} has {_benefit(tgt, 'en')}, enough for "
+                "your use." + (f" You'd give up: {', '.join(gives_en)}." if gives_en else "")
                 + " Reply YES to move, or ignore this to keep your plan."
-                if en else f"Podría pagar {_money(diff)} menos al mes. {tgt['name']} tiene {_benefit(tgt, 'es')}, "
+                if en else f"Podría pagar {_money(diff)} menos al mes: {tgt['name']} tiene {_benefit(tgt, 'es')}, "
                            "suficiente para su uso." + (f" Perdería: {', '.join(gives_es)}." if gives_es else "")
-                           + " Responda SÍ para cambiar o ignore este mensaje.")
+                           + " Responda SÍ para cambiar.")
+        if len(f"{hi}{body} {stop}") > MAX_LEN:   # long give-up list: drop the 'enough for your use' clause
+            body = body.replace(", enough for your use.", ".").replace(", suficiente para su uso.", ".")
     elif action == "step_up":
         tgt = P.loc[res["step_up"]["plan_sku"]]
         diff = plan_price_cents(tgt, n) - plan_price_cents(cur, n)
@@ -208,13 +219,12 @@ def build_message(f: pd.Series, action: str, res: dict, promos: pd.DataFrame, pl
             f"{tgt['hotspot_high_speed_gb']} GB hotspot per line"
         perk_es = "datos premium ilimitados en cada línea" if pd.notna(cur["data_cap_gb"]) else \
             f"{tgt['hotspot_high_speed_gb']} GB de hotspot por línea"
-        body = (f"{lines_en} {'are' if n > 1 else 'is'} on {cur['name']}. {tgt['name']} gives {perk_en} for "
-                f"{_money(diff)}/month more. A trade-in gets {_money(v['credit'] * 100)} in bill credits over "
-                f"{v['payout']} months toward a new phone.{calm} Reply YES for details."
+        # batch 7: plan move only; any phone trade-in is a separate offer, never bundled into this text
+        body = (f"{why}. {tgt['name']} gives {perk_en} for {_money(diff)}/month more for your {n} lines.{calm} "
+                "Reply YES to compare plans."
                 if en else
-                f"{lines_es} tiene{'n' if n > 1 else ''} {cur['name']}. {tgt['name']} le da {perk_es} por "
-                f"{_money(diff)} más al mes. Al entregar un teléfono recibe {_money(v['credit'] * 100)} en créditos "
-                f"en {v['payout']} meses.{calm} Responda SÍ para detalles.")
+                f"{why}. {tgt['name']} le da {perk_es} por {_money(diff)} más al mes para sus {n} líneas.{calm} "
+                "Responda SÍ para comparar planes.")
     elif action == "device_upgrade":
         pr = promos.loc[res["device_upgrade"]["promo"]]
         amt, months = _money(pr["value_cents"]), int(pr["payout_months"])
@@ -247,8 +257,9 @@ def build_message(f: pd.Series, action: str, res: dict, promos: pd.DataFrame, pl
     else:
         return ""
     msg = f"{hi}{body} {stop}"
-    if len(msg) > MAX_LEN and action == "family_upgrade":   # drop the optional current-plan sentence
-        msg = f"{hi}{body.split('. ', 1)[1]} {stop}"
+    if len(msg) > MAX_LEN and action in ("step_up", "family_upgrade"):   # long plan names: shorter stay-as-is line
+        short = " No need to do anything." if en else " No tiene que hacer nada."
+        msg = f"{hi}{body.replace(calm, short)} {stop}"
     return msg
 
 
@@ -282,7 +293,7 @@ def allowed_amounts(f: pd.Series, action: str, promos: pd.DataFrame, plans: pd.D
         ok.add(care["value_cents"] * (care["payout_months"] or 1) / 100)
     if action in ("loyalty_credit", "bill_shock_price_lock"):
         ok.add(loy)
-    if action in ("device_upgrade", "family_upgrade"):
+    if action == "device_upgrade":
         ok |= {promos.loc[s, "value_cents"] / 100 for s in ("PROMO-STUB-OLD-PHONE-UPGRADE", "PROMO-STUB-TRADEIN-ANY")}
     if action == "home_internet_bundle":
         ok.add(promos.loc["PROMO-STUB-BUNDLE-HINT", "value_cents"] / 100)
