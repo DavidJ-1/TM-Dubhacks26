@@ -65,53 +65,74 @@ def retention_net(o: pd.DataFrame, cands: pd.DataFrame, action_col: str) -> pd.S
     return pd.Series(out, index=o.index)
 
 
+def holdout_on() -> bool:
+    """Holdout is a flag column only; it changes the decision only when env TM_HOLDOUT is set (e.g. 0.2)."""
+    return bool(os.environ.get("TM_HOLDOUT"))
+
+
 def decide(o: pd.DataFrame, cands: pd.DataFrame, moments: pd.DataFrame | None, g=None) -> pd.DataFrame:
+    """decision in {text_now, wait_until <date>, already_leaving, receipt_only, silent} (+ 'silent (holdout)' only
+    when TM_HOLDOUT is set). When tm-models' guardrail is present, contact_ok gates EVERY contact (texts and port-out
+    save attempts) and their bill rule is already in it; our own bill_rule() is used only when it is absent."""
     o = o.copy()
-    if APPLY_BILL_RULE:
+    have_g = g is not None and "contact_ok" in g.columns
+    if APPLY_BILL_RULE and not have_g:
         br = gj.bill_rule(o, cands, g)
         o["final_action"], o["final_ev"], o["bill_rule_note"] = br.bill_rule_action.values, br.bill_rule_ev.values, \
             br.bill_rule_note.values
     else:
         o["final_action"], o["final_ev"], o["bill_rule_note"] = o.action_code, o.expected_value, ""
-    o["retention_net"] = retention_net(o, cands, "final_action").round(2)
     rs = receipt_sets()
     save_attempt = o.get("already_leaving_save_attempt", pd.Series("", index=o.index)).fillna("") != ""
-    # bill rule never rewrites a port-out save attempt (its own line)
     o.loc[save_attempt, ["final_action", "final_ev"]] = o.loc[save_attempt, ["action_code", "expected_value"]].values
-    o["retention_net"] = retention_net(o, cands, "final_action").round(2)
+    o = gj.join(o, g)
+    ok = o["tmm_contact_ok"].fillna(False).astype(bool) if have_g else pd.Series(True, index=o.index)
+    hold = (o["tmm_holdout"].fillna(False).astype(bool) if have_g and "tmm_holdout" in o else
+            pd.Series(False, index=o.index))
     wait = {}
-    if moments is not None and len(moments):
+    if have_g and "tmm_timing" in o:
+        wait = {a: str(d) for a, t, d in zip(o.account_id, o.tmm_timing, o.get("tmm_wait_until", "")) if t == "wait"}
+    elif moments is not None and len(moments):
         w = moments[moments.decision == "wait_until"]
         wait = {a: (AS_OF + pd.DateOffset(months=int(m))).date().isoformat()
                 for a, m in zip(w.account_id, w.wait_months)}
-    dec, wa = [], []
-    for aid, a, sa in zip(o.account_id, o.final_action, save_attempt):
-        if aid in wait and not sa:
+    contact = (o.final_action != "do_nothing") & ok
+    o.loc[~contact, ["final_action", "final_ev"]] = ["do_nothing", 0.0]   # guardrail-blocked picks send nothing
+    o["blocked_by_guardrail"] = (o.action_code != "do_nothing") & ~ok
+    o["retention_net"] = retention_net(o, cands, "final_action").round(2)
+    dec = []
+    for aid, c, sa, h in zip(o.account_id, contact, save_attempt, hold):
+        if c and h and holdout_on():
+            dec.append("silent (holdout)")
+        elif c and sa:
+            dec.append("already_leaving")
+        elif c and aid in wait:
             dec.append(f"wait_until {wait[aid]}")
-        elif a != "do_nothing":
+        elif c:
             dec.append("text_now")
         elif aid in rs["strict"] or aid in rs["lose_x"]:
             dec.append("receipt_only")
         else:
             dec.append("silent")
     o["decision"] = dec
+    o["holdout_flag"] = hold.values
     o["receipt_line_kind"] = ["strict_like_for_like" if a in rs["strict"] else "you_d_lose_x" if a in rs["lose_x"]
                               else "" for a in o.account_id]
-    o["in_headline"] = (o.decision == "text_now") & ~save_attempt
-    return gj.join(o, g)
+    k = o.decision.str.split(" ").str[0]
+    o["in_headline"] = k.isin(["text_now", "wait_until"])
+    return o
 
 
 UPSELLS = {"step_up", "family_upgrade", "device_upgrade", "home_internet_bundle"}
 
 
 def reconcile(o: pd.DataFrame) -> dict:
-    t = o[o.decision == "text_now"]
-    h = t[t.in_headline]
+    h = o[o.in_headline]
     ov = h.pick_override.fillna("")
     forced_ot = h[ov == "open_ticket"]            # FIX_FIRST_FORCE=all_open only (EV <= 0 forced contacts)
     up = h[h.final_action.isin(UPSELLS)]
     ret = h[~h.final_action.isin(UPSELLS)]
-    sa = o[o.get("already_leaving_save_attempt", pd.Series("", index=o.index)).fillna("") != ""]
+    sa = o[o.decision == "already_leaving"]
     return {
         "decision_counts": o.decision.str.split(" ").str[0].value_counts().to_dict(),
         "headline_contacts": int(len(h)),
@@ -133,6 +154,12 @@ def reconcile(o: pd.DataFrame) -> dict:
         "port_out_ev_sum_counted_ev_pos_only": round(float(sa.final_ev[sa.final_ev > 0].sum()), 2),
         "port_out_retention_net_ev_pos_only": round(float(sa.retention_net[sa.final_ev > 0].sum()), 2),
         "bill_rule": o.bill_rule_note.value_counts().to_dict(),
+        "blocked_by_guardrail": int(o.blocked_by_guardrail.sum()),
+        "blocked_by_guardrail_reasons": o.loc[o.blocked_by_guardrail, "tmm_block_reason"].value_counts().to_dict()
+        if "tmm_block_reason" in o else {},
+        "blocked_by_guardrail_actions": o.loc[o.blocked_by_guardrail, "action_code"].value_counts().to_dict(),
+        "holdout_flagged": int(o.holdout_flag.sum()), "holdout_applied": holdout_on(),
+        "wait_until": int(o.decision.str.startswith("wait_until").sum()),
         "receipt_only": int((o.decision == "receipt_only").sum()),
         "mean_kept_value_usd": round(float(o.customer_value_usd.mean()), 2),
         "data_note": "SYNTHETIC; port-out save attempts never in headline; their EV<=0 rows never in any net",
@@ -149,8 +176,10 @@ def main(argv=None):
     cands = pd.read_csv(out / "offer_candidates.csv")
     mp = Path(a.moments) if a.moments else out / "moment_decisions.csv"
     mom = pd.read_csv(mp) if mp.exists() else None
+    g = gj.load(out / "guardrail.csv")
     o = decide(o.drop(columns=[c for c in o.columns if c.startswith("tmm_") or c in (
-        "decision", "final_action", "final_ev", "bill_rule_note", "retention_net", "receipt_line_kind")]), cands, mom)
+        "decision", "final_action", "final_ev", "bill_rule_note", "retention_net", "receipt_line_kind",
+        "blocked_by_guardrail", "holdout_flag")]), cands, mom, g)
     o.to_csv(out / "offers.csv", index=False)
     rec = reconcile(o)
     (out / "one_decision_summary.json").write_text(json.dumps(rec, indent=1))

@@ -79,26 +79,58 @@ def test_receipt_limited_time(monkeypatch):
     assert not eng.receipt_item(r)["receipt_limited_time"]
 
 
-def test_one_decision_toy(monkeypatch):
-    o = pd.DataFrame({"account_id": ["A", "B", "C", "D", "E"],
-                      "action_code": ["perk_reminder", "fix_first", "do_nothing", "do_nothing", "check_in"],
-                      "expected_value": [2.0, 3.0, 0.0, 0.0, 1.0], "p_churn_90d": [.1] * 5,
-                      "customer_value_usd": [1000.0] * 5, "pick_override": [""] * 5,
-                      "already_leaving_save_attempt": [""] * 5})
-    cands = pd.DataFrame({"account_id": ["A", "A", "B", "E"],
-                          "action_code": ["perk_reminder", "care_credit", "fix_first", "check_in"],
-                          "eligible": ["True"] * 4, "expected_value": [2.0, 1.5, 3.0, 1.0],
-                          "save_rate": [.01, .02, .03, .01], "offer_cost": [.5, 25, 15, 2], "annoyance": [0, 1, 1, 1]})
-    g = pd.DataFrame({"account_id": ["A", "B", "C", "D", "E"], "contact_ok": [False] * 5,
-                      "block_reason": ["bill_change_no_fix"] * 2 + ["x"] * 3,
-                      "blocking_bill_change": [True, True, False, False, False]})
+def _toy():
+    o = pd.DataFrame({"account_id": ["A", "B", "C", "D", "E", "F"],
+                      "action_code": ["perk_reminder", "fix_first", "do_nothing", "do_nothing", "check_in", "check_in"],
+                      "expected_value": [2.0, 3.0, 0.0, 0.0, 1.0, -1.0], "p_churn_90d": [.1] * 6,
+                      "customer_value_usd": [1000.0] * 6, "pick_override": [""] * 5 + ["port_out"],
+                      "already_leaving_save_attempt": [""] * 5 + ["already leaving, one save attempt: check-in"]})
+    cands = pd.DataFrame({"account_id": ["A", "A", "B", "E", "F"],
+                          "action_code": ["perk_reminder", "care_credit", "fix_first", "check_in", "check_in"],
+                          "eligible": ["True"] * 5, "expected_value": [2.0, 1.5, 3.0, 1.0, -1.0],
+                          "save_rate": [.01, .02, .03, .01, .01], "offer_cost": [.5, 25, 15, 2, 2],
+                          "annoyance": [0, 1, 1, 1, 1]})
+    return o, cands
+
+
+def test_one_decision_bill_rule_without_guardrail(monkeypatch):
+    o, cands = _toy()
+    g = pd.DataFrame({"account_id": list("ABCDEF"), "blocking_bill_change": [True, True] + [False] * 4})
     monkeypatch.setattr(od, "receipt_sets", lambda: {"strict": {"C"}, "lose_x": set(), "source": []})
     mom = pd.DataFrame({"account_id": ["E"], "decision": ["wait_until"], "wait_months": [1]})
     r = od.decide(o, cands, mom, g).set_index("account_id")
     assert r.loc["A", "final_action"] == "care_credit" and r.loc["A", "bill_rule_note"] == "swapped_to_offsetting_credit"
     assert r.loc["B", "final_action"] == "fix_first"          # fix-only callbacks pass the bill rule
-    assert list(r.decision) == ["text_now", "text_now", "receipt_only", "silent", "wait_until 2026-11-01"]
-    assert "tmm_contact_ok" in r.columns and "tmm_block_reason" in r.columns   # join point
+    assert list(r.decision) == ["text_now", "text_now", "receipt_only", "silent", "wait_until 2026-11-01",
+                                "already_leaving"]
+    assert list(r.in_headline) == [True, True, False, False, True, False]
+
+
+def test_one_decision_guardrail_gates_every_contact(monkeypatch):
+    o, cands = _toy()
+    g = pd.DataFrame({"account_id": list("ABCDEF"), "contact_ok": [True, False, False, False, True, True],
+                      "block_reason": ["", "bill_change_no_fix", "receipt_only_plan_move", "not_worth_contacting",
+                                       "", ""],
+                      "timing": ["now", "now", "silent", "silent", "wait", "now"],
+                      "wait_until": ["", "", "", "", "2026-11-05", ""],
+                      "holdout": [True, False, False, False, False, False]})
+    monkeypatch.setattr(od, "receipt_sets", lambda: {"strict": {"C"}, "lose_x": set(), "source": []})
+    monkeypatch.delenv("TM_HOLDOUT", raising=False)
+    r = od.decide(o, cands, None, g).set_index("account_id")
+    assert list(r.decision) == ["text_now", "silent", "receipt_only", "silent", "wait_until 2026-11-05",
+                                "already_leaving"]
+    assert r.loc["B", "blocked_by_guardrail"] and r.loc["B", "final_action"] == "do_nothing"
+    assert r.loc["A", "holdout_flag"] and r.loc["A", "decision"] == "text_now"   # holdout: flag only by default
+    assert "tmm_contact_ok" in r.columns and "tmm_block_reason" in r.columns    # join point
+    monkeypatch.setenv("TM_HOLDOUT", "0.2")
+    r = od.decide(o, cands, None, g).set_index("account_id")
+    assert r.loc["A", "decision"] == "silent (holdout)"
+
+
+def test_engine_rules_hook_never_breaks_offers(monkeypatch, tmp_path, capsys):
+    monkeypatch.setitem(sys.modules, "experiments.engine_rules.apply_rules", None)   # import fails
+    assert eng.run_engine_rules(tmp_path) is False
+    assert "WARNING: engine rules skipped" in capsys.readouterr().out
 
 
 @pytest.fixture(scope="module")
@@ -144,5 +176,70 @@ def test_decision_column_if_present(offers):
     if "decision" not in offers:
         pytest.skip("one_decision.py not run on this output")
     k = offers.decision.str.split(" ").str[0]
-    assert set(k) <= {"text_now", "wait_until", "receipt_only", "silent"}
+    assert set(k) <= {"text_now", "wait_until", "receipt_only", "silent", "already_leaving"}
     assert (offers.loc[k == "silent", "final_action"] == "do_nothing").all()
+    if "tmm_contact_ok" in offers:   # guardrail gates every contact
+        sent = k.isin(["text_now", "wait_until", "already_leaving"])
+        assert offers.loc[sent, "tmm_contact_ok"].astype(bool).all()
+
+
+OUR_COLS = ["account_id", "decision", "channel", "decided_by_rule", "decision_reason", "offer_label", "offer_cost_usd",
+            "customer_saves_usd_mo", "receipt_line", "message_en", "message_es"]
+
+
+def _decisions():
+    p = OUT / "decisions.csv"
+    if not p.exists():
+        pytest.skip("decisions.csv not generated for this output")
+    return pd.read_csv(p, keep_default_na=False), pd.read_csv(OUT / "options.csv", keep_default_na=False)
+
+
+def test_decisions_file():
+    import decisions_out as dout
+    d, _ = _decisions()
+    assert list(d.columns[:len(OUR_COLS)]) == OUR_COLS
+    assert len(d) == 5042 and d.account_id.is_unique
+    assert set(d.decision) <= {"message", "receipt_only", "silent"}
+    assert set(d.channel) <= {"text", "in_app", "email", "call", "bill", "none"}
+    msg = d.decision == "message"
+    assert msg.sum() == 184                       # contact set = the policy guardrail's contact_ok accounts
+    assert (d.loc[d.decision == "receipt_only", "channel"] == "bill").all()
+    assert (d.loc[d.decision == "silent", "channel"] == "none").all()
+    assert (d.loc[~msg, "message_en"] == "").all() and (d.loc[msg, "message_en"] != "").all()
+    assert (d.loc[d.decision == "receipt_only", "receipt_line"] != "").all()
+    assert set(d.decided_by_rule.astype(int)) <= {1, 2, 3, 4, 5, 6}
+    for c in dout.TEXT_COLS:
+        assert not d[c].astype(str).str.contains(dout.FORBIDDEN).any(), c
+    # channel vs promise: only agent-call rows may promise a call
+    for c in ("message_en", "message_es", "offer_label"):
+        assert not ((d.channel != "call") & d[c].astype(str).str.contains(dout.CALL_PROMISE)).any(), c
+    for c in [c for c in dout.MONEY_TEXT_COLS if c in d.columns]:   # 'Show money' off: no company money in text
+        assert not d[c].map(dout.company_money).any(), c
+    if "guardrail_result" in d.columns:           # tm-models' ledger joined: their pass set == our message set
+        assert ((d.guardrail_result == "pass") == msg).all()
+
+
+def test_options_file():
+    d, o = _decisions()
+    assert set(o.account_id) == set(d.account_id)
+    assert (o.groupby("account_id").head(1).option_label == "Do nothing").all()
+    assert set(o.verdict) <= {"picked", "not_sent", "ruled_out"}
+    assert (o.loc[o.verdict == "ruled_out", "net_mid_usd"].astype(str) == "").all()
+    assert (o[o.verdict == "picked"].groupby("account_id").size() == 1).all()
+    import decisions_out as dout
+    assert not o.reason.map(dout.company_money).any()
+
+
+def test_fix_first_wording_templates():
+    import decisions_out as dout
+    for ch in ("text", "in_app", "email"):
+        for t in (dout.FIX_EN[ch], dout.FIX_ES[ch]):
+            assert not dout.CALL_PROMISE.search(t), (ch, t)
+            assert not dout.PERK.search(t)
+    assert "Reply STOP" in dout.FIX_EN["text"] and "STOP" in dout.FIX_ES["text"]
+    assert dout.no_call("A specialist can call you to fix it at a time that works for you.") == \
+        "Our team is working on your open request."
+    assert not dout.FORBIDDEN.search("We value a saved account at its own monthly margin times 19.3 months.")
+    assert dout.FORBIDDEN.search("a flat $1,478 per account")
+    assert dout.company_money("Expected net $42") and dout.company_money("same $25 credit plus the explanation")
+    assert not dout.company_money("Your bill went up $26.85 when a promo ended. Saves you $8/mo.")

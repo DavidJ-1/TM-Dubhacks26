@@ -156,7 +156,7 @@ CONFIG = {
                                        # (https://www.ofgem.gov.uk/sites/default/files/docs/2017/11/cmol_report_0.pdf,
                                        # https://www.ofgem.gov.uk/sites/default/files/docs/2019/09/cmoc_report_final_updated_template_0.pdf);
                                        # 3+ yr default-tariff customers 6.8% -> 12-13%. Range: RIGHT_SIZE_P_ACCEPT_RANGE.
-        "variant_switch":       0.10,  # ASSUMPTION / SYNTHETIC (was 0.70, uncited). Customer-has-to-act framing
+        "variant_switch":       0.10,  # TEAM ASSUMPTION (no public take rate for this offer; was 0.70, uncited). Customer-has-to-act framing
                                        # (our texts ask them to switch; nothing auto-applies). Ascarza et al. 2016
                                        # 1.5% (https://evaascarza.com/papers/ascarza_iyengar_schleicher_16.pdf);
                                        # Ofgem 2017 cheaper-deal letters 3.4%
@@ -258,7 +258,8 @@ CONFIG = {
     "CHECK_IN_COST": 2.0,               # $ (message + light agent follow-up). v2: only holds if digital: between
                                         # Gartner self-service $0.10-1.84 and assisted $8-13.50 (RESEARCH.md s12)
     "PERK_MIN_STREAMING_HOURS": 20.0,   # streaming_hours_3m_avg that makes an unused perk relevant
-    "HINT_MARGIN": 0.30,                # share of Home Internet revenue that is margin
+    "HINT_MARGIN": 0.30,                # share of Home Internet revenue that is margin. TEAM ASSUMPTION (unsourced;
+                                        # bundle is off in v2, so it moves no pick)
     "QUIET_APP_SESSIONS": 3,            # app_sessions_30d at or below = went quiet
     # --- mock churn model (used only when real churn_scores.csv is missing)
     "MOCK_MEAN_MONTHLY_HAZARD": 0.0099,  # calibrate mock to 0.99%/month like tm-data's synthetic labels
@@ -1434,7 +1435,39 @@ def main() -> pd.DataFrame:
     assert chosen.index.is_unique and len(chosen) == len(offers), "candidates: not exactly one chosen per account"
     assert (chosen.reindex(offers["account_id"]).values == offers["action"].values).all(), "candidates != offers"
     cands.to_csv(OUT_DIR / "offer_candidates.csv", index=False)
+    run_engine_rules()
     return offers
+
+
+def run_engine_rules(out_dir: Path | None = None) -> bool:
+    """tm-models' engine rules (experiments/engine_rules: guardrail, timing, holdout flag) on this run's outputs,
+    then the one-decision column and the UI file. Never breaks offers.py: any import/run error logs a warning.
+    Holdout is a FLAG only unless env TM_HOLDOUT (e.g. 0.2) is set (one_decision.py). decisions.csv / options.csv
+    come from decisions_out.py (contact set = the policy guardrail's 184, tm-models' ledger joined)."""
+    out_dir = Path(out_dir or OUT_DIR)
+    try:
+        if str(HERE.parent) not in sys.path:
+            sys.path.insert(0, str(HERE.parent))
+        from experiments.engine_rules.apply_rules import run as engine_rules_run
+        kw = {"holdout_share": float(os.environ["TM_HOLDOUT"])} if os.environ.get("TM_HOLDOUT") else {}
+        ow, rules, _ = engine_rules_run(engine_dir=out_dir, policy="engine", save_rate_scale=1.0, value_scale=1.0,
+                                        **kw)
+        ow.to_csv(out_dir / "offers_with_rules.csv", index=False)
+        rules[["account_id", "contact_ok", "block_reason", "why_line", "timing", "wait_until", "holdout",
+               "holdout_note", "text_send"]].to_csv(out_dir / "guardrail.csv", index=False)
+        rules.to_csv(out_dir / "guardrail_detail.csv", index=False)
+    except Exception as e:  # noqa: BLE001  (missing module, missing inputs, ...)
+        print(f"WARNING: engine rules skipped ({type(e).__name__}: {e}); offers.csv is unchanged")
+        return False
+    try:
+        import one_decision as od
+        import decisions_out as dout
+        od.main(["--out", str(out_dir)])
+        dout.main(["--out", str(out_dir)])
+    except Exception as e:  # noqa: BLE001
+        print(f"WARNING: one-decision / UI file skipped ({type(e).__name__}: {e})")
+        return False
+    return True
 
 
 if __name__ == "__main__":

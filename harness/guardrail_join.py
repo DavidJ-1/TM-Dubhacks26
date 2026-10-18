@@ -1,7 +1,7 @@
 """Join point for tm-models' do-not-contact guardrail (v2). ALL NUMBERS SYNTHETIC.
 
-tm-models owns the guardrail (scratch_models/economics/guardrail/guardrail.py, out/guardrail.csv + guardrail_detail.csv;
-read-only here, never edited). Two things live here:
+tm-models owns the guardrail (experiments/engine_rules/, never edited here). offers.py main() runs their apply_rules
+hook and writes OUT_DIR/guardrail.csv + guardrail_detail.csv; this module reads those (or TM_GUARDRAIL_DIR).
 
   join(offers)          left-joins whatever per-account columns tm-models publishes (today contact_ok, block_reason,
                         why_line; later timing, holdout) on account_id. Missing file -> columns absent, no crash.
@@ -20,15 +20,24 @@ from pathlib import Path
 
 import pandas as pd
 
-GUARDRAIL_DIR = Path(os.environ.get("TM_GUARDRAIL_DIR", "/workspace/tmobile/scratch_models/economics/guardrail/out"))
-JOIN_COLS = ("contact_ok", "block_reason", "why_line", "timing", "holdout")   # whichever exist
+_HERE = Path(__file__).resolve().parent
+
+
+def guardrail_dir() -> Path:
+    """TM_GUARDRAIL_DIR, else the engine's OUT_DIR (TM_OUT_DIR, else harness/out)."""
+    d = os.environ.get("TM_GUARDRAIL_DIR") or os.environ.get("TM_OUT_DIR")
+    return Path(d) if d else _HERE / "out"
+
+
+JOIN_COLS = ("contact_ok", "block_reason", "why_line", "timing", "wait_until", "holdout", "holdout_note",
+             "text_send")   # whichever exist
 # their OFFSETS set (credits that put money back against a higher bill) + fix-only callbacks (RULE=new)
 OFFSETS = {"bill_shock_price_lock", "loyalty_credit", "care_credit", "care_credit_fix_first", "keep_your_phone"}
 ALLOWED_ON_BILL_CHANGE = OFFSETS | {"fix_first"}
 
 
 def load(path: Path | None = None) -> pd.DataFrame | None:
-    p = Path(path) if path else GUARDRAIL_DIR / "guardrail.csv"
+    p = Path(path) if path else guardrail_dir() / "guardrail.csv"
     if not p.exists():
         return None
     g = pd.read_csv(p)

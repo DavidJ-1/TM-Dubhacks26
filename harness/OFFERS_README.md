@@ -222,3 +222,17 @@ Persona golden tests: `tests/test_persona_golden.py` (42 personas).
   bill-change rule on our picks, `retention_net`, `tmm_*` guardrail join columns (`harness/guardrail_join.py`).
 - `harness/moment_replay.py`: the only windowed wait allowed is a care credit gated by min_tenure_months, with the
   90-day support window re-counted from dated contacts.
+
+## decisions.csv + options.csv (v2, tm-design spec; synthetic numbers)
+`harness/decisions_out.py` (run by the engine-rules hook in `offers.py`, or `TM_OUT_DIR=<dir> python harness/decisions_out.py`)
+writes `decisions.csv` (5,042 rows, outreach_card order) and `options.csv` (do nothing first, then every option weighed).
+- Our columns: account_id, decision {message, receipt_only, silent}, channel {text, in_app, email, call, bill, none},
+  decided_by_rule (`harness/RULEBOOK.md`), decision_reason, offer_label, offer_cost_usd, customer_saves_usd_mo,
+  receipt_line, message_en, message_es.
+- Contact set = the policy guardrail's 184 (`experiments/engine_rules/out/demo/guardrail_detail.csv`, env
+  `TM_POLICY_GUARDRAIL`). Open ticket: perk reminder becomes fix-first (25). Message text = the outreach card's wording,
+  with any call promise removed unless the channel is call (env `TM_OUTREACH_DIR`).
+- tm-models' ledger (guardrail_result/note, save_rate_*, net_*, why_*, already_leaving(+note), in_holdout, timing,
+  wait_until, newest event) is joined from the v2 working tree at build time
+  (`/workspace/tmobile/v2-efficacy/experiments/ledger/ledger.csv`, env `TM_LEDGER_DIR`), never computed here.
+- `fix_first_digital.csv`: fix-first accounts whose channel is not call (for rebooking the callback cost).

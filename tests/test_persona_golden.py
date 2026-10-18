@@ -144,7 +144,8 @@ def check(pid: int, offers: pd.DataFrame, lt: pd.DataFrame | None) -> tuple[bool
 def _src() -> Path:
     if (OUT / "offers.csv").exists():
         return OUT
-    if (DEMO / "offers.csv").exists():
+    # the tracked demo_data copy is frozen (pre-v2); use it only if it carries the v2 schema, never stale outputs
+    if (DEMO / "offers.csv").exists() and "in_headline" in pd.read_csv(DEMO / "offers.csv", nrows=1).columns:
         return DEMO
     pytest.skip("run harness/offers.py first (no harness/out or demo_data offers.csv)")
 
