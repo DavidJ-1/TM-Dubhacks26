@@ -500,23 +500,35 @@ def breakdown(b0: float, C: pd.Series, p: float, Z: pd.Series | None = None, k: 
     return base, top.reset_index(drop=True), rest, overlap, p * 100
 
 
-def _tower(base, top, rest, overlap, p_now, key) -> go.Figure:
+def _tower(base, top, rest, overlap, p_now, key, hl: str | None = None, hl_old: float | None = None,
+           hl_delta: float | None = None) -> go.Figure:
+    """hl (optional): feature whose block moved (the 'Other' block when it isn't in the top): drawn solid magenta at its
+    new height, a dashed grey outline at its old height (hl_old pts), and a callout with the signal's own change this
+    event (hl_delta, points; 'new' when it contributed nothing before). The total risk change is the header chip's."""
     cols = [("Typical customer", "base", base, 0.0)]
     cum = base
+    hl_i = None
     for _, t in top.iterrows():
+        if hl is not None and t.feat == hl:
+            hl_i = len(cols)
         cols.append((t.label, t.lane, t.pts, cum))
         cum += t.pts
     if abs(rest + overlap) >= 0.005:
+        if hl is not None and hl_i is None:
+            hl_i = len(cols)
         cols.append(("Other small signals + overlap", "Other", rest + overlap, cum))
     cols.append(("This customer", "total", p_now, 0.0))
     lane_y = {"Commerce": 0, "Customer": 1, "Live": 2, "Other": 1, "base": 1, "total": 1}
     fig, W = go.Figure(), 0.36
     ex, ey, ez, ann = [], [], [], []
+    hx, hy, hz = [], [], []
     for i, (lab, lane, v, z0) in enumerate(cols):
         x, y = float(i), lane_y[lane]
         lo, hi = ((0.0, v) if lane in ("base", "total") else ((z0, z0 + v) if v >= 0 else (z0 + v, z0)))
         hi = max(hi, lo + 0.012)
         color = {"base": "#D9D3C9", "total": INK, "Other": BG}.get(lane, MAG if v > 0 else "#FFFFFF")
+        if i == hl_i:
+            color = MAG
         X = [x - W, x + W, x + W, x - W] * 2
         Y = [y - W, y - W, y + W, y + W] * 2
         Z = [lo] * 4 + [hi] * 4
@@ -527,6 +539,17 @@ def _tower(base, top, rest, overlap, p_now, key) -> go.Figure:
                                 f"{esc(lab)}<br>{v:.2f}%<extra></extra>", showscale=False))
         for a, b in [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)]:
             ex += [X[a], X[b], None]; ey += [Y[a], Y[b], None]; ez += [Z[a], Z[b], None]
+            if i == hl_i and hl_old is not None:   # dashed grey outline: the same block at its old height
+                g = 0.04
+                OX = [x - W - g, x + W + g, x + W + g, x - W - g] * 2
+                OY = [y - W - g, y - W - g, y + W + g, y + W + g] * 2
+                olo, ohi = (z0, z0 + hl_old) if hl_old >= 0 else (z0 + hl_old, z0)
+                OZ = [olo] * 4 + [max(ohi, olo + 0.012)] * 4
+                hx += [OX[a], OX[b], None]; hy += [OY[a], OY[b], None]; hz += [OZ[a], OZ[b], None]
+        if i == hl_i and hl_delta is not None:
+            ann.append(dict(x=x, y=y, z=hi, text=f"<b>{'new' if hl_old is not None and abs(hl_old) < 0.005 else 'moved'} this event</b> · {hl_delta:+.2f} pts", showarrow=True, arrowhead=0, arrowwidth=1,
+                            arrowcolor=MAG, ax=40, ay=-30, font=dict(family="SM", size=10, color=MAG), bgcolor="#fff",
+                            bordercolor=MAG, borderwidth=1, borderpad=3))
         if lane in ("base", "total"):
             ann.append(dict(x=x, y=y, z=hi, text=f"<b>{'TYPICAL' if lane == 'base' else 'THIS CUSTOMER'}</b><br>{pct(v)}",
                             showarrow=True, arrowhead=0, arrowwidth=1, arrowcolor=INK, ax=0, ay=-40,
@@ -537,6 +560,8 @@ def _tower(base, top, rest, overlap, p_now, key) -> go.Figure:
         cx += [i + W, i + 1 - W, None]; cy += [lane_y[cols[i][1]], lane_y[lane], None]; cz += [run, run, None]
         run += v
     fig.add_trace(go.Scatter3d(x=ex, y=ey, z=ez, mode="lines", line=dict(color=INK, width=1.6), hoverinfo="skip", showlegend=False))
+    if hx:
+        fig.add_trace(go.Scatter3d(x=hx, y=hy, z=hz, mode="lines", line=dict(color=MUTED, width=2, dash="dash"), hoverinfo="skip", showlegend=False))
     fig.add_trace(go.Scatter3d(x=cx, y=cy, z=cz, mode="lines", line=dict(color=INK, width=1.4, dash="dash"), hoverinfo="skip", showlegend=False))
     for n in range(min(3, len(top))):
         t, i = top.loc[n], n + 1
@@ -580,7 +605,7 @@ def _facts(r) -> dict[str, list[tuple[str, str]]]:
         "Customer": [("Months with us", num("tenure_months")), ("Account type", str(r.get("segment", "")).title() or None),
                      ("Support contacts, 90 days", num("support_90d")), ("Unresolved, 90 days", num("unresolved_90d")),
                      ("Unhappy contacts, 90 days", num("negative_contacts_90d")), ("Asked about cancelling, 270 days", num("cancel_inquiries_270d")),
-                     ("Prefers", str(r.get("contact_preference", "")) or None), ("Language", str(r.get("language", "")).upper() or None)],
+                     ("Prefers", PREF_WORDS.get(str(r.get("contact_preference", "")).strip().lower(), str(r.get("contact_preference", ""))) or None), ("Language", str(r.get("language", "")).upper() or None)],
         "Live": [("Comparing carriers (0-1)", num("competitor_research_score", "{:.2f}")), ("Asked about transferring number", yes("port_out_inquiry")),
                  ("App sessions, 30 days", num("app_sessions_30d")), ("Data use vs 3 mo ago", num("data_growth_pct", "{:+.0f}%", 100)),
                  ("Data per month, GB", num("data_gb_3m_avg", "{:.1f}"))],
@@ -643,7 +668,8 @@ INPUT_VALUES: dict[str, Callable] = {  # considerations item -> this customer's 
 }
 
 
-def _inputs_html(r, inputs: pd.DataFrame) -> tuple[str, int, int]:
+def _inputs_html(r, inputs: pd.DataFrame, was: dict | None = None) -> tuple[str, int, int]:
+    """was (optional): {item: previous shown value}; those rows get a magenta left hairline and a grey 'was X'."""
     cols, shown, total = "", 0, 0
     for g, x in inputs.groupby("group", sort=False):
         name = re.sub(r"^\w+\.\s*(Inputs:\s*)?", "", str(g)).strip().title()
@@ -653,6 +679,14 @@ def _inputs_html(r, inputs: pd.DataFrame) -> tuple[str, int, int]:
             val = fn(r) if fn else None
             total += 1
             shown += val is not None
+            w = (was or {}).get(str(it.item))
+            if w is not None and val is not None:
+                a_, b_ = str(val).split(" ", 1) + [""], str(w).split(" ", 1) + [""]
+                nv_, ov_ = (a_[0], b_[0]) if a_[1] and a_[1] == b_[1] else (str(val), str(w))   # '−0.20 was −0.13'
+                nv_, ov_ = nv_.replace("-", "−"), ov_.replace("-", "−")
+                rows += (f"<div class='o-kv o-chg' style='border-left:2px solid {MAG};padding-left:8px;margin:3px 0'><span>{esc(str(it.item))}</span>"
+                         f"<span><span class='nv' style='color:{MAG}'>{esc(nv_)}</span> <span class='wv' style='color:{MUTED};font-size:12px'>was {esc(ov_)}</span></span></div>")
+                continue
             rows += (f"<div class='o-kv'><span>{esc(str(it.item))}</span><span>{esc(str(val)) if val is not None else '<i style=\"color:#6B675F\">not in this view</i>'}</span></div>")
         cols += f"<div class='col'><div class='gh'>{esc(name)} · {len(x)}</div>{rows}</div>"
     return cols, shown, total
@@ -760,6 +794,9 @@ def _bill_rule_pass(r, d=None) -> str:
     return "Bill went up, but this message is still allowed."
 
 
+PREF_WORDS = {"sms": "text", "text": "text", "app": "the app", "in_app": "the app", "email": "email", "call": "a phone call"}
+
+
 def outreach_rules(r, channel: str | None = None, d=None) -> list[tuple[str, str, str]]:
     """The outreach rules (from the outreach playbook), in order; the first one that stops us decides, and if none
     does we send. Returns (rule, status, detail) with status 'stop' (decides: no message), 'pass', 'info' (also true:
@@ -801,7 +838,7 @@ def outreach_rules(r, channel: str | None = None, d=None) -> list[tuple[str, str
         + ("we'll call to help fix their open issue." if (channel or "") == "call" else "we'll help fix their open issue."), "No open support issue.", kind="info")
     pref = sv("contact_preference")
     if pref:
-        add("We reach people the way they asked to be reached.", True, f"Prefers {pref}.", "", kind="note")
+        add("We reach people the way they asked to be reached.", True, f"Prefers {PREF_WORDS.get(pref.strip().lower(), pref)}.", "", kind="note")
     add("One proactive message per account at most.", True, "At most one message this run.", "", kind="note")
     return out
 
@@ -952,7 +989,7 @@ def _events_for(acc, events=None, decisions=None) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def _strip_html(e: pd.DataFrame, nv: dict) -> str:
+def _strip_html(e: pd.DataFrame, nv: dict, live: bool = False) -> str:
     if e is None or not len(e):
         return ""
     def d(x):
@@ -971,7 +1008,7 @@ def _strip_html(e: pd.DataFrame, nv: dict) -> str:
         tag = ""
     return (f"<div style='display:flex;align-items:baseline;gap:12px;border-bottom:1px solid #111;padding:7px 0'>"
             f"<span class='o-lbl' style='min-width:150px'>Latest on the account</span><span style='flex:1'>{items}</span>{tag}</div>"
-            f"<div style='text-align:right;font:400 10px SM;color:{MUTED};padding:3px 0 2px'>latest events from the account record, refreshed each run</div>")
+            f"<div style='text-align:right;font:400 10px SM;color:{MUTED};padding:3px 0 2px'>{"what if this happens next" if live else "latest events, refreshed each run"}</div>")
 
 
 def _why_when(r, nv, e) -> str:
@@ -1052,6 +1089,81 @@ def _options_html(r, candidates, nv, stop, options=None) -> str:
     return head + f"<div style='max-height:180px;overflow:auto;border-top:1px solid #111;margin-bottom:16px'>{rows}</div>"
 
 
+CSS_LIVE = """
+.o-live{border:1px solid var(--ink);background:#fff;margin:4px 0 14px}
+.o-live .hd{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--ink);padding:10px 14px}
+.o-live .chips{display:flex;flex-wrap:wrap;gap:8px;padding:12px 14px;border-bottom:1px solid var(--ink);min-height:52px;align-items:center}
+.o-live .chip{border:1px solid var(--ink);padding:5px 10px;font:400 13px 'SM'}
+.o-live .chip.new{background:var(--ink);color:#fff}
+.o-live .chip.todo{border-style:dashed;color:var(--muted);border-color:var(--muted)}
+.o-live .row{display:grid;grid-template-columns:1fr 1.25fr 1.5fr}
+.o-live .cell{padding:12px 14px;border-right:1px solid var(--ink)}
+.o-live .cell:last-child{border-right:0}
+.o-live .num{font:500 44px/1 'SG';letter-spacing:-.02em}
+.o-live .num small{font-size:20px}
+.o-live .delta{font:400 13px 'SM';color:var(--muted);margin-top:6px}
+.o-live .delta.up{color:var(--mag)}
+.o-live .txt{font:400 17px/1.35 'SG';margin-top:6px}
+.o-live .card{padding:0}
+.o-live .card .pk{font:500 26px/1.1 'SG';padding:12px 14px 6px}
+.o-live .card .pk.flip{background:var(--mag);color:#fff;padding:14px 14px 10px}
+.o-live .card .ws{font:400 15px/1.35 'SG';padding:6px 14px 12px}
+.o-live .ft{border-top:1px solid var(--ink);padding:8px 14px;font:400 12px 'SM';color:var(--muted)}
+"""
+
+
+def _live_go(state_key: str, i: int) -> None:
+    st.session_state[state_key] = i
+
+
+def render_live(rows: pd.DataFrame, *, show_money: bool = True, key: str = "orbit") -> None:
+    """'What if this happens next': a manual Next event / Reset strip over precomputed rows (one per event). Each press
+    adds one event; the risk, the reason that moved and the pick come from the rows as given (no math here)."""
+    rows = rows.sort_values("step").reset_index(drop=True)
+    acc = str(rows.account_id.iloc[0])
+    sk = f"{key}_live_{acc}"
+    n = len(rows) - 1
+    i = max(0, min(int(st.session_state.get(sk, 0)), n))
+    cur, first = rows.iloc[i], rows.iloc[0]
+    prev = rows.iloc[i - 1] if i > 0 else cur
+    st.markdown(f"<style>{CSS_LIVE}</style>", unsafe_allow_html=True)
+    chips = "".join(f"<span class='chip{' new' if j == i else ''}'>{j:02d} · {esc(str(rows.event_label[j]))}</span>"
+                    for j in range(1, i + 1))
+    chips += "".join(f"<span class='chip todo'>{j:02d} · ?</span>" for j in range(i + 1, n + 1))
+    r_now, r_prev = float(cur.risk) * 100, float(prev.risk) * 100
+    d = r_now - r_prev
+    delta = ("starting point" if i == 0 else f"{'+' if d >= 0 else '−'}{abs(d):.1f} pts vs before · was {pct(float(first.risk) * 100)} at the start")
+    if i == 0:
+        what = "Nothing new yet. Press Next event to see what happens."
+        moved = "Today's top reason: " + str(cur.reason_1 or "")
+    else:
+        what = str(cur.event_line or "")
+        moved = str(cur.reason_changed or "") or "No single reason stands out."
+    flipped = str(cur.pick) != str(first.pick)
+    pick = "Do nothing. No message is sent." if str(cur.pick) == "silent" else f"Send a {esc(str(cur.pick_label))}."
+    ev = ""
+    if show_money and str(cur.pick) == "message" and pd.notna(cur.get("policy_ev_usd")):
+        ev = f"<div class='ws' style='padding-top:0;color:{MUTED};font-size:13px'>Expected value, this customer only: +${float(cur.policy_ev_usd):,.2f}</div>"
+    note = ("This customer only: the week's totals above don't change."
+            if not show_money else "This customer only: the week's message count and dollars above don't change.")
+    st.markdown(f"""<div class='o-live'><div class='hd'><span class='o-ph' style='margin:0'>What if this happens next</span>
+<span class='o-lbl'>event {i} of {n}</span></div>
+<div class='chips'>{chips}</div>
+<div class='row'>
+<div class='cell'><div class='o-lbl'>90-day churn risk</div><div class='num'>{pct(r_now)[:-1]}<small>%</small></div>
+<div class='delta {"up" if d > 0 else ""}'>{esc(delta)}</div></div>
+<div class='cell'><div class='o-lbl'>{"What happened" if i else "Right now"}</div><div class='txt'>{esc(what)}</div>
+<div class='o-lbl' style='margin-top:10px'>{"Reason that moved" if i else "Why they score this"}</div><div class='txt'>{esc(moved)}</div></div>
+<div class='cell card'><div class='o-lbl' style='padding:12px 14px 0'>{"Decision flipped" if flipped else "What we'd do"}</div>
+<div class='pk{" flip" if flipped else ""}'>{pick}</div><div class='ws'>{esc(str(cur.why or ""))}</div>{ev}</div>
+</div><div class='ft'>{esc(note)}</div></div>""", unsafe_allow_html=True)
+    with st.container(key=f"orbit_live_nav_{key}"):
+        a, b, _ = st.columns([1.2, 1, 5])
+        a.button("Next event →", key=f"{sk}_next", disabled=i >= n, on_click=_live_go, args=(sk, i + 1), width="stretch",
+                 type="primary")
+        b.button("Reset", key=f"{sk}_reset", disabled=i == 0, on_click=_live_go, args=(sk, 0), width="stretch")
+
+
 def _go(state_key: str, i: int) -> None:
     st.session_state[state_key] = i
 
@@ -1059,7 +1171,8 @@ def _go(state_key: str, i: int) -> None:
 def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Callable | None = None,
                     candidates: pd.DataFrame | None = None, inputs: pd.DataFrame | None = None,
                     decisions: pd.DataFrame | None = None, options: pd.DataFrame | None = None,
-                    events: pd.DataFrame | None = None, show_money: bool = True, key: str = "orbit") -> None:
+                    events: pd.DataFrame | None = None, show_money: bool = True, key: str = "orbit",
+                    live: pd.DataFrame | None = None, tick: dict | None = None) -> None:
     """Act 2. contributions_fn(account_id, edits) -> (intercept_logit, contributions Series, p, standardized-values Series or None).
     candidates: every option row for this account (action, eligible, expected_value, blocked_or_ineligible_reason, is_chosen).
     events (optional): account_id, event_date, event_type[, event_text, timing, wait_until] for the 'Latest on the account' strip
@@ -1067,7 +1180,11 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
     decisions / options (optional, engine output): when given they drive step 3's verdicts, step 4's pick, reason
     and money bar; otherwise the outreach columns on df are used. Missing columns degrade quietly.
     inputs: the engine-input rows of the considerations table (groups 1a-1c: group, item); step 1 lists this customer's value for each.
-    show_money=False hides step 4's net-value bar; the customer's own savings (bill lines) stay."""
+    show_money=False hides step 4's net-value bar; the customer's own savings (bill lines) stay.
+    live (optional): precomputed 'what if this happens next' rows (step, event_label, event_line, risk, reason_changed,
+    pick, pick_label, why, policy_ev_usd) for the one account they belong to; renders the Next event / Reset strip.
+    tick (optional, 'the account ticks'): {risk (0-1), chip, was {item: old value}, hl (feature), reasons [(text, is_new)],
+    rail (callable drawing the event rail)}; the header, step 1 and step 2 then show that event's state."""
     _act("02 / 05", "One customer, step by step", "why this score · why this action")
     if account_id not in set(df.account_id):
         st.markdown(f"<div class='o-lbl'>No customer {esc(account_id)} in this data.</div>", unsafe_allow_html=True)
@@ -1093,20 +1210,30 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
         except Exception as e:  # noqa: BLE001
             print(f"[orbit] breakdown unavailable: {type(e).__name__}: {e}")
     p_now = bd[4] if bd else p_orig
+    if tick and tick.get("risk") is not None:
+        p_now = float(tick["risk"]) * 100
     base = bd[0] if bd else None
 
     was = f"<div class='was'>(what-if, was {pct(p_orig)})</div>" if edits and bd else ""
     lines = int(_n(r, "n_lines"))
-    sub = (f"typical customer {pct(base)} · " if base else "") + (f"risk rank {int(r.risk_rank):,} of {len(df):,}" if "risk_rank" in r else "")
+    if tick and tick.get("chip"):
+        was = f"<div class='was o-tk-chip' style='color:{MAG}'>{esc(tick['chip'])}</div>"
+    if tick and callable(tick.get("rail")):
+        tick["rail"]()
+    sub = (f"typical customer {pct(base)} · " if base else "") + (f"risk rank {int(r.risk_rank):,} of {len(df):,}" if "risk_rank" in r and not (tick and "step" in tick) else "")
+    sub = sub.rstrip(" ·")
+    an = (tick or {}).get("anim", "")   # CSS hook: set only on the run right after a Next event press
     st.markdown(f"""<div class='o-cust'><div><div class='o-lbl'>Customer {esc(cid(account_id))}</div>
 <div class='name'>{esc(str(r.get('segment', '')).title())} account · {(str(int(_n(r, 'tenure_months')) // 12) + ' yrs') if _n(r, 'tenure_months') >= 12 else (str(int(_n(r, 'tenure_months'))) + ' months')} with us · {lines} line{'s' if lines != 1 else ''}</div>
 <div class='sub'>{sub}</div></div>
-<div><div class='risk'>{pct(p_now)[:-1]}<small>%</small></div><div class='rl'>90-DAY CHURN RISK</div>{was}</div></div>""", unsafe_allow_html=True)
+<div class='{an}'><div class='risk o-tk-risk'>{pct(p_now)[:-1]}<small>%</small></div><div class='rl'>90-DAY CHURN RISK</div>{was}</div></div>""", unsafe_allow_html=True)
 
     events_df = _events_for(account_id, events, decisions)
-    strip = _strip_html(events_df, _next_version(r, decisions))
+    strip = _strip_html(events_df, _next_version(r, decisions), live=bool(tick and "step" in tick))
     if strip:
         st.markdown(strip, unsafe_allow_html=True)
+    if live is not None and len(live) and account_id in set(live.account_id):
+        render_live(live[live.account_id == account_id], show_money=show_money, key=key)
     with st.container(key=f"orbit_rail_{key}"):
         rc = st.columns(len(STEPS))
         for i, (c, name) in enumerate(zip(rc, STEPS)):
@@ -1117,9 +1244,9 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
     with panel:
         if step == 0:
             if inputs is not None and len(inputs):
-                cols, shown, total = _inputs_html(r, inputs)
+                cols, shown, total = _inputs_html(r, inputs, (tick or {}).get("was"))
                 st.markdown(f"<div class='o-ph'>Every input the engine uses, and this customer's value<small>{total} inputs</small></div>"
-                            f"<div class='o-know o-know-sm' style='margin-bottom:16px'>{cols}</div>", unsafe_allow_html=True)
+                            f"<div class='o-know o-know-sm {an}' style='margin-bottom:16px'>{cols}</div>", unsafe_allow_html=True)
             else:
                 g = _facts(r)
                 cols = "".join(f"<div class='col'><div class='gh'>{k}</div>" + "".join(
@@ -1133,15 +1260,28 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
                 b, top, rest, overlap, pn = bd
                 a, z = st.columns([1.5, 1], gap="large")
                 with a:
-                    st.plotly_chart(_tower(b, top, rest, overlap, pn, key), width="stretch", theme=None, config=CFG3D,
-                                    key=f"{key}_tower")
+                    tk = tick or {}
+                    st.plotly_chart(_tower(b, top, rest, overlap, pn, key, tk.get("hl"), tk.get("hl_old_pts"), tk.get("hl_delta")),
+                                    width="stretch", theme=None, config=CFG3D, key=f"{key}_tower")
                     st.markdown("<div class='o-hint'>drag to rotate · hover a block</div>", unsafe_allow_html=True)
                 with z:
-                    rows = "".join(f"<div class='o-drv'><span class='n'>{i + 1:02d}</span><span>{esc(t.label)} <span class='g'>· {t.lane}</span></span>"
+                    hlf = (tick or {}).get("hl")
+                    rows = "".join(f"<div class='o-drv'><span class='n'>{i + 1:02d}</span><span>{esc(t.label)} <span class='g'>· {t.lane}</span>"
+                                   + (f" <b style='color:{MAG};font:500 11px SM'>MOVED</b>" if hlf and t.feat == hlf else "") + "</span>"
                                    f"<span class='g' style='text-align:right'>{'raises' if t.pts > 0 else 'lowers'}</span>"
                                    f"<span class='p {'up' if t.pts > 0 else ''}'>{t.pts:+.2f} pts</span></div>" for i, t in top.iterrows())
                     rows += (f"<div class='o-drv'><span class='n'>··</span><span>Other small signals + overlap</span><span></span>"
                              f"<span class='p'>{rest + overlap:+.2f} pts</span></div>")
+                    if hlf and not any(t.feat == hlf for _, t in top.iterrows()):
+                        rows += f"<div class='o-lbl' style='margin-top:6px;color:{MAG}'>moved: inside other small signals</div>"
+                    if tick and tick.get("reasons"):
+                        same = bool(tick.get("same_signal"))
+                        tag = "new · moved" if same else "new reason"
+                        rows = "".join(f"<div class='o-drv'><span class='n'>{i + 1:02d}</span><span>{esc(t_)}</span><span></span>"
+                                       f"<span class='p up'>{tag if nw else ''}</span></div>" for i, (t_, nw) in enumerate(tick["reasons"])) \
+                            + ("" if same or not any(nw for _, nw in tick["reasons"]) else
+                               f"<div class='o-lbl' style='margin:6px 0 0'>The new reason is worded by reason group; the block marked moved is the single signal that changed most.</div>") \
+                            + "<div class='o-lbl' style='margin:14px 0 4px'>Biggest signals</div>" + rows
                     st.markdown(f"<div class='o-ph'>Typical {pct(b)} → this customer {pct(pn)}</div>{rows}", unsafe_allow_html=True)
         elif step == 2:
             nv = _next_version(r, decisions)
@@ -1149,9 +1289,14 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
             decide = f"<span style='color:{MAG};font-weight:700'>DECIDES</span>"
             mark = {"stop": f"<span style='color:{MAG};font-weight:700'>STOPS HERE</span>", "pass": "passes", "info": "also true",
                     "na": "doesn't apply", "note": "noted", "skip": "not reached"}
+            chg = set((tick or {}).get("rules_changed") or [])   # live mode: the rule whose verdict changed this event
+
             def _rrow(n, rule, s_, det, win=False):
-                return (f"<div class='o-opt {'win' if win or s_ == 'stop' else ''} {'off' if s_ == 'skip' else ''}' style='grid-template-columns:1.4fr 1.2fr 110px;padding:5px 0'>"
-                        f"<span>{n}{esc(rule)}</span><span class='why'>{esc(det)}</span><span class='v'>{decide if win else mark[s_]}</span></div>")
+                hi = rule in chg
+                return (f"<div class='o-opt {'win' if win or s_ == 'stop' else ''} {'off' if s_ == 'skip' else ''}' style='grid-template-columns:1.4fr 1.2fr 110px;padding:5px 0"
+                        + (f";border-left:3px solid {MAG};padding-left:8px;background:#fff" if hi else "") + "'>"
+                        f"<span>{n}{esc(rule)}" + (f" <b style='color:{MAG};font:500 11px SM'>CHANGED</b>" if hi else "")
+                        + f"</span><span class='why'>{esc(det)}</span><span class='v'>{decide if win else mark[s_]}</span></div>")
             rrows, sent_row = "", not any(s_ == "stop" for _, s_, _ in rl) and nv.get("kind") == "message"
             for i, (rule, s_, det) in enumerate(rl):
                 if sent_row and s_ in ("info", "na", "note"):   # once, right after the last rule that could stop us
@@ -1182,13 +1327,22 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
             if nv.get("leaving"):
                 when += (f"<div style='border-top:1px solid #111;padding:10px 14px'><div style='border:1px solid #111;padding:8px 12px'>"
                          f"<div class='o-lbl'>Asked us about leaving</div><div style='font:400 14px/1.4 SG;margin-top:4px'>{esc(nv['leaving'])}</div></div></div>")
-            st.markdown(f"<div class='o-dec' style='max-width:780px'><div class='hd'><span class='o-lbl'>What we picked</span></div>{big}{why}{when}{money}</div>",
+            tk = tick or {}
+            if tk.get("pick_note"):
+                ch_ = tk.get("flip_at") is not None and tk.get("step", 0) >= tk["flip_at"]
+                big = (f"<div class='o-lbl' style='padding:10px 14px 0;color:{MAG if ch_ else MUTED}'>{esc(tk['pick_note'])}</div>"
+                       + (big if ch_ else "<div class='big hero'>Still doing nothing.<br>No text is sent.</div>"))
+                if tk.get("ev"):
+                    money += f"<div style='border-top:1px solid #111;padding:8px 14px;font:400 13px SM;color:{MUTED}'>{esc(tk['ev'])}</div>"
+            flipc = " o-tk-flip" if (tk.get("is_flip") and an) else ""
+            st.markdown(f"<div class='o-dec{flipc}' style='max-width:780px'><div class='hd'><span class='o-lbl'>What we picked</span></div>{big}{why}{when}{money}</div>",
                         unsafe_allow_html=True)
             if nv["kind"] in ("message", "bill"):
                 m = _message_html(r, _drow(decisions, account_id), st.session_state.get(f"{key}_lang_{account_id}") or _pref_lang(r))
                 if m:
                     lab = "On the bill:" if nv["kind"] == "bill" else f"Sent {CHANNEL_PHRASE.get(nv['channel'], 'as a message')}:"
-                    st.markdown(f"<div class='o-lbl' style='margin:12px 0 6px'>{esc(lab)}</div>{m}", unsafe_allow_html=True)
+                    slide = " o-tk-slide" if ((tick or {}).get("is_flip") and an) else ""
+                    st.markdown(f"<div class='o-lbl' style='margin:12px 0 6px'>{esc(lab)}</div><div class='{slide}'>{m}</div>", unsafe_allow_html=True)
         elif step == 4:
             drow = _drow(decisions, account_id)
             lk = f"{key}_lang_{account_id}"
@@ -1203,7 +1357,8 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
             reason = str(r.get("reason_line", "") or "")
             head = "Why we're reaching out" if r.messaged else "Why we're not reaching out"
             top = f"<div class='o-lbl'>{head}</div><div class='o-ph'>{esc(_cap(reason))}</div>" if reason else ""
-            st.markdown(top + m, unsafe_allow_html=True)
+            slide = " o-tk-slide" if ((tick or {}).get("is_flip") and an) else ""
+            st.markdown(top + (f"<div class='{slide}'>{m}</div>" if m else ""), unsafe_allow_html=True)
         else:
             rel = [(k, lab) for k, lab, cond, _ in TOGGLES if cond(r)]
             st.markdown("<div class='o-ph'>Switch a fact off and the risk model re-scores live</div>", unsafe_allow_html=True)
