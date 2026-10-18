@@ -144,6 +144,7 @@ def clean_text(t) -> str:
     t = re.sub(r"(?i)\basked (us )?about porting (their |the |a )?number( out)?\b", "Asked us about transferring their number", t)
     t = re.sub(r"(?i)\bport(ing)?[- ]out\b", "number transfer", t)
     t = re.sub(r"(?i)\bporting\b", "transferring", t)
+    t = re.sub(r"no-income upgrade model('|&#x27;)s top", r"simulated upgrade score\1s top", t)
     return t.strip()
 
 
@@ -156,6 +157,29 @@ def signal_type(text: str) -> str:
                             "long-time", "new customer", "cancel")):
         return "Customer"
     return "Commerce"
+
+
+_REASON_CATS = [
+    (r"unresolved support contact", "Unresolved support contacts (90 days)"),
+    (r"unhappy support contact", "Unhappy support contacts (90 days)"),
+    (r"promo ended, bill up|promo recently ended", "Promo ended, bill went up"),
+    (r"^bill up", "Bill went up vs prior months"),
+    (r"^new customer", "New customer"),
+    (r"^phone is \d+ months old", "Older phone"),
+    (r"shopping other carriers", "Shopping other carriers"),
+    (r"rarely uses the app", "Rarely uses the app"),
+    (r"porting|transferring their number", "Asked us about transferring their number"),
+    (r"asked about cancelling", "Asked about cancelling"),
+]
+
+
+def reason_category(t) -> str:
+    """Plain label for a risk reason with the numbers removed (for counts across customers)."""
+    t = str(t or "").strip()
+    for pat, lab in _REASON_CATS:
+        if re.search(pat, t, re.I):
+            return lab
+    return clean_text(t)
 
 
 PILL = {"Commerce": "p-com", "Customer": "p-cus", "Real-time": "p-rt"}
@@ -304,7 +328,7 @@ def engine():
     return O, cat, d.set_index("account_id")
 
 
-@st.cache_resource(show_spinner="Loading the offer engine (one time, ~7 s)…")
+@st.cache_resource(show_spinner=False)
 def offer_api():
     """tm-offers' per-account chooser (harness/offer_api.py: prepared_row + choose_offer). Read-only, synthetic."""
     import os
@@ -315,6 +339,40 @@ def offer_api():
     from harness import offer_api as api
     api.prepared_row(CARDS[0][0])  # warm the engine cache once
     return api
+
+
+@st.cache_resource(show_spinner=False)
+def prewarm() -> bool:
+    """Load the scorer + offer engine once at startup so the first toggle flip is instant. No choose_offer, no sends."""
+    try:
+        if str(REPO) not in sys.path:
+            sys.path.insert(0, str(REPO))
+        from harness.churn_scorer import score_account
+        f = data["features"].df
+        for acc in ("ACC-PERSONA-21",):
+            if (f.account_id == acc).any():
+                score_account(f[f.account_id == acc].iloc[0].to_dict())
+        api = offer_api()
+        api.prepared_row("ACC-PERSONA-21")
+        return True
+    except Exception as e:  # noqa: BLE001
+        print(f"[tm-ui] prewarm skipped: {type(e).__name__}: {e}")
+        return False
+
+
+def sms_state() -> str:
+    """'dry' | 'real' | 'off' for the caption under the phone. Reads only TM_SMS_DRY_RUN."""
+    import os
+    if str(REPO / "harness") not in sys.path:
+        sys.path.insert(0, str(REPO / "harness"))
+    try:
+        from sms_send import is_configured
+        cfg = bool(is_configured())
+    except Exception:  # noqa: BLE001
+        cfg = False
+    if not cfg:
+        return "off"
+    return "dry" if os.environ.get("TM_SMS_DRY_RUN") else "real"
 
 
 def what_if(acc: str, edits: dict) -> dict:
@@ -358,8 +416,9 @@ def what_if(acc: str, edits: dict) -> dict:
     return out
 
 
-def key_facts(r) -> str:
+def key_facts(r, edits=None) -> str:
     """Verifiable facts straight from features.csv (synthetic), so the why-line can be checked on screen."""
+    edits = edits or {}
     def n(c):
         try:
             return float(r.get(c))
@@ -368,12 +427,16 @@ def key_facts(r) -> str:
     bits = []
     if pd.notna(n("support_270d")):
         sent = n("avg_sentiment")
-        bits.append(f"{int(n('support_270d'))} support contacts in 270 days, {int(n('unresolved_270d') or 0)} unresolved"
+        s90 = n("support_90d")
+        sup = (f"{int(s90)} support contacts in 90 days ({int(n('support_270d'))} in 270)" if pd.notna(s90)
+               else f"{int(n('support_270d'))} support contacts in 270 days")
+        bits.append(f"{sup}, {int(n('unresolved_270d') or 0)} unresolved"
                     + (f", avg sentiment {sent:+.2f}" if pd.notna(sent) and n("support_270d") > 0 else ""))
     if pd.notna(n("port_out_inquiry")):
         bits.append("asked us about transferring their number" if n("port_out_inquiry") > 0 else "hasn't asked about transferring their number")
     if pd.notna(n("competitor_research_score")):
-        bits.append(f"shopping score {n('competitor_research_score'):.2f}")
+        bits.append("not comparing carriers" if "competitor_research_score" in edits
+                    else f"shopping score {n('competitor_research_score'):.2f}")
     if pd.notna(n("bill_change_3m_pct")):
         bits.append(f"bill {n('bill_change_3m_pct'):+.0%} vs prior 3 mo")
     return "Facts: " + " · ".join(bits) + " (synthetic)" if bits else ""
@@ -477,7 +540,6 @@ def send_button(body: str, key: str):
         ok_cfg = False
     clicked = st.button("📲 Send this text to my phone", key=f"send_{key}", disabled=not ok_cfg)
     if not ok_cfg:
-        st.caption("Phone sending not set up")
         return
     if clicked:  # st.button is True only on the rerun triggered by this click
         res = send_sms(body)
@@ -507,7 +569,8 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
     h1.markdown(f"#### {html.escape(title) or 'Customer #' + num}  \n<span class='cid'>Customer #{num} (synthetic) · "
                 f"{r.get('segment', '')} · "
                 f"{int(r.get('tenure_months', 0) or 0) // 12} yrs with us</span>", unsafe_allow_html=True)
-    h2.metric("Churn risk, 90 days", fmt_prob(r.p_churn_90d),
+    risk_ph = h2.empty()
+    risk_ph.metric("Churn risk, 90 days", fmt_prob(r.p_churn_90d),
               help="Churn risk model: the single churn number used on every screen (synthetic).")
     why_ph = st.empty()
     warn_ph = st.empty()
@@ -515,7 +578,7 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
     with left:
         dec_ph = st.empty()
         chips_ph = st.empty()
-        st.caption(key_facts(r))
+        facts_ph = st.empty()
         opt_hdr, tbl_ph = st.empty(), st.empty()
         st.markdown("**What if?** Switch a fact off and our models re-decide live.")
         rel = [(key, lab, ed) for key, lab, cond, ed in TOGGLES if cond(r)]
@@ -532,6 +595,10 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
             if w["p"] is None:
                 st.markdown(f"<div class='whatif'>{html.escape(w['error'])}</div>", unsafe_allow_html=True)
             else:
+                with risk_ph.container():
+                    st.metric("Churn risk, 90 days", fmt_prob(w["p"]),
+                              help="What-if: re-scored live by the churn risk model with the switched-off facts removed (synthetic).")
+                    st.caption(f"(what-if, was {fmt_prob(r.p_churn_90d)})")
                 line = f"Risk {fmt_prob(r.p_churn_90d)} → <b>{fmt_prob(w['p'])}</b>"
                 if w["action"]:
                     na = normalize_action(w["action"])
@@ -551,6 +618,16 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
         for i in (1, 2, 3):
             rr[f"risk_reason_{i}"] = risks[i - 1] if i <= len(risks) else None
         stays, _dropped = clean_stays(rr)
+    rr_now = r.copy()
+    for kk, vv in edits.items():
+        rr_now[kk] = vv
+    facts_ph.caption(key_facts(rr_now, edits))
+    if "port_out_inquiry" in edits:
+        risks = [x for x in risks if not (isinstance(x, str) and re.search(r"porting|transferring their number", x, re.I))]
+        stays = ["Hasn't asked about transferring their number"] + [x for x in stays if "transferring" not in str(x)]
+    if "competitor_research_score" in edits:
+        risks = [x for x in risks if not (isinstance(x, str) and re.search(r"shopping other carriers|comparing carriers", x, re.I))]
+        stays = ["Not comparing carriers"] + [x for x in stays if "shopping" not in str(x).lower() and "comparing" not in str(x).lower()]
     chips = "".join(chip(x, "risk") for x in risks if isinstance(x, str) and x)
     chips += "".join(chip(x, "stay") for x in stays)
     chips_ph.markdown(chips + LEGEND, unsafe_allow_html=True)
@@ -589,7 +666,9 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
             st.info("No text is sent to this customer: the offer engine chose to wait." if k_now == "do_nothing"
                     else "No text is sent to this customer.", icon="🤫")
         st.caption(("What-if text from the offer engine." if res is not None else "The exact text the offer engine wrote.")
-                   + " Mockup only, nothing is sent.")
+                   + " " + {"dry": "Rehearsal mode: the text is checked but not sent.",
+                            "real": "Sends this exact text to the demo phone.",
+                            "off": "Phone sending not set up."}[sms_state()])
     sp, _gap = st.columns([2.4, 1])
     with sp:
         score_panel(acc, float(r.p_churn_90d), kp)
@@ -604,7 +683,7 @@ with tab2:
             card(acc, story, fits, i)
     with st.expander("More household plan fits (synthetic)"):
         mcols = st.columns(2)
-        for mc, macc in zip(mcols, ("ACC-PERSONA-39", "ACC-PERSONA-05")):
+        for mc, macc in zip(mcols, ("ACC-PERSONA-05",)):
             mr = df[df.account_id == macc]
             if not len(mr):
                 continue
@@ -676,8 +755,7 @@ with top_c:
     # ================= End-to-end process band (one screen explains the pipeline) =================
     st.markdown("#### How it works, end to end")
     n_contact = int(D.contact.sum())
-    _rr = NONP[NONP.p_churn_90d >= cut].risk_reason_1.fillna("").str.replace(r"\d+(\.\d+)?", "N", regex=True)
-    _rr = _rr.str.replace(r"\(score N\)", "", regex=True).str.replace("N unresolved support contact in", "N unresolved support contacts in").str.strip()
+    _rr = NONP[NONP.p_churn_90d >= cut].risk_reason_1.fillna("").map(reason_category)
     top_drv = _rr[_rr != ""].value_counts().head(3)
     mix_top = D[D.contact].action_key.map(action_label).value_counts().head(4) if "action_key" in D else pd.Series(dtype=int)
 
@@ -707,7 +785,7 @@ with top_c:
         st.markdown(f"<div class='big'>{n_flag:,}</div><div class='sub'>flagged: top 10% most likely to leave in 90 days</div>",
                     unsafe_allow_html=True)
         if catch is not None:
-            st.caption(f"Tested on held-out customers, the top 10% catches {catch:.0%} of churners.")
+            st.caption(f"Tested on held-out customers, the top 10% catches {catch:.0%} of churners (synthetic).")
     with steps[2], st.container(border=True):
         st.markdown("<div class='step'>3 · Why this score</div>", unsafe_allow_html=True)
         st.markdown("<div class='sub'>Top drivers among flagged customers</div>", unsafe_allow_html=True)
@@ -926,17 +1004,15 @@ with bottom_c:
         else:
             st.markdown("**Top reason each flagged customer is at risk**")
             fl = D[D.flagged & ~D.account_id.astype(str).str.startswith("ACC-PERSONA")]
-            rr = fl.risk_reason_1.fillna("").str.replace(r"\d+(\.\d+)?", "#", regex=True)
-            rr = rr.str.replace(r"\(score #\)", "", regex=True).str.replace("# unresolved support contact in", "# unresolved support contacts in").str.strip()
+            rr = fl.risk_reason_1.fillna("").map(reason_category)
             t = rr[rr != ""].value_counts().head(8).reset_index()
             t.columns = ["reason", "accounts"]
-            t["reason"] = t.reason.str.replace("#", "N")
             fig = px.bar(t.sort_values("accounts"), x="accounts", y="reason", orientation="h", template="plotly_white",
                          color_discrete_sequence=[MAGENTA], text="accounts")
             fig.update_layout(height=330, margin=dict(l=8, r=8, t=8, b=8), xaxis_title="flagged accounts (synthetic)", yaxis_title=None)
             fig.update_traces(textposition="outside", cliponaxis=False)
             st.plotly_chart(fig, use_container_width=True)
-            st.caption("Top risk reason for the flagged top 10% (N = a count in the reason). Synthetic.")
+            st.caption("Top risk reason for the flagged top 10%. Synthetic.")
 
     with st.expander("Explore: drivers of churn and the at-risk list (synthetic)"):
 
@@ -1039,3 +1115,6 @@ with st.expander("Data provenance", expanded=False):
         l = data[n]
         st.caption(f"{lab_}: " + {"real": "saved sandbox run", "mock": "placeholder mock", "missing": "not loaded"}[l.source])
 st.caption("All customers and numbers are synthetic.")
+
+# warm the live what-if path after the page has rendered (cached; runs once per server)
+prewarm()
