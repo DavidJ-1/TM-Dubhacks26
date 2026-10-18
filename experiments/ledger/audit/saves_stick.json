@@ -1,0 +1,15 @@
+{
+ "policy": "final 184, conservative costing, kept value = own-risk survival value",
+ "net_mid_10": -1307.0,
+ "accounts_positive_at_10": 36,
+ "breakeven_save_rate": 0.145,
+ "boot10_p_pos": 0.218,
+ "boot10_range": [
+  -4000.0,
+  3080.0
+ ],
+ "boot5_p_pos": 0.045,
+ "old_method_repick_contacts": 58,
+ "old_method_repick_breakeven": 0.076,
+ "old_method_repick_boot10_p_pos": 0.428
+}
