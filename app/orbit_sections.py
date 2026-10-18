@@ -710,14 +710,87 @@ def _msg_es(r, d=None) -> str:
     return (_sv(d, "message_es") if d is not None else "") or str(r.get("message_es", "") or "").strip()
 
 
+# Languages a draft can be in. HI/ZH appear only when that column has text.
+_DRAFT_ORDER = ("EN", "ES", "HI", "ZH")
+_DRAFT_COL = {"EN": "message_en", "ES": "message_es", "HI": "message_hi", "ZH": "message_zh"}
+# Scroll page supplies the topic. notify.py itself has none.
+PHONE_TOPIC = "tm-dubhacks26-lf3reo19tv"
+
+
+def _drafts(r, d=None) -> dict[str, str]:
+    """Plain text of each language that has a draft, in EN / ES / HI / ZH order."""
+    found: dict[str, str] = {}
+    en = str(r.get("message_en", "") or "").strip()
+    if not en and d is not None:
+        en = _sv(d, "message_en")
+    if en:
+        found["EN"] = en
+    es = _msg_es(r, d)
+    if es:
+        found["ES"] = es
+    for code in ("HI", "ZH"):
+        col = _DRAFT_COL[code]
+        text = (_sv(d, col) if d is not None else "") or str(r.get(col, "") or "").strip()
+        if text:
+            found[code] = text
+    return found
+
+
+def _why_not_sent(r, d=None, nv=None) -> str:
+    """Do-nothing copy. No send button accompanies this."""
+    why = str((nv or {}).get("reason") or "").strip()
+    if not why and d is not None:
+        why = _sv(d, "decision_reason")
+    if not why:
+        why = str(r.get("reason_line", "") or "").strip()
+    why = _cap(why) if why else ""
+    return f"No message sent, here's why: {why}" if why else "No message sent, here's why."
+
+
+def _select_lang(r, drafts: dict[str, str], key: str, account_id: str) -> str:
+    """Language toggle for the drafts that exist. Returns the code currently shown."""
+    lk = f"{key}_lang_{account_id}"
+    pref = _pref_lang(r)
+    if pref not in drafts:
+        pref = next(iter(drafts))
+    if st.session_state.get(lk) not in drafts:
+        st.session_state[lk] = pref
+    codes = [c for c in _DRAFT_ORDER if c in drafts]
+    if len(codes) > 1:
+        st.segmented_control("Message language", codes, key=lk,
+                             format_func=lambda x, pref=pref: f"{x} · preferred" if x == pref else x)
+    chosen = st.session_state.get(lk)
+    return chosen if chosen in drafts else pref
+
+
+def _send_to_phone(body: str, *, title: str, button_key: str) -> None:
+    """Post the text on screen. An empty SEND_BACKEND still uses ntfy; an explicit dryrun stays a preview."""
+    if not body or not st.button("Send to my phone", key=button_key):
+        return
+    import os
+    try:
+        from harness.notify import default_topic, send
+        explicit = os.environ.get("SEND_BACKEND", "").strip().lower()
+        backend = explicit or "ntfy"
+        topic = default_topic() or PHONE_TOPIC
+        result = send(body, backend=backend, topic=topic, title=title)
+    except Exception as exc:  # noqa: BLE001
+        st.toast(str(exc) or "Send failed.")
+        return
+    if result.get("ok") and result.get("sent"):
+        st.toast("Sent to your phone.")
+    elif result.get("ok"):
+        st.toast("Preview only. Nothing was sent.")
+    else:
+        st.toast(result.get("detail") or "Send failed.")
+
+
 def _message_html(r, d=None, lang: str = "EN") -> str:
     """Step 5: the message as the customer receives it, in its channel's look. Empty string when there is nothing to show.
     d (optional decisions row): receipt_line / customer_saves_usd_mo fill in when df lacks them; receipt_kind 'tradeoff'
     adds the receipt_tradeoff_line under the bill row as "but you'd lose: ..."; timing 'wait' + wait_until puts the
-    scheduled date in the preview header. lang 'ES' shows message_es (decisions row, else df) when there is one."""
-    msg = str(r.get("message_en", "") or "").strip()
-    if lang == "ES" and msg and _msg_es(r, d):
-        msg = _msg_es(r, d)
+    scheduled date in the preview header. lang picks that draft (EN / ES / HI / ZH) when one exists."""
+    msg = _drafts(r, d).get(lang, "")
     wait = _sv(d, "wait_until") if d is not None and _sv(d, "timing").lower() == "wait" else ""
     when = f"scheduled {_nice_date(wait)}" if wait else "now"
     ch = r.get("channel")
@@ -1313,7 +1386,7 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
             nv = _next_version(r, decisions)
             reason = nv.get("reason", "")
             if nv["kind"] == "quiet":
-                big = "<div class='big hero'>Do nothing.<br>No text is sent.</div>"
+                big = "<div class='big hero'>No message sent, here's why.</div>"
             elif nv["kind"] == "bill":
                 big = "<div class='big'>Cheaper plan on the bill.<br>No message is sent.</div>"
             else:
@@ -1331,34 +1404,50 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
             if tk.get("pick_note"):
                 ch_ = tk.get("flip_at") is not None and tk.get("step", 0) >= tk["flip_at"]
                 big = (f"<div class='o-lbl' style='padding:10px 14px 0;color:{MAG if ch_ else MUTED}'>{esc(tk['pick_note'])}</div>"
-                       + (big if ch_ else "<div class='big hero'>Still doing nothing.<br>No text is sent.</div>"))
+                       + (big if ch_ else "<div class='big hero'>No message sent, here's why.</div>"))
                 if tk.get("ev"):
                     money += f"<div style='border-top:1px solid #111;padding:8px 14px;font:400 13px SM;color:{MUTED}'>{esc(tk['ev'])}</div>"
             flipc = " o-tk-flip" if (tk.get("is_flip") and an) else ""
             st.markdown(f"<div class='o-dec{flipc}' style='max-width:780px'><div class='hd'><span class='o-lbl'>What we picked</span></div>{big}{why}{when}{money}</div>",
                         unsafe_allow_html=True)
-            if nv["kind"] in ("message", "bill"):
-                m = _message_html(r, _drow(decisions, account_id), st.session_state.get(f"{key}_lang_{account_id}") or _pref_lang(r))
+            drow = _drow(decisions, account_id)
+            if nv["kind"] == "message":
+                drafts = _drafts(r, drow)
+                if drafts:
+                    lang = _select_lang(r, drafts, key, account_id)
+                    m = _message_html(r, drow, lang)
+                    if m:
+                        lab = f"Sent {CHANNEL_PHRASE.get(nv['channel'], 'as a message')}:"
+                        slide = " o-tk-slide" if ((tick or {}).get("is_flip") and an) else ""
+                        st.markdown(f"<div class='o-lbl' style='margin:12px 0 6px'>{esc(lab)}</div><div class='{slide}'>{m}</div>", unsafe_allow_html=True)
+                    _send_to_phone(drafts.get(lang, ""), title=f"Customer {cid(account_id)} {lang}",
+                                   button_key=f"{key}_send_{account_id}")
+                else:
+                    st.markdown(f"<div class='o-ph' style='margin-top:12px'>{esc(_why_not_sent(r, drow, nv))}</div>", unsafe_allow_html=True)
+            elif nv["kind"] == "bill":
+                m = _message_html(r, drow, "EN")
                 if m:
-                    lab = "On the bill:" if nv["kind"] == "bill" else f"Sent {CHANNEL_PHRASE.get(nv['channel'], 'as a message')}:"
-                    slide = " o-tk-slide" if ((tick or {}).get("is_flip") and an) else ""
-                    st.markdown(f"<div class='o-lbl' style='margin:12px 0 6px'>{esc(lab)}</div><div class='{slide}'>{m}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='o-lbl' style='margin:12px 0 6px'>On the bill:</div>{m}", unsafe_allow_html=True)
         elif step == 4:
             drow = _drow(decisions, account_id)
-            lk = f"{key}_lang_{account_id}"
-            lang = _pref_lang(r)
-            if r.messaged and str(r.get("message_en", "") or "").strip() and _msg_es(r, drow):
-                st.session_state.setdefault(lk, lang)
-                lc, _ = st.columns([1, 5])
-                lc.segmented_control("Message language", ["EN", "ES"], key=lk,
-                                     format_func=lambda x: f"{x} · preferred" if x == lang else x)
-            lang = st.session_state.get(lk) or lang
-            m = _message_html(r, drow, lang)
-            reason = str(r.get("reason_line", "") or "")
-            head = "Why we're reaching out" if r.messaged else "Why we're not reaching out"
-            top = f"<div class='o-lbl'>{head}</div><div class='o-ph'>{esc(_cap(reason))}</div>" if reason else ""
-            slide = " o-tk-slide" if ((tick or {}).get("is_flip") and an) else ""
-            st.markdown(top + (f"<div class='{slide}'>{m}</div>" if m else ""), unsafe_allow_html=True)
+            nv = _next_version(r, decisions)
+            drafts = _drafts(r, drow)
+            if nv["kind"] == "message" and drafts:
+                lang = _select_lang(r, drafts, key, account_id)
+                m = _message_html(r, drow, lang)
+                reason = str(r.get("reason_line", "") or "") or str(nv.get("reason") or "")
+                top = f"<div class='o-lbl'>Why we're reaching out</div><div class='o-ph'>{esc(_cap(reason))}</div>" if reason else ""
+                slide = " o-tk-slide" if ((tick or {}).get("is_flip") and an) else ""
+                st.markdown(top + (f"<div class='{slide}'>{m}</div>" if m else ""), unsafe_allow_html=True)
+                _send_to_phone(drafts.get(lang, ""), title=f"Customer {cid(account_id)} {lang}",
+                               button_key=f"{key}_send_{account_id}")
+            elif nv["kind"] == "bill":
+                m = _message_html(r, drow, "EN")
+                reason = str(r.get("reason_line", "") or "") or str(nv.get("reason") or "")
+                top = f"<div class='o-lbl'>On the bill</div><div class='o-ph'>{esc(_cap(reason))}</div>" if reason else ""
+                st.markdown(top + (m or ""), unsafe_allow_html=True)
+            else:
+                st.markdown(f"<div class='o-ph'>{esc(_why_not_sent(r, drow, nv))}</div>", unsafe_allow_html=True)
         else:
             rel = [(k, lab) for k, lab, cond, _ in TOGGLES if cond(r)]
             st.markdown("<div class='o-ph'>Switch a fact off and the risk model re-scores live</div>", unsafe_allow_html=True)
