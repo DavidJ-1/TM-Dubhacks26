@@ -27,8 +27,20 @@ _STATE: dict = {}
 SCRATCH_ID = "ACC-WHATIF-0001"
 
 
+DEMO = HERE.parent / "demo_data"
+
+
+def _input_dir() -> Path:
+    """harness/out first (local run), then the tracked demo_data/ copy (fresh clone), same order as compare_strategies."""
+    for d in (OUT, DEMO):
+        if (d / "features.csv").exists() and (d / "labels.csv").exists():
+            return d
+    return OUT
+
+
 def _load(label: str = "churn_90d"):
-    fp, lp, cache = OUT / "features.csv", OUT / "labels.csv", OUT / "model_a_scorer.pkl"
+    src = _input_dir()
+    fp, lp, cache = src / "features.csv", src / "labels.csv", OUT / "model_a_scorer.pkl"
     key = (label, fp.stat().st_mtime, lp.stat().st_mtime)
     if _STATE.get("key") == key:
         return _STATE
@@ -51,6 +63,7 @@ def _load(label: str = "churn_90d"):
         train = (~persona.values) & y.notna().values
         model = ModelA().fit(X[train], y[train].astype(int))
         try:
+            OUT.mkdir(parents=True, exist_ok=True)
             cache.write_bytes(pickle.dumps({"key": key, "model": model}))
         except OSError:
             pass
