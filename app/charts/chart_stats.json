@@ -1,0 +1,125 @@
+{
+ "sources": {
+  "churn_scores": [
+   "real",
+   "/workspace/tmobile/TM-Dubhacks26/harness/out/churn_scores.csv"
+  ],
+  "offers": [
+   "real",
+   "/workspace/tmobile/TM-Dubhacks26/harness/out/offers.csv"
+  ],
+  "features": [
+   "real",
+   "/workspace/tmobile/TM-Dubhacks26/harness/out/features.csv"
+  ],
+  "labels": [
+   "real",
+   "/workspace/tmobile/TM-Dubhacks26/harness/out/labels.csv"
+  ]
+ },
+ "quadrant": {
+  "n": 5000,
+  "xcut": 0.052127100000000016,
+  "ycut": 167.0,
+  "save_zone": 248,
+  "mix": {
+   "do_nothing": 3995,
+   "fix_first_callback": 357,
+   "step_up_plan": 350,
+   "care_credit_fix_first": 273,
+   "care_credit_25": 25
+  },
+  "save_zone_offer_share": 0.9838709677419355
+ },
+ "gain": {
+  "n": 5000,
+  "churners": 137,
+  "oracle_top10": 0.6423357664233577,
+  "model_top10": 0.6423357664233577,
+  "model_top20": 0.781021897810219,
+  "rule_share": 0.2924,
+  "rule_caught": 0.7664233576642335,
+  "rule_rank_top10": 0.5328467153284672,
+  "model_at_rule_share": 0.8248175182481752
+ },
+ "calibration": {
+  "ece": 0.0036718627999999982,
+  "buckets": [
+   {
+    "bucket": 0,
+    "pred": 0.0039,
+    "obs": 0.004,
+    "n": 500
+   },
+   {
+    "bucket": 1,
+    "pred": 0.0052,
+    "obs": 0.002,
+    "n": 500
+   },
+   {
+    "bucket": 2,
+    "pred": 0.0063,
+    "obs": 0.002,
+    "n": 500
+   },
+   {
+    "bucket": 3,
+    "pred": 0.0075,
+    "obs": 0.006,
+    "n": 500
+   },
+   {
+    "bucket": 4,
+    "pred": 0.0089,
+    "obs": 0.012,
+    "n": 500
+   },
+   {
+    "bucket": 5,
+    "pred": 0.0107,
+    "obs": 0.01,
+    "n": 500
+   },
+   {
+    "bucket": 6,
+    "pred": 0.0136,
+    "obs": 0.012,
+    "n": 500
+   },
+   {
+    "bucket": 7,
+    "pred": 0.0189,
+    "obs": 0.012,
+    "n": 500
+   },
+   {
+    "bucket": 8,
+    "pred": 0.0338,
+    "obs": 0.038,
+    "n": 500
+   },
+   {
+    "bucket": 9,
+    "pred": 0.165,
+    "obs": 0.176,
+    "n": 500
+   }
+  ]
+ },
+ "qini": {
+  "placeholder": true,
+  "expects": "Draft input found (uplift_curve.csv), not published until TM_MODELC_FINAL=1.\nExpected: harness/out/[charts/]*qini*.csv with columns\nshare_targeted (0..1) or n_targeted, incremental_saves | qini | uplift, optional model/policy column",
+  "waiting": "Waiting on final Model C"
+ },
+ "policy": {
+  "placeholder": true,
+  "expects": "Draft input found (policy_eval.csv), not published until TM_MODELC_FINAL=1.\nExpected: harness/out/[charts/]*policy*value*.csv with columns\npolicy, churners_saved, retained_revenue_net, cost_per_save\npolicies: EV policy, offer-to-everyone, 3+ calls rule, random, do nothing",
+  "waiting": "Waiting on final Model C"
+ },
+ "learning": {
+  "placeholder": true,
+  "expects": "Expected: harness/bench/out/learning_curve_long.csv\n(target, train_source, model, n_train, metric, value, sd; filtered to target == churn_90d)\nor harness/bench/*.csv with model, n_train, metric, value",
+  "waiting": "Waiting on tm-bench"
+ }
+}

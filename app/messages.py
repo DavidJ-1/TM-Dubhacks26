@@ -10,6 +10,7 @@ ACTION_LABELS = {
     "step_up_plan": ("Step-up plan", "Mejorar plan"),
     "device_upgrade": ("Device upgrade", "Cambio de teléfono"),
     "fix_first_callback": ("Fix-first callback", "Llamada para resolver primero"),
+    "care_credit_fix_first": ("$25 care credit + fix-first callback", "Crédito de $25 + llamada para resolver"),
 }
 
 # Accept human-readable action strings from tm-offers too.
@@ -64,6 +65,10 @@ TEMPLATES = {
     "device_upgrade": (
         "T-Mobile: Your phone is over 3 years old. You may qualify for an upgrade credit with trade-in. See your offer in T-Life or reply INFO.",
         "T-Mobile: Tu teléfono tiene más de 3 años. Podrías calificar para un crédito de cambio con intercambio. Mira tu oferta en T-Life o responde INFO.",
+    ),
+    "care_credit_fix_first": (
+        "T-Mobile: We're sorry for the trouble lately. We've added a $25/mo credit for the next 6 months, and a specialist will call you within 24 hours to fix the open issue. Reply TIME to pick a time.",
+        "T-Mobile: Lamentamos los problemas recientes. Agregamos un crédito de $25/mes por los próximos 6 meses y un especialista te llamará en 24 horas para resolver el problema. Responde HORA para elegir un horario.",
     ),
     "fix_first_callback": (
         "T-Mobile: Sorry about the coverage trouble. A network specialist will call you within 24 hours to fix it. Reply TIME to pick a time.",

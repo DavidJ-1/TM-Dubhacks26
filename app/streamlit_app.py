@@ -80,7 +80,7 @@ SIGNALS = {  # column -> (source, label, kind)
 # ---------------- sidebar ----------------
 with st.sidebar:
     st.markdown("### 📱 Churn + Upsell Harness")
-    page = st.radio("Screen", ["Insights", "Who's at risk this week", "Customer card"], key="page")
+    page = st.radio("Screen", ["Insights", "Who's at risk this week", "Customer card", "Charts"], key="page")
     st.divider()
     st.caption("Data sources (auto-switch to real outputs when they land)")
     for n, l in data.items():
@@ -103,6 +103,21 @@ def mock_note():
         parts.append("offers are **mock** until Model B (tm-offers) lands")
     if parts:
         st.info("Heads-up: " + "; ".join(parts) + ".", icon="🧪")
+
+
+def fmt_prob(p) -> str:
+    """Adaptive precision: 74% / 5.2% / 0.05% / <0.01%."""
+    try:
+        p = float(p)
+    except (TypeError, ValueError):
+        return "n/a"
+    if p >= 0.1:
+        return f"{p:.0%}"
+    if p >= 0.01:
+        return f"{p:.1%}"
+    if p >= 0.0001:
+        return f"{p * 100:.2g}%"
+    return "<0.01%"
 
 
 def flag_label(c: str) -> str:
@@ -209,7 +224,7 @@ def at_risk():
         show["Upgrade moment"] = v[flag_cols].apply(
             lambda r: ", ".join(flag_label(c) for c in flag_cols if truthy(r.get(c))), axis=1)
     ev = st.dataframe(show, hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
-                      column_config={"Risk (90d)": st.column_config.ProgressColumn("Risk (90d)", format="%.0f%%", min_value=0, max_value=100),
+                      column_config={"Risk (90d)": st.column_config.ProgressColumn("Risk (90d)", format="%.1f%%", min_value=0, max_value=100),
                                      "Expected value ($)": st.column_config.NumberColumn(format="$%.0f")}, key="risk_table")
     st.caption("Risk = simulated 90-day churn probability. Expected value = p_churn × save rate × customer value − offer cost − annoyance (synthetic).")
     rows = ev.selection.rows if ev and hasattr(ev, "selection") else []
@@ -244,9 +259,12 @@ def fmt(col, val):
     return html.escape(str(val))
 
 
-def phone(msg: str | None, lang: str) -> str:
+def phone(msg: str | None, lang: str, missing: bool = False) -> str:
     sender = "T-Mobile · Text Message"
-    if msg is None:
+    if msg is None and missing:
+        inner = ("<div class='nomsg'><b>" + ("Sin texto en este idioma" if lang == "es" else "No text for this language yet")
+                 + "</b></div>")
+    elif msg is None:
         inner = ("<div class='nomsg'>🤫<br><b>No message sent</b><br>" +
                  ("El motor decidió esperar." if lang == "es" else "The engine decided to wait.") + "</div>")
     else:
@@ -271,7 +289,7 @@ def customer_card():
     st.markdown(hdr + (f"  \n_{html.escape(str(note))}_" if isinstance(note, str) and note else ""))
 
     m1, m2, m3 = st.columns(3)
-    m1.metric("90-day churn risk (simulated)", f"{r.p_churn_90d:.0%}")
+    m1.metric("90-day churn risk (simulated)", fmt_prob(r.p_churn_90d))
     m2.metric("Risk rank", f"#{int(r.risk_rank)} of {len(df)}")
     m3.metric("Expected value of action (synthetic)", f"${float(r.get('expected_value', 0) or 0):,.0f}")
 
@@ -322,10 +340,75 @@ def customer_card():
         default = "es" if str(r.get("language", "en")) == "es" else "en"
         lang = st.radio("Language", ["en", "es"], index=["en", "es"].index(default), horizontal=True,
                         format_func=lambda x: {"en": "English", "es": "Español"}[x], key=f"lang_{acc}")
-        msg = render_message(k, lang, r.get("tenure_months"))
-        st.markdown(phone(msg, lang), unsafe_allow_html=True)
+        col = f"message_{lang}"
+        src = "none"
+        if k == "do_nothing":
+            msg = None
+        elif col in r.index:  # tm-offers' tailored text, shown verbatim
+            v = r.get(col)
+            msg = v.strip() if isinstance(v, str) and v.strip() else None
+            src = "offers.csv" if msg else "missing"
+        else:  # columns missing: fall back to app/messages.py templates
+            msg = render_message(k, lang, r.get("tenure_months"))
+            src = "template" if msg else "none"
+        st.markdown(phone(msg, lang, missing=src == "missing"), unsafe_allow_html=True)
+        src_note = {"offers.csv": "Text from tm-offers (offers.csv).", "template": "_template_",
+                    "none": "", "missing": f"offers.csv has no {col} for this row."}[src]
         st.caption(f"Channel preference: {fmt('contact_preference', r.get('contact_preference'))}. "
-                   "Mockup only, nothing is sent. Deterministic template; an LLM may only reword it.")
+                   f"Mockup only, nothing is sent. {src_note}")
 
 
-{"Insights": insights, "Who's at risk this week": at_risk, "Customer card": customer_card}[page]()
+# ---------------- Charts ----------------
+CHART_DIR = Path(__file__).resolve().parent / "charts"
+CHARTS = [  # file, title, stats key
+    ("01_risk_value_quadrant.png", "1 · Prioritization: risk vs value", "quadrant"),
+    ("02_cumulative_gain.png", "2 · Cumulative gain vs the 3+ support-contacts rule", "gain"),
+    ("03_calibration.png", "3 · Calibration", "calibration"),
+    ("04_modelC_qini.png", "4 · Model C: uplift (Qini) curve", "qini"),
+    ("05_modelC_policy_value.png", "5 · Model C: policy value", "policy"),
+    ("06_learning_curve.png", "6 · Benchmark learning curve", "learning"),
+]
+
+
+def charts():
+    import json
+    import subprocess
+    st.title("Charts")
+    st.caption("Slide-ready PNGs (1600×900) in app/charts/, regenerated from harness/out with "
+               "`python app/charts/make_charts.py`. All data synthetic.")
+    if st.button("Regenerate charts from current outputs"):
+        with st.spinner("Rendering…"):
+            r = subprocess.run([sys.executable, str(CHART_DIR / "make_charts.py")], capture_output=True, text=True, timeout=300)
+        (st.success if r.returncode == 0 else st.error)("Charts regenerated." if r.returncode == 0 else r.stderr[-2000:])
+    stats_p = CHART_DIR / "chart_stats.json"
+    stats = json.loads(stats_p.read_text()) if stats_p.exists() else {}
+    for fname, title, key in CHARTS:
+        st.subheader(title)
+        info = stats.get(key) or {}
+        img = CHART_DIR / fname
+        if isinstance(info, dict) and info.get("placeholder"):
+            st.warning(f"**{info.get('waiting', 'Waiting on inputs')}**. {info.get('expects', '')}".replace("\n", " "), icon="⏳")
+            if img.exists():
+                with st.expander("Placeholder PNG"):
+                    st.image(str(img))
+            continue
+        if img.exists():
+            if key == "quadrant":
+                a, b = st.columns([1.6, 1])
+                a.image(str(img))
+                with b:
+                    st.markdown("**Top 20 at risk**")
+                    t = df.sort_values("risk_rank").head(20)
+                    st.dataframe(pd.DataFrame({
+                        "#": t.risk_rank.astype(int), "Account": t.account_id, "Risk": t.p_churn_90d.map(fmt_prob),
+                        "Action": t.get("action_key", pd.Series(dtype=str)).map(action_label)}),
+                        hide_index=True, height=420, width="stretch")
+            else:
+                st.image(str(img))
+        else:
+            st.info("Not generated yet. Click Regenerate.")
+    if stats.get("sources"):
+        st.caption("Chart inputs: " + ", ".join(f"{k} = {v[0]}" for k, v in stats["sources"].items()))
+
+
+{"Insights": insights, "Who's at risk this week": at_risk, "Customer card": customer_card, "Charts": charts}[page]()
