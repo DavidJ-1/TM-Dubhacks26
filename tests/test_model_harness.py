@@ -345,3 +345,12 @@ def test_upgrade_direction_guard():
 def test_persona_bar_defaults():
     """Per David, 2026-10-17: persona 'high' bar = 90th percentile (top 10%); 'low' bar = the median."""
     assert mh.CONFIG["persona_high_pct"] == 90.0 and mh.CONFIG["persona_low_pct"] == 50.0
+
+
+def test_enrichment_exclusion_keeps_base_features():
+    """tm-data repeats base columns (n_lines) in enrichment.csv; excluding enrichment must not drop them."""
+    assert "n_lines" not in mh.enrichment_columns()
+    assert "household_income_usd" in mh.enrichment_columns()
+    if (Path(mh.CONFIG["data_dir"]) / "features.csv").exists():
+        X, _, _ = mh.load_data("churn_90d")
+        assert "extra_lines" in X.columns or "n_lines" in X.columns

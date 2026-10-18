@@ -135,12 +135,18 @@ ENRICHMENT_COLS = {"recent_job_change", "household_income_usd", "income_band", "
                    "step_up_cost_pct_income"}
 
 
+# Base features.csv columns that tm-data also repeats in enrichment.csv (as join context). They are ordinary
+# sandbox features, NOT enrichment, so the enrichment exclusion must never drop them (dropping n_lines removed
+# tm-churn's extra_lines and made harness model_a differ from churn_model.py, 2026-10-17).
+ENRICHMENT_BASE_OVERLAP = {"n_lines", "is_persona"}
+
+
 def enrichment_columns() -> set:
     cols = set(ENRICHMENT_COLS)
     p = Path(CONFIG["data_dir"]) / "enrichment.csv"
     if p.exists():
         cols |= set(pd.read_csv(p, nrows=0).columns) - {"account_id"}
-    return cols
+    return cols - ENRICHMENT_BASE_OVERLAP
 
 
 class HarnessDataError(ValueError):
