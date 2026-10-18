@@ -6,7 +6,7 @@ DB := vendor/dubhacks/data/sandbox.db
 .PHONY: run setup test
 
 run: setup
-	$(BIN)/streamlit run app/console_app.py --server.headless true --server.address 0.0.0.0 --server.port 8501
+	$(BIN)/streamlit run app/scroll_app.py --server.headless true --server.address 0.0.0.0 --server.port 8501
 
 setup: $(BIN)/streamlit $(DB)
 

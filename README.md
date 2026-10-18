@@ -10,9 +10,16 @@ DubHacks '26, T-Mobile track. A Python console that ranks who is likely to leave
 make setup && .venv/bin/streamlit run app/scroll_app.py --server.port 8501
 ```
 
-This is the one app on this branch: the scroll page at <http://localhost:8501> (money shown; add `?money=0` to hide company dollars). `make setup` creates a virtualenv, installs the Python dependencies and clones the judge sandbox if it is not already in `vendor/dubhacks`.
+On Windows, from the repo root:
 
-The older chart page (`app/streamlit_app.py`) is retired on this branch; its figures are out of date. `make run` still starts the Retention Console (`app/console_app.py`), which other lanes own.
+```bat
+.venv\Scripts\pip install -r requirements.txt -r app/requirements.txt
+.venv\Scripts\streamlit run app/scroll_app.py
+```
+
+This is the app: the scroll page at <http://localhost:8501> (money shown; add `?money=0` to hide company dollars). `make setup` creates a virtualenv, installs the Python dependencies and clones the judge sandbox if it is not already in `vendor/dubhacks`. `make run` starts the same scroll page.
+
+The older chart page (`app/streamlit_app.py`) is retired; its figures are out of date. The Retention Console (`app/console_app.py`) is still in the repo.
 
 ```bash
 make test
