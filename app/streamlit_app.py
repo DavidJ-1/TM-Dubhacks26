@@ -53,6 +53,7 @@ st.markdown(f"""
 :root {{--paper:#F6F3EE; --card:#FFFFFF; --line:#E6E0D8; --ink:#15111A; --muted:#6E6873; --faint:#A39DA6; --mag:{MAGENTA}}}
 html, body, [data-testid="stAppViewContainer"], .stApp {{background:var(--paper) !important; color:var(--ink)}}
 .stApp, .stApp p, .stApp li, .stApp label, .stApp span, .stApp div, .stApp td, .stApp th, .stApp input {{font-family:'Inter',system-ui,sans-serif}}
+.stApp [data-testid="stIconMaterial"] {{font-family:'Material Symbols Rounded' !important}}
 .stApp h1, .stApp h2, .stApp h3, .stApp h4 {{font-family:'Inter Tight','Inter',sans-serif !important; font-weight:600 !important;
   letter-spacing:-0.025em; color:var(--ink)}}
 .stApp h3 {{font-size:28px !important; margin:48px 0 8px !important}}
