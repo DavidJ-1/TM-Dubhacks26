@@ -16,7 +16,11 @@ Rules for the chart:
 - Whiskers = realized-outcome bootstrap (2,000 account resamples, also drawing who churns and who is saved), read
   from the policy table (CI, P(net>0)) and its RESULTS.md section 4 (mean). The expected-value CI stays in the CSV only.
 - Pending bars are hidden on the chart (kept in chart_bars.csv with status=pending) and listed in one footnote.
-- Receipt like-for-like excludes any account whose optimizer reason gives up a price guarantee.
+- Receipt headline uses the STRICT like-for-like rule: losing a price guarantee, adding a 50 GB cap, losing hotspot
+  or losing perks all mean "you'd lose something". Source order: tm-models receipt.csv if present; else their
+  plan_moves_classified.csv (cap / guarantee / hotspot flags) plus the optimizer reason for perks; else the older
+  optimizer-agrees-with-engine set minus price-guarantee losses (403), flagged as a fallback.
+- Shipped engine and every bar use full company dollars only (business_net_full_dollar), never the chart-style column.
 
 Source of the numbers: tm-models' policy-by-save-rate table (env TM_POLICY_BY_SAVE_RATE). This script does not
 recompute policy values; any bar not yet in that table is written as "pending tm-models" (value blank).
@@ -33,6 +37,8 @@ HERE = Path(__file__).resolve().parent; ROOT = HERE.parents[1]; OUT = HERE / "ou
 TM = Path(os.environ.get("TM_POLICY_BY_SAVE_RATE", ROOT.parent / "scratch_models" / "chart_check" / "policy_by_save_rate.csv"))
 HH = Path(os.environ.get("HOUSEHOLD_PLAN_CSV", HERE / "data" / "household_plan.csv"))
 TM_RESULTS = TM.parent / "RESULTS.md"
+TM_RECEIPT = TM.parent / "receipt.csv"                     # preferred: tm-models' receipt table (RESULTS.md section 6)
+TM_MOVES = TM.parent / "plan_moves_classified.csv"         # else: their per-move classification, strict rule applied here
 DECIDE = 0.10; SCORED = [0.05, 0.10, 0.22]; HEADLINE = 0.05
 SWITCH = {"base": 0.03, "low": 0.02, "high": 0.13}   # receipt switch rate (assumption; randomized plan-fit trials 1-13%)
 PENDING = "pending"
@@ -41,15 +47,17 @@ UPSELL_LABEL = "Profit-ranked incl. upsell (Q&A only; rests on 3.9%/quarter upgr
 TITLE = "Business net in full company dollars, picks made at a 10% save rate (SYNTHETIC)"
 SUBTITLE = "Profitable if real save rates are at least about 4.5%. At 10% it wins ~7 in 8; at 5% it's a coin flip."
 HI_NOTE = "Home Internet never picked at a 1-4% take rate (derived)."
+PERK_NOTE = "Perk reminders never pay as texts; shown on the bill/app instead."
 
 # (key, chart label, regex on tm-models policy name, required decide rate or None for rules that don't decide)
 BARS = [
     ("shipped", "Shipped engine (picks made at its assumed ~44%)", r"^shipped_engine$", "any"),
     ("risk_credit", "Top 10% risk: $25 credit to all (old chart rule)", r"^top10_risk_care_credit$", None),
-    ("risk_best", "Top 10% risk: best fix for each", r"^risk_only_best_fix_top500$", DECIDE),
+    ("risk_best", "Top 10% risk: best fix for each (fix chosen at each rate)", r"^risk_only_best_fix_top500$", "own"),
     ("ret_fixed44", "Retention-only, picks fixed at 44%", r"^ev_retention_only_unlimited_mismatched$", 0.44),
     ("ret_10", "Retention-only, re-picked at 10%", r"^ev_retention_only_unlimited(?:_picked10)?$", DECIDE),
-    ("texts_receipt", "Retention texts + like-for-like plan moves on the receipt (3% switch)", r"^texts10_receipt_l4l_rule_acc3$", DECIDE),
+    ("receipt_only", "Receipt only: like-for-like plan moves, no texts (3% switch)", r"^texts10_receipt_like_for_like_acc3$", DECIDE),
+    ("texts_receipt", "Retention texts + like-for-like plan moves on the receipt (3% switch)", r"^texts10_receipt_like_for_like_acc3$", DECIDE),
     # corrected profit-ranked (Home Internet fixed take; identical at 1/2/4% because HI is never picked). The older
     # ev_ranked_unlimited_picked10 rows are NOT used: they priced Home Internet off the phone-upgrade score (a bug).
     ("upsell_qa", UPSELL_LABEL, r"^ev_ranked_corrected_noHI(?:_picked10)?$", DECIDE),
@@ -97,7 +105,8 @@ def tm_rows() -> pd.DataFrame:
 def pick(t, rx, dec, scored):
     if t.empty: return None
     m = t[t.policy.astype(str).str.contains(rx, regex=True, flags=re.I) & (t.true_save_rate == scored)]
-    if dec not in (None, "any"): m = m[m.decide_save_rate == dec]
+    if dec == "own": m = m[m.decide_save_rate == scored]
+    elif dec not in (None, "any"): m = m[m.decide_save_rate == dec]
     elif dec is None: m = m[m.decide_save_rate.isna() | True]
     return m.iloc[0] if len(m) else None
 
@@ -109,7 +118,7 @@ def build_bars(t):
     for key, label, rx, dec in BARS:
         for s in SCORED:
             r = pick(t, rx, dec, s)
-            row = dict(bar=key, label=label, decide_save_rate=(dec if isinstance(dec, float) else ("as shipped" if dec == "any" else "rule")),
+            row = dict(bar=key, label=label, decide_save_rate=(dec if isinstance(dec, float) else {"any": "as shipped", "own": "at scored rate"}.get(dec, "rule")),
                        scored_save_rate=s, headline=s == HEADLINE, data_note="SYNTHETIC/SIMULATED")
             if r is None:
                 row.update(status=PENDING, tm_models_policy="", contacts=np.nan, business_net_full_usd=np.nan,
@@ -117,8 +126,13 @@ def build_bars(t):
             else:
                 used.add(r.policy)
                 row.update(status="from tm-models", tm_models_policy=r.policy, contacts=r.contacts,
-                           business_net_full_usd=r[full], customer_savings_usd=r.customer_savings,
+                           business_net_full_usd=r[full], value_column=full, customer_savings_usd=r.customer_savings,
                            upsell_contacts=r.get("upsell_contacts", np.nan), notes=r.get("notes", ""))
+                if key == "receipt_only":   # the receipt part alone of the texts+receipt run: no texts, no contact cost
+                    row.update(contacts=0, business_net_full_usd=r.get("receipt_net_full", np.nan), value_column="receipt_net_full",
+                               customer_savings_usd=r.get("receipt_customer_savings", np.nan),
+                               notes="receipt part alone (receipt_net_full) of " + str(r.policy))
+                    out.append(row); continue
                 base = re.sub(r"_picked10$", "", str(r.policy))
                 bt = t[t.policy.isin([base + "_bootstrap", base + "_picked10_bootstrap"]) & (t.true_save_rate == s)
                        & (t.decide_save_rate == r.decide_save_rate)]
@@ -129,6 +143,8 @@ def build_bars(t):
                     row["bootstrap_source"] = "realized outcomes: 2,000 account resamples + Bernoulli churn x save"
             out.append(row)
     B = pd.DataFrame(out)
+    assert (B.loc[B.status != PENDING, "value_column"].isin(["business_net_full_dollar", "receipt_net_full"])).all(), \
+        "every bar must be in full company dollars"
     if not t.empty:
         print("tm-models rows not used by any bar:", sorted(set(t.policy) - used - set(t.policy[t.policy.str.endswith("_breakeven")])))
     # shipped engine: picks were made at the engine's assumed rates, not 10%; say so on the label
@@ -137,8 +153,42 @@ def build_bars(t):
     return B, be
 
 
+def _receipt_frame(n_ll, mo_ll, n_lx, mo_lx, src, fallback):
+    def line(name, n, mo, headline):
+        r = dict(line=name, accounts=int(n), counts_in_headline=headline, monthly_if_all_switch=float(mo),
+                 yearly_if_all_switch=12 * float(mo), status=src, fallback=fallback,
+                 data_note="SYNTHETIC; switch rate is an assumption")
+        for k, v in SWITCH.items(): r[f"yearly_at_{int(v*100)}pct_switch"] = round(12 * mo * v, 0)
+        return r
+    R = pd.DataFrame([line("Money back to customers (receipt): like-for-like accounts", n_ll, mo_ll, True),
+                      line("Cheaper, but you'd lose something (separate line, never in the headline)", n_lx, mo_lx, False)])
+    t = R.iloc[[0]].copy(); t["line"] = "T-Mobile side: the same receipt dollars as a cost (not in business net)"
+    for col in [c for c in R.columns if c.startswith(("monthly", "yearly"))]: t[col] = -t[col]
+    return pd.concat([R, t], ignore_index=True)
+
+
+def _strict_moves(m):
+    """Strict like-for-like: no added cap, no lost price guarantee, no lost hotspot, no lost perks."""
+    lose = m.adds_cap.astype(bool) | m.loses_guarantee.astype(bool) | m.less_hotspot.astype(bool)
+    if HH.exists():   # perks: the classification has no perks flag, so use the optimizer's reason text
+        h = pd.read_csv(HH).set_index("account_id")
+        lose |= m.account_id.map(h.reason.astype(str).str.contains("perk", case=False)).fillna(False).astype(bool)
+    return lose
+
+
 def receipt():
-    """Receipt line from the plan-mix optimizer, limited to accounts where it agrees with the engine."""
+    """Receipt line, strict like-for-like rule (see module docstring for source order)."""
+    for f, kind in ((TM_RECEIPT, "receipt"), (TM_MOVES, "moves")):
+        if not f.exists(): continue
+        m = pd.read_csv(f)
+        need = {"account_id", "customer_monthly_delta", "adds_cap", "loses_guarantee", "less_hotspot"}
+        if not need <= set(m.columns): print(f"note: {f.name} lacks {need - set(m.columns)}; skipped"); continue
+        m["sav"] = -m.customer_monthly_delta; lose = _strict_moves(m)
+        ll, lx = m[~lose], m[lose]
+        print(f"receipt source: {f.name} (strict rule) -> like-for-like {len(ll)}, lose-something {len(lx)}")
+        return _receipt_frame(ll.account_id.nunique(), ll.sav.sum(), lx.account_id.nunique(), lx.sav.sum(),
+                              f"tm-models {f.name}, strict rule (cap/guarantee/hotspot/perks)", False)
+    print("WARNING: no tm-models receipt file; FALLBACK to optimizer-agrees-with-engine minus price-guarantee (403)")
     if not HH.exists():
         return pd.DataFrame([dict(line="money back to customers (receipt)", status="pending: optimizer output missing")])
     h = pd.read_csv(HH); s = h[h.monthly_saving > 0].set_index("account_id")
@@ -147,25 +197,13 @@ def receipt():
     e["sav"] = -e.customer_monthly_delta
     e = e.sort_values("sav", ascending=False).drop_duplicates("account_id").set_index("account_id")
     agree = s.index.intersection(e.index); agree = agree[np.isclose(s.loc[agree, "monthly_saving"], e.loc[agree, "sav"])]
-    # like-for-like = same saving in both AND gives up nothing: accounts that lose a price guarantee move to "lose" line
     agree = agree[~s.loc[agree, "reason"].astype(str).str.contains("price guarantee", case=False).to_numpy()]
     other = s.index.difference(agree)
-    def line(name, idx, headline):
-        mo = float(s.loc[idx, "monthly_saving"].sum()); pg = int(s.loc[idx, "reason"].astype(str).str.contains("price guarantee").sum())
-        r = dict(line=name, accounts=len(idx), counts_in_headline=headline, monthly_if_all_switch=mo,
-                 yearly_if_all_switch=12 * mo, lose_price_guarantee=pg, status="computed here from optimizer + engine",
-                 data_note="SYNTHETIC; switch rate is an assumption")
-        for k, v in SWITCH.items(): r[f"yearly_at_{int(v*100)}pct_switch"] = round(12 * mo * v, 0)
-        return r
-    R = pd.DataFrame([line("Money back to customers (receipt): like-for-like accounts", agree, True),
-                      line("Cheaper, but you'd lose something (separate line, never in the headline)", other, False)])
-    # same dollars on T-Mobile's side: a cost, shown as its own line
-    t = R.iloc[[0]].copy(); t["line"] = "T-Mobile side: the same receipt dollars as a cost (not in business net)"
-    for col in [c for c in R.columns if c.startswith(("monthly", "yearly"))]: t[col] = -t[col]
-    return pd.concat([R, t], ignore_index=True)
+    return _receipt_frame(len(agree), s.loc[agree, "monthly_saving"].sum(), len(other), s.loc[other, "monthly_saving"].sum(),
+                          "FALLBACK: optimizer + engine agree, minus price-guarantee losses", True)
 
 
-SHORT = {"risk_best": "Top 10% risk: best fix for each", "texts_receipt": "Texts + receipt",
+SHORT = {"risk_best": "Top 10% risk: best fix for each", "receipt_only": "Receipt only", "texts_receipt": "Texts + receipt",
          "upsell_qa": "Profit-ranked incl. upsell", "shipped": "Shipped engine", "risk_credit": "Top 10% risk credit",
          "ret_fixed44": "Retention-only fixed at 44%", "ret_10": "Retention-only at 10%", "nothing": "Do nothing"}
 
@@ -249,10 +287,11 @@ def chart(B, R, hi_ok=True):
     rec = ("Receipt (not in business net): money back to customers on " + f"{int(r0.get('accounts', 0)):,} like-for-like accounts "
            f"(nothing given up), ${r0.get('yearly_at_3pct_switch', 0):,.0f}/yr at a 3% switch rate (2-13%: "
            f"${r0.get('yearly_at_2pct_switch', 0):,.0f}-${r0.get('yearly_at_13pct_switch', 0):,.0f}); the same dollars are a cost "
-           "on T-Mobile's side. Plans that would lose a price guarantee, hotspot or data are a separate line, never in the headline."
+           "on T-Mobile's side. Moves that would lose a price guarantee, hotspot, perks or unlimited data are a separate line, never in the headline."
+           + (" (FALLBACK definition.)" if bool(r0.get("fallback", False)) else "")
            if "accounts" in R else "Receipt: not computed yet.")
     notes = [rec,
-             (HI_NOTE + " " if hi_ok else "") + "All rates assumed; save rates 5-22% bracket the field evidence. Upsell row rests on "
+             (HI_NOTE + " " if hi_ok else "") + PERK_NOTE + " All rates assumed; save rates 5-22% bracket the field evidence. Upsell row rests on "
              "a 3.9%/quarter upgrade assumption.",
              "Whiskers: 95% range over 2,000 account resamples that also draw who actually churns and who is saved (realized outcomes).",
              pending_note(B)]

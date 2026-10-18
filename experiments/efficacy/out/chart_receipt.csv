@@ -1,4 +1,4 @@
-line,accounts,counts_in_headline,monthly_if_all_switch,yearly_if_all_switch,lose_price_guarantee,status,data_note,yearly_at_3pct_switch,yearly_at_2pct_switch,yearly_at_13pct_switch
-Money back to customers (receipt): like-for-like accounts,403,True,4795.0,57540.0,0,computed here from optimizer + engine,SYNTHETIC; switch rate is an assumption,1726.0,1151.0,7480.0
-"Cheaper, but you'd lose something (separate line, never in the headline)",279,False,10035.0,120420.0,126,computed here from optimizer + engine,SYNTHETIC; switch rate is an assumption,3613.0,2408.0,15655.0
-T-Mobile side: the same receipt dollars as a cost (not in business net),403,True,-4795.0,-57540.0,0,computed here from optimizer + engine,SYNTHETIC; switch rate is an assumption,-1726.0,-1151.0,-7480.0
+line,accounts,counts_in_headline,monthly_if_all_switch,yearly_if_all_switch,status,fallback,data_note,yearly_at_3pct_switch,yearly_at_2pct_switch,yearly_at_13pct_switch
+Money back to customers (receipt): like-for-like accounts,394,True,4600.0,55200.0,"tm-models plan_moves_classified.csv, strict rule (cap/guarantee/hotspot/perks)",False,SYNTHETIC; switch rate is an assumption,1656.0,1104.0,7176.0
+"Cheaper, but you'd lose something (separate line, never in the headline)",142,False,8965.0,107580.0,"tm-models plan_moves_classified.csv, strict rule (cap/guarantee/hotspot/perks)",False,SYNTHETIC; switch rate is an assumption,3227.0,2152.0,13985.0
+T-Mobile side: the same receipt dollars as a cost (not in business net),394,True,-4600.0,-55200.0,"tm-models plan_moves_classified.csv, strict rule (cap/guarantee/hotspot/perks)",False,SYNTHETIC; switch rate is an assumption,-1656.0,-1104.0,-7176.0

@@ -64,11 +64,18 @@ All numbers synthetic / simulated.
   CI is kept in `chart_bars.csv` only (`ev_*` columns), not drawn.
 - **Money back to customers** sits on its own small panel ("also a cost to T-Mobile; not in business net"), so it
   does not stretch the business-net axis. Plan moves are never texted; they go on the receipt.
-- Receipt headline: **403 like-for-like accounts** where the plan-mix optimizer and the offer engine agree exactly
-  and the customer gives up nothing ($4,795/month if every account switched; **$1,726/year at an assumed 3% switch
-  rate**, range 2-13%: $1,151-$7,480). The 85 agreeing accounts whose optimizer reason says "gives up price
-  guarantee" are excluded and moved, with 194 others, to the separate "cheaper, but you'd lose something" line
-  (279 accounts), which never counts in the headline.
+- Receipt headline, **strict like-for-like rule**: losing a price guarantee, adding a 50 GB cap, losing hotspot or
+  losing perks all mean "you'd lose something". **394 like-for-like accounts** ($4,600/month if every account
+  switched; **$1,656/year at an assumed 3% switch rate**, range 2-13%: $1,104-$7,176). 142 moves go on the separate
+  "cheaper, but you'd lose something" line ($8,965/month), which never counts in the headline. Source: the
+  receipt table named in the policy table's RESULTS.md section 6 was not present as `receipt.csv`, so the script
+  reads the per-move classification `plan_moves_classified.csv` (cap / guarantee / hotspot flags) and the
+  optimizer's reason text for perks (no strict-set account mentions perks). If neither file exists it falls back to
+  the older optimizer-agrees-with-engine set minus price-guarantee losses (403 accounts) and says FALLBACK.
+- "Receipt only" bar = the receipt part alone (no texts, no contact cost) of the texts + like-for-like receipt run
+  (`receipt_net_full`). It is a small net company cost at every save rate.
+- Every bar, including the shipped engine (-$60,009 at 10%), is in full company dollars; the script asserts it.
+- Footnote: "Perk reminders never pay as texts; shown on the bill/app instead."
 - Profit-ranked incl. upsell is one **Q&A-only** row: its gain rests on the 3.9%/quarter upgrade assumption
   ($10,946 of the $16,676 at 10% is step-up/family upsell margin). Home Internet is a footnote, not a bar: "never
   picked at a 1-4% take rate (derived)". The script checks that the 1/2/4% rows pick zero Home Internet and equal the
@@ -86,12 +93,15 @@ All numbers synthetic / simulated.
 |---|---|---|---|
 | Shipped engine (picks made at its assumed ~44%) | -$69,434 | -$60,009 | -$37,388 |
 | Top 10% risk, $25 credit to all | -$9,114 | -$4,116 | +$7,880 |
-| Top 10% risk, best fix for each | pending | +$3,640 | pending |
+| Top 10% risk, best fix for each (fix chosen at each rate; 498 contacts) | -$2,730 | +$3,640 | +$21,552 |
 | Retention-only, picks fixed at 44% | -$10,706 | -$1,540 | +$20,460 |
 | **Retention-only, re-picked at 10% (246 contacts)** | **+$538** | **+$6,211** | +$19,825 |
-| Retention texts + like-for-like receipt (3% switch) | -$1,233 | +$4,453 | +$18,100 |
+| Receipt only, like-for-like, no texts (3% switch) | -$1,643 | -$1,629 | -$1,598 |
+| Retention texts + like-for-like receipt (3% switch) | -$1,104 | +$4,582 | +$18,227 |
 | Profit-ranked incl. upsell (Q&A only; 3.9%/qtr upgrade assumption) | +$11,003 | +$16,676 (334) | +$30,290 |
 | Do nothing | $0 | $0 | $0 |
+
+No bar is pending.
 
 Retention-only re-picked at 10%, realized-outcome bootstrap: at 10% mean +$6,328, 95% CI -$3,375 to +$18,970,
 P(net > 0) = 0.876; at 5% mean +$491, CI -$5,229 to +$9,953, P = 0.487. (Expected-value bootstrap, CSV only: 10% CI
