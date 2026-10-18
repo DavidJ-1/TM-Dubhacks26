@@ -112,94 +112,123 @@
   "file": "/workspace/tmobile/TM-Dubhacks26/harness/model_c_artifacts/uplift_curve.csv",
   "y": "cum_incremental_saves",
   "auuc_ipw": {
-   "Model C T-learner": 4.495,
-   "Model B EV chooser": 6.898,
-   "Model A risk ranking": 7.587,
-   "3+ calls rule": 6.594,
-   "Random": 2.393,
-   "Oracle (reference)": 7.486
+   "Model C T-learner": 65.441,
+   "Model B EV chooser": 55.073,
+   "Model A risk ranking": 61.967,
+   "3+ calls rule": 56.739,
+   "Random": 13.503,
+   "Oracle (reference)": 76.737
+  },
+  "share_of_oracle_true": {
+   "Model C T-learner": 0.804,
+   "Model B EV chooser": 0.73,
+   "Model A risk ranking": 0.818,
+   "3+ calls rule": 0.749,
+   "Random": 0.219,
+   "Oracle (reference)": 1.0
   },
   "curves": {
    "Model B EV chooser": {
-    "at10": 10.45,
-    "at20": 16.45,
-    "max": 17.55
+    "at10": 83.15,
+    "at20": 123.6,
+    "max": 139.9
    },
    "Model C T-learner": {
-    "at10": 9.9,
-    "at20": 10.75,
-    "max": 11.1
+    "at10": 119.2,
+    "at20": 135.2,
+    "max": 151.35
    },
    "Model A risk ranking": {
-    "at10": 14.6,
-    "at20": 15.7,
-    "max": 18.0
+    "at10": 113.5,
+    "at20": 125.95,
+    "max": 142.45
    },
    "3+ calls rule": {
-    "at10": 11.8,
-    "at20": 14.8,
-    "max": 16.8
+    "at10": 92.8,
+    "at20": 122.45,
+    "max": 141.45
    },
    "Oracle (reference)": {
-    "at10": 13.65,
-    "at20": 15.2,
-    "max": 17.45
+    "at10": 129.2,
+    "at20": 154.5,
+    "max": 179.25
    },
    "Random": {
-    "at10": 3.4,
-    "at20": 7.2,
-    "max": 16.7
+    "at10": 18.2,
+    "at20": 30.05,
+    "max": 135.7
    }
   }
  },
  "policy": {
   "file": "/workspace/tmobile/TM-Dubhacks26/harness/model_c_artifacts/policy_eval.csv",
   "estimator": "doubly_robust",
+  "has_ci": true,
   "table": [
    {
     "policy": "Model B EV chooser",
     "label": "Model B EV chooser",
-    "net_value_no_upsell_dr_usd": 24272.0,
-    "net_value_with_upsell_dr_usd": 52064.0,
-    "churners_saved_dr": 14.84,
-    "cost_per_save_dr_usd": 347.82,
-    "n_contacted": 304
+    "net_value_no_upsell_dr_usd": 179164.0,
+    "net_value_with_upsell_dr_usd": 480011.0,
+    "churners_saved_dr": 118.45,
+    "cost_per_save_dr_usd": 416.51,
+    "n_contacted": 2976,
+    "net_no_upsell_dr_ci_low": 137209.36,
+    "net_no_upsell_dr_ci_high": 221119.58,
+    "net_with_upsell_dr_ci_low": 437814.07,
+    "net_with_upsell_dr_ci_high": 522208.34
    },
    {
     "policy": "Model C uplift policy",
     "label": "Model C T-learner",
-    "net_value_no_upsell_dr_usd": 20435.0,
-    "net_value_with_upsell_dr_usd": 48348.0,
-    "churners_saved_dr": 12.86,
-    "cost_per_save_dr_usd": 423.46,
-    "n_contacted": 314
+    "net_value_no_upsell_dr_usd": 175525.0,
+    "net_value_with_upsell_dr_usd": 476390.0,
+    "churners_saved_dr": 107.89,
+    "cost_per_save_dr_usd": 351.41,
+    "n_contacted": 2600,
+    "net_no_upsell_dr_ci_low": 140891.35,
+    "net_no_upsell_dr_ci_high": 210158.35,
+    "net_with_upsell_dr_ci_low": 441225.59,
+    "net_with_upsell_dr_ci_high": 511554.51
    },
    {
     "policy": "offer to everyone (best eligible offer)",
     "label": "Offer to everyone",
-    "net_value_no_upsell_dr_usd": -12422.0,
-    "net_value_with_upsell_dr_usd": 18412.0,
-    "churners_saved_dr": 14.98,
-    "cost_per_save_dr_usd": 2735.52,
-    "n_contacted": 1186
+    "net_value_no_upsell_dr_usd": -156518.0,
+    "net_value_with_upsell_dr_usd": 174015.0,
+    "churners_saved_dr": 131.13,
+    "cost_per_save_dr_usd": 3059.79,
+    "n_contacted": 11864,
+    "net_no_upsell_dr_ci_low": -208821.18,
+    "net_no_upsell_dr_ci_high": -104215.14,
+    "net_with_upsell_dr_ci_low": 121418.86,
+    "net_with_upsell_dr_ci_high": 226610.3
    },
    {
     "policy": "3+ calls rule -> $25 care credit",
     "label": "3+ calls rule",
-    "net_value_no_upsell_dr_usd": 714.0,
-    "net_value_with_upsell_dr_usd": 714.0,
-    "churners_saved_dr": 6.17,
-    "cost_per_save_dr_usd": 1568.25,
-    "n_contacted": 387
+    "net_value_no_upsell_dr_usd": 6471.0,
+    "net_value_with_upsell_dr_usd": 6471.0,
+    "churners_saved_dr": 66.59,
+    "cost_per_save_dr_usd": 1433.88,
+    "n_contacted": 3819,
+    "net_no_upsell_dr_ci_low": -22568.22,
+    "net_no_upsell_dr_ci_high": 35509.5,
+    "net_with_upsell_dr_ci_low": -22568.22,
+    "net_with_upsell_dr_ci_high": 35509.5
    },
    {
     "policy": "random (eligible arm)",
     "label": "Random",
-    "net_value_no_upsell_dr_usd": -22704.0,
-    "net_value_with_upsell_dr_usd": -13611.0,
-    "churners_saved_dr": 9.42,
-    "cost_per_save_dr_usd": 4324.99,
-    "n_contacted": 791
+    "net_value_no_upsell_dr_usd": -262720.0,
+    "net_value_with_upsell_dr_usd": -154307.0,
+    "churners_saved_dr": 73.35,
+    "cost_per_save_dr_usd": 5384.17,
+    "n_contacted": 7804,
+    "net_no_upsell_dr_ci_low": -309066.98,
+    "net_no_upsell_dr_ci_high": -216372.92,
+    "net_with_upsell_dr_ci_low": -200612.58,
+    "net_with_upsell_dr_ci_high": -108002.08
    },
    {
     "policy": "do nothing",
@@ -208,16 +237,24 @@
     "net_value_with_upsell_dr_usd": 0.0,
     "churners_saved_dr": 0.0,
     "cost_per_save_dr_usd": NaN,
-    "n_contacted": 0
+    "n_contacted": 0,
+    "net_no_upsell_dr_ci_low": 0.0,
+    "net_no_upsell_dr_ci_high": 0.0,
+    "net_with_upsell_dr_ci_low": 0.0,
+    "net_with_upsell_dr_ci_high": 0.0
    },
    {
     "policy": "oracle (true effects; reference only)",
     "label": "Oracle (reference)",
-    "net_value_no_upsell_dr_usd": 23551.0,
-    "net_value_with_upsell_dr_usd": 51404.0,
-    "churners_saved_dr": 14.65,
-    "cost_per_save_dr_usd": 297.35,
-    "n_contacted": 307
+    "net_value_no_upsell_dr_usd": 201451.0,
+    "net_value_with_upsell_dr_usd": 502536.0,
+    "churners_saved_dr": 126.37,
+    "cost_per_save_dr_usd": 349.6,
+    "n_contacted": 2989,
+    "net_no_upsell_dr_ci_low": 165311.2,
+    "net_no_upsell_dr_ci_high": 237590.51,
+    "net_with_upsell_dr_ci_low": 465807.62,
+    "net_with_upsell_dr_ci_high": 539265.29
    }
   ]
  },
