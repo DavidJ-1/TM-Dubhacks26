@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import sys
 from pathlib import Path
 
@@ -14,9 +15,13 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from harness.engine import build_console
+from harness.messages import draft, outbound_title
+from harness.draft_lang import LANGUAGES, clean_draft, selected_draft
+from harness.notify import send, will_send
+from harness.playbook.send import frequency_open, record_send
+from harness.playbook.rules import ASSUMPTION_CREDIT_CENTS, FREQUENCY_CAP_DAYS, RULES, VALUE_FORMULA
+from harness.upsell.config import INCLUDE_SYNTHETIC_DEFAULT, SYNTHETIC_BADGE
 from harness.projections import acceptance_curve, project, upgrade_curve
-
-st.set_page_config(page_title="Retention Console", layout="wide")
 
 PINNED = [
     "ACC-PERSONA-04",
@@ -47,9 +52,30 @@ def dollars(cents: int | None) -> str:
     return f"${cents / 100:,.2f}"
 
 
+def show(text) -> str:
+    """Streamlit markdown treats a pair of $ signs as code. Keep amounts as text."""
+    if text is None:
+        return ""
+    return str(text).replace("$", "\\$")
+
+
 @st.cache_resource(show_spinner="Scoring the sandbox…")
 def get_console():
     return build_console()
+
+
+@st.cache_resource(show_spinner="Building the targeting playbook…")
+def get_playbook():
+    from harness.playbook.build import build_playbook
+
+    return build_playbook(get_console())
+
+
+@st.cache_data(show_spinner="Building upgrades and life moments…")
+def get_upsell():
+    from harness.upsell.build import build_upsell
+
+    return build_upsell(get_console())
 
 
 def apply_css() -> None:
@@ -57,6 +83,8 @@ def apply_css() -> None:
         """
         <style>
           .stApp { background: #F7F1EA; color: #1A1220; }
+          header[data-testid="stHeader"] { background: #F7F1EA; }
+          section.main > div.block-container { padding-top: 2.75rem; }
           .banner {
             background: #1A1220; color: #F7F1EA; padding: 10px 14px; border-radius: 8px;
             font-size: 0.95rem; margin-bottom: 12px;
@@ -90,14 +118,16 @@ def banner() -> None:
     )
 
 
-def chart(fig: go.Figure) -> None:
+def chart(fig: go.Figure, height: int = 400) -> None:
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font_color=COLORS["ink"],
-        margin=dict(l=10, r=10, t=36, b=10),
-        height=360,
+        margin=dict(l=16, r=28, t=56, b=48),
+        height=height,
     )
+    fig.update_xaxes(automargin=True)
+    fig.update_yaxes(automargin=True)
     st.plotly_chart(fig, width="stretch")
 
 
@@ -196,8 +226,8 @@ def overview(console) -> None:
             hovertemplate="%{y}<br>%{x:.1%} expected churn<br>n=%{customdata}<extra></extra>",
         )
     )
-    fig.update_layout(title="Other slices of the same sandbox score", xaxis_tickformat=".0%", height=460)
-    chart(fig)
+    fig.update_layout(title="Other slices of the same sandbox score", xaxis_tickformat=".0%")
+    chart(fig, height=560)
     st.caption(
         "Autopay, Home Internet, and segment barely separate this book. "
         "The gap that matters is friction: support, shopping around, a bill jump, a port-out inquiry."
@@ -218,8 +248,46 @@ def overview(console) -> None:
     )
 
 
+def _position_from_state(state) -> int | None:
+    """Row index from a dataframe selection. A cell click counts; the grid highlights those without a checkbox."""
+    if state is None:
+        return None
+    rows = selected_rows(state)
+    if rows:
+        return int(rows[0])
+    selection = getattr(state, "selection", None)
+    if selection is None and isinstance(state, dict):
+        selection = state.get("selection")
+    cells = getattr(selection, "cells", None) if selection is not None else None
+    if cells is None and isinstance(selection, dict):
+        cells = selection.get("cells")
+    if not cells:
+        return None
+    cell = cells[0]
+    return int(cell[0])
+
+
+def _open_click_position() -> int | None:
+    click = st.session_state.get("queue_open_click")
+    if not click:
+        return None
+    row = click["row"] if isinstance(click, dict) else getattr(click, "row", None)
+    if row is None:
+        return None
+    return int(row)
+
+
+def _table_account(show: pd.DataFrame) -> tuple[str | None, int | None]:
+    """Account for the queue row the user just opened or selected."""
+    position = _open_click_position()
+    if position is None:
+        position = _position_from_state(st.session_state.get("risk_queue"))
+    if position is None or position < 0 or position >= len(show):
+        return None, None
+    return str(show.iloc[position]["account_id"]), position
+
+
 def queue(console) -> None:
-    account_id = ensure_selection(console)
     c1, c2 = st.columns([2, 1])
     with c1:
         query = st.text_input("Filter by account id or persona title", "")
@@ -232,21 +300,46 @@ def queue(console) -> None:
         frame = frame.loc[frame["account_id"].str.lower().str.contains(needle) | title.str.contains(needle)]
     show = frame[
         ["rank", "account_id", "segment", "model_p", "sandbox_p", "support_90d", "action_name", "upgrade_when", "top_leave"]
-    ].copy()
-    show["model_p"] = show["model_p"].map(lambda value: f"{value:.1%}")
-    show["sandbox_p"] = show["sandbox_p"].map(lambda value: f"{value:.1%}")
-    event = st.dataframe(
-        show,
+    ].reset_index(drop=True)
+    table_account, table_row = _table_account(show)
+    applied = st.session_state.get("queue_applied_row")
+    if table_account and table_row != applied:
+        st.session_state.queue_applied_row = table_row
+        st.session_state.account_id = table_account
+        st.session_state.queue_account_pick = table_account
+    account_id = ensure_selection(console)
+    visible = show["account_id"].tolist()
+    if account_id not in visible and visible:
+        account_id = visible[0]
+        st.session_state.account_id = account_id
+    if "queue_account_pick" not in st.session_state or st.session_state.queue_account_pick not in visible:
+        st.session_state.queue_account_pick = account_id
+    account_id = st.selectbox("Show this account", visible, key="queue_account_pick")
+    st.session_state.account_id = account_id
+    display = show.copy()
+    display["model_p"] = display["model_p"].map(lambda value: f"{value:.1%}")
+    display["sandbox_p"] = display["sandbox_p"].map(lambda value: f"{value:.1%}")
+    display.insert(0, "open", "Open")
+    st.dataframe(
+        display,
         hide_index=True,
         width="stretch",
         on_select="rerun",
-        selection_mode="single-row",
+        selection_mode=["single-row", "single-cell"],
+        key="risk_queue",
         height=420,
+        column_config={
+            "open": st.column_config.ButtonColumn(
+                "Open",
+                help="Show this account's reasons",
+                width="small",
+                pinned=True,
+                type="primary",
+                key="queue_open_click",
+            ),
+        },
     )
-    rows = selected_rows(event)
-    if rows:
-        st.session_state.account_id = frame.iloc[rows[0]]["account_id"]
-        account_id = st.session_state.account_id
+    st.caption("Click Open on a row, or use the account menu. The reasons below follow that account.")
     detail = console.account(account_id)
     st.subheader(account_id)
     if detail.get("title"):
@@ -273,8 +366,85 @@ def queue(console) -> None:
             marker_color=[COLORS["risk"] if value > 0 else COLORS["good"] for value in contrib["contribution"]],
         )
     )
-    fig.update_layout(title="Model A contribution (coefficient × standardized value)", height=320)
-    chart(fig)
+    fig.update_layout(title="Model A contribution (coefficient × standardized value)")
+    chart(fig, height=480)
+
+
+def _delivery() -> tuple[str | None, str | None]:
+    """Sidebar choice from the demo. Unset means the env-var backend."""
+    if "send_backend" not in st.session_state:
+        return None, None
+    topic = str(st.session_state.get("send_topic") or "").strip()
+    return str(st.session_state.get("send_backend") or "dryrun"), topic
+
+
+def _subscribe_line() -> str:
+    _backend, topic = _delivery()
+    shown = topic or "tm-dubhacks26-lf3reo19tv"
+    return f"Install the ntfy app and subscribe to {shown}."
+
+
+def text_we_would_send(
+    english: str,
+    spanish: str,
+    why: str,
+    account_id: str,
+    key: str,
+    hindi: str = "",
+    chinese: str = "",
+) -> None:
+    """One language at a time. Send posts only the language selected in the radio."""
+    st.subheader("Text message we'd send")
+    texts = {
+        "en": clean_draft(english),
+        "es": clean_draft(spanish),
+        "hi": clean_draft(hindi),
+        "zh": clean_draft(chinese),
+    }
+    if not any(texts.values()):
+        st.write(f"No message sent, here's why: {why}")
+        return
+    labels = [name for _code, name in LANGUAGES]
+    choice = st.radio("Language", labels, horizontal=True, key=f"{key}_lang")
+    body = selected_draft(texts, choice)
+    st.markdown(
+        "<div class='phone'><div class='phone-bar'></div>"
+        f"<div class='quiet'>{html.escape(choice)}</div>"
+        f"<div class='bubble'>{html.escape(body) if body else '—'}</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    _send_to_my_phone({"why": why}, {"text": body}, account_id, key=key)
+
+
+def _send_to_my_phone(action: dict, message: dict, account_id: str | None = None, key: str | None = None) -> None:
+    if not message.get("text"):
+        st.write(f"No message sent, here's why: {action['why']}")
+        return
+    backend, topic = _delivery()
+    st.caption(_subscribe_line())
+    button_key = key or f"send_{account_id or 'next'}"
+    if st.button("Send to my phone", key=button_key):
+        live = will_send(backend, topic) if backend is not None else will_send()
+        if account_id and live and not frequency_open(account_id):
+            st.toast(f"Frequency cap: one nudge per {FREQUENCY_CAP_DAYS} days. Nothing sent.")
+            return
+        if backend is None:
+            result = send(message["text"])
+        else:
+            result = send(message["text"], backend=backend, topic=topic)
+        if result.get("hint"):
+            st.caption(result["hint"])
+        if result.get("sent") and account_id:
+            record_send(account_id)
+        if result.get("backend") == "dryrun" or not result.get("sent"):
+            if result.get("ok"):
+                st.toast("Preview only. Nothing was sent.")
+                st.info(result.get("message") or "")
+            else:
+                st.toast(result.get("detail") or "Send failed.")
+        else:
+            st.toast("Sent to your phone." if result.get("ok") else result.get("detail") or "Send failed.")
 
 
 def action_page(console) -> None:
@@ -291,12 +461,25 @@ def action_page(console) -> None:
     action = detail["action"]
     moment = detail["moment"]
     message = detail["message"]
+    drafted = {
+        language: draft({**detail, "language": language}, action, moment).get("text") or ""
+        for language in ("en", "es", "hi", "zh")
+    }
+    text_we_would_send(
+        drafted["en"],
+        drafted["es"],
+        action["why"],
+        choice,
+        f"send_action_{choice}",
+        hindi=drafted["hi"],
+        chinese=drafted["zh"],
+    )
 
     left, right = st.columns([1.15, 0.85])
     with left:
-        st.subheader(action["name"])
-        st.write(action["why"])
-        st.caption(action["formula"])
+        st.subheader(outbound_title(action, moment))
+        st.write(show(action["why"]))
+        st.caption(show(action["formula"]))
         considered = pd.DataFrame(action["considered"])
         if not considered.empty:
             view = considered.copy()
@@ -312,10 +495,10 @@ def action_page(console) -> None:
         if moment is None:
             st.write("No paid-off phone, no usage over the plan cap, and no phone 36 months or older.")
         else:
-            st.write(moment["headline"])
-            st.caption(moment.get("assumption", ""))
-            st.write(moment.get("battery_note", ""))
-            st.caption(moment.get("condition_note", ""))
+            st.write(show(moment["headline"]))
+            st.caption(show(moment.get("assumption", "")))
+            st.write(show(moment.get("battery_note", "")))
+            st.caption(show(moment.get("condition_note", "")))
             triggers = ", ".join(moment["triggers"])
             st.write(f"Triggers: {triggers}.")
             if moment.get("usage_3m_gb") is not None and moment.get("data_cap_gb"):
@@ -325,14 +508,18 @@ def action_page(console) -> None:
             promo = moment.get("promo")
             if promo:
                 st.write(
-                    f"One device promo: {promo['name']} ({dollars(promo['savings_cents'])}) "
-                    f"on {promo['device_name']}. A second device promo is not applied."
+                    show(
+                        f"One device promo: {promo['name']} ({dollars(promo['savings_cents'])}) "
+                        f"on {promo['device_name']}. A second device promo is not applied."
+                    )
                 )
                 st.write(
-                    f"Good-condition trade-in {dollars(moment.get('tradein_value_cents'))}. "
-                    f"Balance charged today {dollars(moment.get('balance_cents'))}. "
-                    f"Net after we subtract the promo {dollars(moment.get('net_cents'))}. "
-                    "The sandbox cart total does not subtract promo savings."
+                    show(
+                        f"Good-condition trade-in {dollars(moment.get('tradein_value_cents'))}. "
+                        f"Balance charged today {dollars(moment.get('balance_cents'))}. "
+                        f"Net after we subtract the promo {dollars(moment.get('net_cents'))}. "
+                        "The sandbox cart total does not subtract promo savings."
+                    )
                 )
             elif moment.get("when") == "now":
                 st.write("No device promotion is eligible on a single trade-in plus one new phone.")
@@ -353,9 +540,11 @@ def customer_card(detail: dict, message: dict) -> None:
         f"prefers {detail['contact_preference']} · language {detail['language']}"
     )
     st.write(
-        f"Latest bill {dollars(detail['last_bill_cents'])}. "
-        f"Bill vs prior average {detail['bill_increase_pct'] * 100:.0f}%. "
-        f"Autopay {'on' if detail['autopay'] else 'off'}."
+        show(
+            f"Latest bill {dollars(detail['last_bill_cents'])}. "
+            f"Bill vs prior average {detail['bill_increase_pct'] * 100:.0f}%. "
+            f"Autopay {'on' if detail['autopay'] else 'off'}."
+        )
     )
     if detail.get("top_topic"):
         st.write(
@@ -366,26 +555,12 @@ def customer_card(detail: dict, message: dict) -> None:
         st.caption(detail["scenario"])
     lines = pd.DataFrame(detail["lines"])
     if not lines.empty:
-        show = lines[["member_label", "device_name", "age_months", "financing_balance_cents", "plan_name", "usage_3m_gb"]].copy()
-        show["balance"] = show["financing_balance_cents"].map(dollars)
+        line_table = lines[["member_label", "device_name", "age_months", "financing_balance_cents", "plan_name", "usage_3m_gb"]].copy()
+        line_table["balance"] = line_table["financing_balance_cents"].map(dollars)
         st.dataframe(
-            show[["member_label", "device_name", "age_months", "balance", "plan_name", "usage_3m_gb"]],
+            line_table[["member_label", "device_name", "age_months", "balance", "plan_name", "usage_3m_gb"]],
             hide_index=True,
             width="stretch",
-        )
-    st.markdown(f"Draft for {message['channel']} · {message['language']} · not sent")
-    if message["text"]:
-        st.markdown(
-            "<div class='phone'><div class='phone-bar'></div><div class='bubble'>"
-            + message["html"]
-            + "</div></div>",
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            "<div class='phone'><div class='phone-bar'></div>"
-            "<div class='quiet'>No outbound message. Doing nothing means we do not text this account.</div></div>",
-            unsafe_allow_html=True,
         )
 
 
@@ -402,14 +577,15 @@ def projections(console) -> None:
     upgrade_rate = c.slider("Upgrade acceptance among upgrade-now accounts", 0.0, 1.0, 0.2, 0.05)
     outcome = project(population, acceptance, save_rate, upgrade_rate)
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Baseline expected churn", f"{outcome['baseline_rate']:.1%}")
-    m2.metric("Projected expected churn", f"{outcome['projected_rate']:.1%}")
-    m3.metric("Offers in the fixed list", f"{outcome['targeted_offers']:,}")
+    m1.metric("Baseline expected churn", f"{outcome['baseline_rate']:.2%}")
+    m2.metric("Projected expected churn", f"{outcome['projected_rate']:.2%}")
+    m3.metric("Expected churners averted", f"{outcome['expected_saves']:.0f}")
     m4.metric("Projected upgrades", f"{outcome['projected_upgrades']:.0f}")
     st.caption(
         "The offer list is frozen at the 25% acceptance used to rank actions, "
         "and credits are only considered at or above a 15% model risk. "
         "Moving these sliders does not rebuild who is contacted. "
+        f"Offers in that fixed list: {outcome['targeted_offers']:,}. "
         f"Upgrade-now accounts in the 5,000: {outcome['upgrade_now_accounts']:,}."
     )
     curve = acceptance_curve(population, save_rate)
@@ -423,15 +599,17 @@ def projections(console) -> None:
             line=dict(color=COLORS["magenta"], width=3),
         )
     )
-    fig.add_hline(y=outcome["baseline_rate"], line_dash="dot", line_color="#1A1220", annotation_text="Baseline")
-    fig.add_vline(x=acceptance, line_dash="dot", line_color="#8A7B84")
-    fig.update_layout(
-        title="Projected, illustrative assumptions — churn",
-        xaxis_title="Offer acceptance rate",
-        xaxis_tickformat=".0%",
-        yaxis_tickformat=".1%",
-        yaxis_title="Expected 90-day churn",
+    fig.add_hline(
+        y=outcome["baseline_rate"],
+        line_dash="dot",
+        line_color="#1A1220",
+        annotation_text="Baseline",
+        annotation_position="top left",
     )
+    fig.add_vline(x=acceptance, line_dash="dot", line_color="#8A7B84")
+    fig.update_xaxes(range=[-0.02, 0.84], tickformat=".0%", title="Offer acceptance rate")
+    fig.update_yaxes(tickformat=".1%", title="Expected 90-day churn")
+    fig.update_layout(title="Projected, illustrative assumptions — churn")
     chart(fig)
     lifts = upgrade_curve(population)
     fig = go.Figure(
@@ -443,12 +621,9 @@ def projections(console) -> None:
         )
     )
     fig.add_vline(x=upgrade_rate, line_dash="dot", line_color=COLORS["magenta"])
-    fig.update_layout(
-        title="Projected, illustrative assumptions — upgrade lift",
-        xaxis_title="Upgrade acceptance",
-        xaxis_tickformat=".0%",
-        yaxis_title="Projected upgrades",
-    )
+    fig.update_xaxes(range=[-0.02, 1.02], tickformat=".0%", title="Upgrade acceptance")
+    fig.update_yaxes(title="Projected upgrades")
+    fig.update_layout(title="Projected, illustrative assumptions — upgrade lift")
     chart(fig)
     st.markdown(
         """
@@ -462,7 +637,205 @@ def projections(console) -> None:
     )
 
 
+def _playbook_message(decision: dict, credit_cents: int, language: str) -> str:
+    text = decision["message_en"] if language != "es" else decision["message_es"]
+    if decision.get("offer_is_assumption"):
+        text = text.replace(f"{decision['offer_cents']} cents", f"{int(credit_cents)} cents")
+    return text
+
+
+def targeting_page(console) -> None:
+    playbook = get_playbook()
+    st.subheader("Targeting playbook")
+    st.caption(VALUE_FORMULA)
+    st.caption(
+        f"Product setting: at most one outbound nudge per customer per {FREQUENCY_CAP_DAYS} days. "
+        "This screen does not show projected churn or dollar outcomes."
+    )
+    credit = st.number_input(
+        "Assumption credit (cents). Not a T-Mobile price.",
+        min_value=0,
+        max_value=100_000,
+        value=ASSUMPTION_CREDIT_CENTS,
+        step=500,
+    )
+    priority = playbook.grid.loc[playbook.grid["priority"]].iloc[0]
+    st.markdown(
+        f"**Priority cell: {priority['risk_label']} × {priority['value_label']}.** "
+        f"{int(priority['accounts']):,} accounts, "
+        f"{priority['expected_churners']:.0f} expected churners from the sandbox score."
+    )
+    heat = playbook.grid.pivot(index="risk_label", columns="value_label", values="accounts")
+    heat = heat.reindex(index=["Top 10% risk", "10–30% risk", "Rest"])
+    fig = go.Figure(
+        go.Heatmap(
+            z=heat.values,
+            x=list(heat.columns),
+            y=list(heat.index),
+            colorscale=[[0, "#F7F1EA"], [1, "#E20074"]],
+            text=heat.values,
+            texttemplate="%{text}",
+            hovertemplate="%{y} × %{x}<br>%{z} accounts<extra></extra>",
+        )
+    )
+    fig.update_layout(title="Accounts by risk band and value")
+    chart(fig, height=320)
+    counts = playbook.grid.copy()
+    counts["expected_churners"] = counts["expected_churners"].map(lambda value: f"{value:.1f}")
+    st.dataframe(
+        counts[["risk_label", "value_label", "accounts", "expected_churners", "priority"]],
+        hide_index=True,
+        width="stretch",
+    )
+    st.markdown("**Rules, first match wins**")
+    st.dataframe(pd.DataFrame(RULES)[["when", "action", "offer", "channel"]], hide_index=True, width="stretch")
+
+    ranked = playbook.ranked()
+    st.markdown("**Ranked targets**")
+    st.caption("Rank score is Model A risk times the value score. It is not a projected save.")
+    show = ranked.head(200).copy()
+    show["model_p"] = show["model_p"].map(lambda value: f"{value:.1%}")
+    show["value_score_cents"] = show["value_score_cents"].map(lambda value: f"{value:,.0f}¢")
+    show["rank_score"] = show["rank_score"].map(lambda value: f"{value:,.0f}")
+    st.dataframe(
+        show[
+            [
+                "account_id",
+                "risk_band",
+                "value_band",
+                "trigger",
+                "action",
+                "offer",
+                "reason_1",
+                "reason_1_source",
+                "rejected_next",
+            ]
+        ],
+        hide_index=True,
+        width="stretch",
+        height=360,
+    )
+    st.download_button(
+        "Download the full target list (CSV)",
+        ranked.to_csv(index=False).encode("utf-8"),
+        file_name="targeting_playbook.csv",
+        mime="text/csv",
+    )
+
+    options = [row.account_id for row in ranked.itertuples()]
+    choice = st.selectbox("One customer", options, index=0)
+    decision = playbook.decision(choice)
+    st.markdown(f"**{choice}** · {decision['action']}")
+    st.write(decision["why"])
+    row = playbook.frame.set_index("account_id").loc[choice]
+    columns = st.columns(2)
+    columns[0].metric("Segment", f"{row['risk_band']} / {row['value_band']}")
+    columns[1].metric("Channel", decision["channel"])
+    st.write(f"Trigger: {decision['trigger']}")
+    st.write(f"Rule: {decision['rule_id']}")
+    offer_cents = int(credit) if decision.get("offer_is_assumption") else decision.get("offer_cents")
+    offer_text = decision["offer_name"]
+    if offer_cents is not None:
+        offer_text += f" · {dollars(int(offer_cents))}"
+        if decision.get("offer_is_assumption"):
+            offer_text += " (assumption, not a T-Mobile price)"
+    st.write(f"Offer: {offer_text}")
+    if decision.get("assumption_note"):
+        st.caption(decision["assumption_note"])
+    st.write(f"Why the next action was rejected: {decision['rejected']}")
+    st.markdown("**Top reasons**")
+    for reason in decision["reasons"]:
+        if reason["text"]:
+            st.write(f"· {reason['text']} ({reason['source']})")
+    english = _playbook_message(decision, int(credit), "en")
+    spanish = _playbook_message(decision, int(credit), "es")
+    st.markdown("**Draft**")
+    st.markdown(
+        "<div class='phone'><div class='phone-bar'></div>"
+        f"<div class='quiet'>English</div><div class='bubble'>{html.escape(english)}</div>"
+        f"<div class='quiet'>Español</div><div class='bubble'>{html.escape(spanish)}</div>"
+        "<div class='quiet'>On-screen mockup. Nothing is sent from this phone.</div></div>",
+        unsafe_allow_html=True,
+    )
+
+
+def upgrades_page(console) -> None:
+    from harness.upsell.build import display_frame
+
+    upsell = get_upsell()
+    st.subheader("Upgrades & life moments")
+    st.caption("Real data only is the default. Tier 2 is a seeded consented signal, and it stays off this screen until the toggle is on.")
+    include = st.toggle("With synthetic life-event signals", value=INCLUDE_SYNTHETIC_DEFAULT)
+    if include:
+        st.markdown(f"**{SYNTHETIC_BADGE}**")
+        st.caption(f"Seeded accounts: {upsell.seeded_accounts:,}. Counts only. An earlier real trigger or a guardrail still wins.")
+    else:
+        st.caption("Real data only.")
+    counts = upsell.counts(include)
+    st.markdown("**Counts per trigger**")
+    st.dataframe(counts, hide_index=True, width="stretch")
+    ranked = upsell.ranked(include)
+    shown = display_frame(ranked).head(200).copy()
+    if "monthly_difference" in shown.columns:
+        shown["monthly_difference"] = shown["monthly_difference"].map(
+            lambda value: "n/a" if value is None or (isinstance(value, float) and pd.isna(value)) else dollars(int(value))
+        )
+    st.markdown("**Ranked targets**")
+    st.caption("Order is satisfaction, affordability, and the signal, with the upgrade-propensity score when that file is already built. This list is not a projected save.")
+    st.dataframe(
+        shown,
+        hide_index=True,
+        width="stretch",
+        height=360,
+        column_config={
+            "rejected": st.column_config.TextColumn(
+                "rejected",
+                width=420,
+                help="Why the runner-up was rejected",
+            ),
+        },
+    )
+    export = display_frame(ranked)
+    st.download_button(
+        "Download the target list (CSV)",
+        export.to_csv(index=False).encode("utf-8"),
+        file_name="upgrades_life_moments.csv",
+        mime="text/csv",
+    )
+    choice = st.selectbox("One customer", list(ranked["account_id"]), index=0, key="upsell_account")
+    decision = upsell.decision(choice, include)
+    if decision["send"]:
+        text_we_would_send(
+            decision["message_en"],
+            decision["message_es"],
+            decision["why"],
+            choice,
+            f"send_grow_{choice}",
+            hindi=decision.get("message_hi") or "",
+            chinese=decision.get("message_zh") or "",
+        )
+    else:
+        st.subheader("Text message we'd send")
+        st.write(f"No message sent, here's why: {decision['why']}")
+    st.markdown(f"**{choice}** · {decision['action']}")
+    if decision["badge"]:
+        st.markdown(f"**{decision['badge']}**")
+    st.write(decision["why"])
+    diff = decision["diff_cents"]
+    st.write(f"Trigger: {decision['trigger']}")
+    st.write(f"Monthly difference: {'n/a' if diff is None else dollars(int(diff))}")
+    offer = decision["offer_name"]
+    if decision.get("promo_savings_cents"):
+        offer += f" · promo savings {dollars(int(decision['promo_savings_cents']))} subtracted by us"
+    st.write(f"Offer: {offer}")
+    st.write(f"Data source: {decision['data_source']}")
+    st.write(f"Why the runner-up was rejected: {decision['rejected']}")
+    if decision.get("assumption_note"):
+        st.caption(decision["assumption_note"])
+
+
 def main() -> None:
+    st.set_page_config(page_title="Retention Console", layout="wide")
     apply_css()
     banner()
     try:
@@ -474,7 +847,7 @@ def main() -> None:
     st.caption("DubHacks '26 · T-Mobile track")
     page = st.sidebar.radio(
         "Screen",
-        ["Overview", "At-risk queue", "Next best action", "Projections"],
+        ["Overview", "At-risk queue", "Next best action", "Targeting playbook", "Upgrades & life moments", "Projections"],
     )
     st.sidebar.caption("Synthetic sandbox data. Money is cents until it is shown as dollars.")
     if page == "Overview":
@@ -483,8 +856,13 @@ def main() -> None:
         queue(console)
     elif page == "Next best action":
         action_page(console)
+    elif page == "Targeting playbook":
+        targeting_page(console)
+    elif page == "Upgrades & life moments":
+        upgrades_page(console)
     else:
         projections(console)
 
 
-main()
+if __name__ == "__main__":
+    main()

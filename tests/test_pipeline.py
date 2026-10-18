@@ -1,6 +1,7 @@
 """Tests for harness/pipeline.py (SYNTHETIC data only)."""
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -36,7 +37,8 @@ def _fixture(tmp: Path):
 
 
 def _check_schema(d):
-    assert set(d) == KEYS and d["synthetic"] is True and d["generated_at"].endswith(("-07:00", "-08:00"))
+    stamp = datetime.fromisoformat(d["generated_at"])
+    assert set(d) == KEYS and d["synthetic"] is True and stamp.tzinfo is not None and stamp.utcoffset() is not None
     assert [s["id"] for s in d["stages"]] == ["accounts", "scored", "flagged", "offered", "wait", "messaged"]
     for s in d["stages"]:
         assert {"id", "label", "count", "by_segment"} <= set(s)

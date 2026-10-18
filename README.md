@@ -10,7 +10,21 @@ DubHacks '26, T-Mobile track. A Python console that ranks who is likely to leave
 make run
 ```
 
-That creates a virtualenv, installs the Python dependencies, clones the judge sandbox if it is not already in `vendor/dubhacks`, and starts Streamlit at <http://localhost:8501>.
+That creates a virtualenv, installs the Python dependencies, clones the judge sandbox if it is not already in `vendor/dubhacks`, and starts the judging demo (`app/demo_app.py`) at <http://localhost:8501>. The demo uses the Retention Console for the live sandbox screens. The landing and the model-evidence screen read the saved synthetic run and are labeled as such.
+
+Install the ntfy app and subscribe to `tm-dubhacks26-lf3reo19tv`. A `.env` in the project root is loaded when it exists; variables already set in the environment win. The sidebar **Send texts via ntfy** is on by default with that topic, so a click sends without exporting variables. Nothing is sent until you click, and it never goes to a customer number.
+
+The teammate demo UI is a second Streamlit app, `app/streamlit_app.py`. It reads `harness/out/*.csv` when those files exist and otherwise the synthetic mocks in `app/mock/`. Its Charts screen reads the bench and Model C artifacts. Those numbers are labeled synthetic and are not used by `make run`. See `app/README.md`.
+
+```bash
+make run-ui
+```
+
+Open **Targeting playbook** in the sidebar. It places every account on a risk-by-value grid, lists the if-then rules, and ranks who to contact. The rank score is risk times value. It is not a projected dollar save. Projected impact stays on the Projections screen, labeled "Projected, illustrative assumptions".
+
+The playbook lives in `harness/playbook/`. Rules and the assumption credit are in `harness/playbook/rules.py`. The drafted English and Spanish messages stay on the on-screen phone mockup.
+
+Open **Upgrades & life moments** for plan, line, and device offers. The toggle defaults to real sandbox data. `make life-signals` regenerates `harness/out/life_signals.csv`. The seeded share is `SYNTHETIC_SHARE` in `harness/upsell/config.py`. It is labeled synthetic, and the screen shows counts of seeded accounts rather than that share.
 
 ```bash
 make test
@@ -58,14 +72,18 @@ The sandbox has no observed churn outcomes. Judges score a private model that is
 - No offer-outcome feedback loop and no retraining on imagined acceptances.
 - No scraped or online "what people want to upgrade to" data.
 - No simulated before/after presented as a real result. The projection screen is labeled as an assumption.
-- Photon messaging is not included. There is no Python send path in this demo.
+- Photon messaging is not included.
 
 ## Layout
 
 ```
-app/streamlit_app.py     Streamlit screens
-harness/                 load, Model A, offers, upgrade moments, projections
-tests/test_engine.py     checks against sandbox.db
+app/demo_app.py          Judging demo (make run): console screens, plus the saved landing and model evidence
+app/console_app.py       Retention Console screens: sandbox.db, Model A, offers, projections, targeting playbook
+harness/playbook/        Risk-by-value grid, if-then rules, on-screen draft
+harness/upsell/          Life-moment offers. Tier 2 signals regenerate with make life-signals
+app/streamlit_app.py     Teammate demo UI (make run-ui): insights, at-risk list, customer card, charts
+harness/                 Both lanes: console engine plus tm-data, tm-churn, tm-offers, tm-harness, bench
+tests/                   console checks against sandbox.db, plus the harness tests
 vendor/dubhacks/         cloned judge sandbox (not committed)
 ```
 
