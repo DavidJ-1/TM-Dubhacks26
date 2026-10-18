@@ -10,7 +10,8 @@
 python harness/offers.py                    # writes harness/out/offers.csv and offer_candidates.csv
 TM_ENABLE_RIGHT_SIZE=0 python harness/offers.py   # same run with right-sizing turned off
 ```
-The sandbox is found at `$TM_SANDBOX_DB`, then `/workspace/tmobile/dubhacks/data/sandbox.db`. It is opened
+The sandbox is found at `$DUBHACKS_DB` (the project-wide DB variable), then `vendor/dubhacks/data/sandbox.db`
+(`make setup`), then a sibling `../dubhacks/data/sandbox.db` clone. It is opened
 **read-only** (`file:...?mode=ro`). A full run takes about 20 s.
 
 ## Inputs
@@ -144,3 +145,32 @@ for N years", "we noticed".
 `rank, action_code, save_value, upsell_gain, customer_benefit, lock_value, lock_in_months, promo_skus,
 blocked_or_ineligible_reason`; `out/line_tradein.csv` (per-line now-vs-wait); `out/upgrade_scores.csv`.
 Persona golden tests: `tests/test_persona_golden.py` (42 personas).
+
+## Batch 7 (Sat 10/17 ~8:50 PM PDT; all numbers synthetic)
+- **Upsells need a usage reason.** Step-up / family upgrade only when a line is near or over its data cap, or uses
+  hotspot the plan lacks (Essentials: any; More: > 45 GB). Usage growth alone no longer triggers (removes the
+  More -> Beyond "250 GB hotspot" pitches).
+- **Family upgrade unbundled.** It is the plan move only (family plan + real child/teen line + usage need); the
+  TRADEIN-ANY credit is never bundled. A phone trade-in stays a separate `device_upgrade` option. On those accounts
+  the family upgrade replaces the generic step-up.
+- **Savings ladder gaps closed** (`right_size` kinds in `action_detail`): `more_to_4line` (4+ lines on standard More,
+  no hotspot / perks / connected lines / Home Internet, every line fits 50 GB -> Essentials 4 Line Offer, persona 37
+  -$100/mo) and `essentials_saver` (1-2 light lines, every line's peak <= 10 GB -> Essentials Saver, persona 08
+  -$10/mo). Texts list what the customer gives up (hotspot, 5-Year Price Guarantee, watch/tablet lines, line limit).
+  No right-size while a support ticket or network issue is open (fix first; it is marketing).
+- **Port-out floor.** A port-out inquiry never gets do nothing: check-in, or the fix-first callback when a ticket is
+  open (`pick_override = port_out`). `PORT_OUT_ALWAYS_CONTACT` switch.
+- **Honest do-nothing reasons** (`do_nothing_reason` code + `why_this_offer` sentence, real fields only): open_ticket
+  ("Open ticket with support; no marketing until it's closed."), wait_payoff (only when a line has line_tradein's
+  wait_until_payoff verdict and nothing stronger applies), low_risk ("Risk is low and nothing needs fixing"),
+  bill_shock_low_risk, shopping_low_risk, recent_complaints, usage_need_held, happy (built from support / port-out /
+  app fields, e.g. persona 24), nothing_helps.
+- **offer_candidates.csv:** every allowed-but-losing option's `reason` now starts with a plain "Lost: ..." sentence;
+  new `customer_monthly_delta` ($/mo change for the customer if accepted; negative = saves; persona 38 = -40).
+  Existing columns unchanged.
+- **offers.csv:** `segment` renamed `offer_segment`; new `do_nothing_reason`, `pick_override`, `customer_monthly_delta`.
+- `upgrade_gate.load()` falls back to `$TM_OUT_DIR` then `demo_data/upgrade_scores.csv` (refresh.py copies it).
+- `offers.prepare()` builds the scored frame (main() uses it); `offer_api._engine()` mirrors it (adds `n_wait_lines`).
+- Tests: golden pins (exact action + SKU) for personas 04, 06, 10, 19, 21, 24, 28, 37, 38; persona 38's -$40/mo;
+  persona 24's reason; wait personas 29/31/33; open-ticket wording; offer_api toggles for persona 21. Golden tests read
+  `demo_data/` when `harness/out/` is missing.

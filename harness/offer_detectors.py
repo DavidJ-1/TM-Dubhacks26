@@ -288,72 +288,18 @@ def apply_enrichment(facts: pd.DataFrame, path) -> tuple[pd.DataFrame, str]:
 
 
 def build_line_tradein(conn: sqlite3.Connection, promos: pd.DataFrame, plan_family: pd.Series,
-                       wait_min_gain_cents: int = 2500) -> pd.DataFrame:
-    """Per-line now-vs-wait trade-in math (sandbox tradein_curves, lines, promotions). SYNTHETIC numbers.
+                       wait_min_gain_cents: int | None = None) -> pd.DataFrame:
+    """Per-line keep / wait-until / upgrade-now trade-in math. SYNTHETIC numbers.
 
-    net_* = max(0, trade-in value - remaining balance)   (spec 6b: trade-in only counts once the phone is paid off)
-    promo: PROMO-STUB-TRADEIN-ANY ($200, any condition, Essentials/More/Beyond) only on a paid-off phone.
-    decision: wait_until_payoff (still financed: the flat credit + payoff beat the value drop),
-              upgrade_now (paid off and 24+ months old: value only falls from here),
-              keep (paid off but < 24 months: nothing to gain by moving yet).
-    wait_verdict ('wait' / 'upgrade_now'): does net+promo in 6 or 12 months beat net+promo now by >= $25?
+    Moved to harness/tradein_wait.py (fixes the old delta_cents, which counted the remaining balance as money
+    saved by waiting even though it is owed either way). Kept here so offers.py's call site is unchanged.
     """
-    today = as_of(conn)
-    lines = pd.read_sql("SELECT line_id, account_id, device_sku, device_purchase_date, financing_balance_cents, "
-                        "financing_months_remaining, monthly_installment_cents, tradein_eligible "
-                        "FROM lines WHERE device_sku IS NOT NULL", conn)
-    curves = pd.read_sql("SELECT * FROM tradein_curves", conn)
-    cmax = curves.groupby("device_sku")["age_months"].max()
-    cv = curves.set_index(["device_sku", "age_months"])["value_cents"]
-    names = pd.read_sql("SELECT sku, name FROM devices", conn).set_index("sku")["name"]
-    anyt = promos.loc["PROMO-STUB-TRADEIN-ANY"]
-    fams = str(anyt["plan_families"]).split(",")
-
-    def val(sku, age):
-        if sku not in cmax.index:
-            return 0
-        return int(cv.get((sku, int(min(max(age, 0), cmax[sku]))), 0))
-
-    rows = []
-    for _, l in lines.iterrows():
-        age = months_between(pd.Timestamp(l["device_purchase_date"]).date(), today)
-        bal, mleft, inst = int(l["financing_balance_cents"]), int(l["financing_months_remaining"]), \
-            int(l["monthly_installment_cents"])
-        promo_ok = bool(l["tradein_eligible"]) and plan_family.get(l["account_id"]) in fams
-        out = {"account_id": l["account_id"], "line_id": l["line_id"], "device_sku": l["device_sku"],
-               "device_name": names.get(l["device_sku"], ""), "age_months": age,
-               "financing_balance_cents": bal, "financing_months_remaining": mleft,
-               "monthly_installment_cents": inst}
-        for tag, k in (("now", 0), ("6m", 6), ("12m", 12)):
-            v = val(l["device_sku"], age + k)
-            b = max(0, bal - inst * k)
-            promo = int(anyt["value_cents"]) if (promo_ok and b == 0) else 0
-            out[f"tradein_value_{tag}_cents"] = v
-            out[f"balance_{tag}_cents"] = b
-            out[f"net_{tag}_cents"] = max(0, v - b)
-            out[f"promo_{tag}_cents"] = promo
-        out["tradein_value_at_payoff_cents"] = val(l["device_sku"], age + mleft)
-        out["net_tradein_now_cents"] = out["net_now_cents"]
-        best_wait = max(out["net_6m_cents"] + out["promo_6m_cents"], out["net_12m_cents"] + out["promo_12m_cents"])
-        now_total = out["net_now_cents"] + out["promo_now_cents"]
-        out["wait_verdict"] = "wait" if best_wait >= now_total + wait_min_gain_cents else "upgrade_now"
-        promo_payoff = int(anyt["value_cents"]) if promo_ok else 0
-        # cost of a new phone's trade-in side: what you give up / get, in cents (lower = better for customer)
-        out["best_promo_sku"] = anyt["sku"] if promo_ok else ""
-        out["promo_value_cents"] = promo_payoff
-        out["cost_now_cents"] = bal - out["tradein_value_now_cents"] - out["promo_now_cents"]
-        out["cost_wait_cents"] = -out["tradein_value_at_payoff_cents"] - promo_payoff
-        out["delta_cents"] = out["cost_now_cents"] - out["cost_wait_cents"]   # > 0: waiting saves this much
-        if bal > 0:
-            dec = "wait_until_payoff" if out["delta_cents"] > 0 else "upgrade_now"
-        else:
-            dec = "upgrade_now" if age >= 24 else "keep"
-        out["decision"] = dec
-        out["wait_until"] = (pd.Timestamp(today) + pd.DateOffset(months=mleft)).strftime("%Y-%m-%d") \
-            if dec == "wait_until_payoff" else ""
-        out["data_note"] = "synthetic/simulated"
-        rows.append(out)
-    return pd.DataFrame(rows)
+    try:
+        from . import tradein_wait as tw  # type: ignore
+    except ImportError:
+        import tradein_wait as tw  # harness/ on sys.path
+    kw = {} if wait_min_gain_cents is None else {"wait_min_gain_cents": wait_min_gain_cents}
+    return tw.build_line_tradein(conn, promos, plan_family, **kw)
 
 
 def apply_features_csv(facts: pd.DataFrame, path) -> tuple[pd.DataFrame, str]:

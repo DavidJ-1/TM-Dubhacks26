@@ -60,6 +60,13 @@ def load(rebuild: bool = False) -> pd.DataFrame | None:
     feats = HERE / "out" / "features.csv"
     if OUT.exists() and not rebuild and (not feats.exists() or OUT.stat().st_mtime >= feats.stat().st_mtime):
         return pd.read_csv(OUT)
+    # fallbacks (no rebuild): $TM_OUT_DIR, then the tracked demo_data/ copy (fresh clone)
+    if not rebuild:
+        for alt in ([Path(os.environ["TM_OUT_DIR"]) / OUT.name] if os.environ.get("TM_OUT_DIR") else []) \
+                + [HERE.parent / "demo_data" / OUT.name]:
+            if alt.exists():
+                print(f"upgrade gate: using {alt}")
+                return pd.read_csv(alt)
     try:
         s = score()
     except Exception as e:  # noqa: BLE001
