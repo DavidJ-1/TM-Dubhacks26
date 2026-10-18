@@ -96,8 +96,8 @@ The literal 3+ calls rule flags 1,462 accounts (29%) and catches 77% of churners
 ## Reproducibility (inputs used)
 
 - Input dir: `demo_data`
-- offers.csv: `demo_data/offers.csv`, mtime 2026-10-17 20:29:17 PDT, 5,042 rows
-- offer_candidates: `demo_data/offer_candidates.csv.gz`, mtime 2026-10-17 20:29:42 PDT
+- offers.csv: `demo_data/offers.csv`, mtime 2026-10-17 21:34:44 PDT, 5,042 rows
+- offer_candidates: `demo_data/offer_candidates.csv.gz`, mtime 2026-10-17 21:34:49 PDT
 - Both were copied to a private snapshot before reading, so a concurrent rerun can't mix runs.
 - Main-table save-rate scale: x1; sweep: x1, x0.5, x0.25
 - Regenerate: `python3 harness/compare_strategies.py` (options: --input-dir, --save-scale, --sweep; env TM_OUT_DIR).
