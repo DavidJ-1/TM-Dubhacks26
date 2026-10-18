@@ -6,8 +6,10 @@
 ```bash
 # from the repo root; needs pandas, numpy (scikit-learn for modelling)
 python harness/features.py   # -> harness/out/features.csv
-python harness/labels.py     # -> harness/out/labels.csv (default --recipe tuned; reads features.csv + sandbox for toy_p)
+python harness/enrichment.py # -> harness/out/enrichment.csv (job change, income, step-up cost; needed by labels.py)
+python harness/labels.py     # -> harness/out/labels.csv (default --recipe tuned; reads features.csv + enrichment.csv + sandbox for toy_p)
 python harness/labels.py --recipe doc   # plan-doc recipe as written; overwrites out/labels.csv, same columns
+python harness/scale_synth.py --n 50000 # -> harness/out/scaled/{features_scaled,labels_scaled}.csv + FIDELITY.md
 ```
 Requirements: `pandas>=2`, `numpy>=1.26`, `scikit-learn>=1.4` (tested: pandas 3.0.6, numpy 2.5.4). Both scripts are deterministic: no global RNG, and draws come from a per-account sha256 uniform.
 Sandbox path: `$SANDBOX_DB`, else `<repo>/dubhacks/data/sandbox.db`, else `<repo>/../dubhacks/data/sandbox.db`. It is opened **read-only** (`mode=ro` + `PRAGMA query_only`). Nothing ever writes to it. `harness/out/` is gitignored.
@@ -52,7 +54,7 @@ Accounts: 5,000 regular + 42 `ACC-PERSONA-xx`. Persona NN maps to account_id `AC
 | `upgrade_driver_1..3` | the three largest positive upgrade-logit contributions (**leak columns**) |
 | `label_driver_1..3` | the three largest positive logit contributions for the account (debug and sanity aid; tm-churn should derive its own reasons) |
 
-**Leak columns.** Never use these as model features: `p_true_90d, monthly_hazard, label_driver_*, p_upgrade_90d, upgrade_driver_*, toy_p, toy_churn`. Train on features.csv against `churn_90d` / `upgrade_90d` only. The upgrade columns come after the churn columns, and the churn columns keep their original order.
+**Leak columns.** Never use these as model features: `p_true_90d, monthly_hazard, label_driver_*, p_upgrade_90d, upgrade_driver_*, toy_p, toy_churn`. Enrichment columns (enrichment.csv) are legitimate *features* for Model B, but note that `upgrade_90d` is generated partly from `household_income_usd` and `step_up_cost_pct_income`. Train on features.csv against `churn_90d` / `upgrade_90d` only. The upgrade columns come after the churn columns, and the churn columns keep their original order.
 
 ### Label recipe (plan doc "Calibration" line, adapted)
 `logit(monthly_hazard) = b0 + SHRINK × Σ coef × term`, where SHRINK = 0.5. b0 is solved by bisection so that the **mean monthly hazard over the 5,000 regular accounts = 0.990%** (T-Mobile postpaid account churn, Q2 2026, TMUS Investor Factbook). Result: b0 = −6.3538.
@@ -123,9 +125,23 @@ Both recipes print persona percentiles after each run.
 - Spearman(p_true_90d, toy_p) = 0.879. AUC of p_true_90d against toy_churn = 0.807 (toy_p itself scores 0.827). AUC of p_true_90d against churn_90d = 0.864 (the oracle ceiling for tm-churn).
 - Personas: p_true_90d, then percentile among the 5,000 regular accounts. Expected high: 04 0.173 (97th), 21 0.061 (92nd), 22 0.051 (90th), 27 0.072 (93rd). Expected low: 10 0.004 (2nd), 24 0.005 (11th). Others: 23 0.089 (94th), 25 0.019 (74th), 26 0.006 (13th), 28 0.009 (42nd).
 
+## enrichment.csv: 5,042 rows (account_id + 9 columns). SYNTHETIC per-account values
+> **ALL PER-ACCOUNT ENRICHMENT VALUES ARE SYNTHETIC.** Only the cited aggregates (BLS hires rate, ACS national income distribution) and the sandbox plan prices are real. These columns are kept out of features.csv so Model A's inputs don't change.
+
+| column | meaning / source |
+|---|---|
+| `recent_job_change` | SYNTHETIC 0/1: started a new job in the last 90 days. Base rate from the **BLS JOLTS hires rate, 3.3%/month (Aug 2026, SA, total nonfarm; released 2026-09-29)**, https://www.bls.gov/news.release/jolts.nr0.htm, giving 1 − (1 − 0.033)³ = **9.57% per 90 days** (achieved 9.48% on the 5,000). Mild links: student +0.6, senior −1.2, tenure < 12 months +0.4, tenure ≥ 60 months −0.2 (logit). Hires per employee is a proxy (it includes rehires). Not used in any label. |
+| `household_income_usd` | SYNTHETIC. **The sandbox has no geography** (no ZIP, city or state), so incomes are drawn from the **real national ACS 2020-2024 5-year B19001** distribution (16 bins) via the Census Reporter API: https://api.censusreporter.org/1.0/data/show/acs2024_5yr?table_ids=B19001,B19013&geo_ids=01000US (cached at `/workspace/tmobile/raw/censusreporter_acs2024_5yr_B19001_B19013_us.json`). api.census.gov returned "missing key" from this host, and we did not sign up for one. A latent rank (prime +0.35, subprime −0.35, student −0.5, senior −0.2, family/SMB +0.2, +0.2 × z(log bill), plus N(0,1) noise) maps to the national inverse CDF, so the marginal matches ACS. Uniform within bins; Pareto(2.5) above $200k, capped at $2M. Sample median $81,750. |
+| `income_band` | <$25k, $25-50k, $50-75k, $75-100k, $100-150k, $150-200k, $200k+ |
+| `area_median_income_usd` | REAL: ACS B19013 national median household income **$80,734** (±166). National, because there is no account geography. |
+| `income_geo_level` | "national (sandbox has no geography)" |
+| `next_plan_sku`, `next_plan_price_cents` | REAL sandbox plans table. Ladder: Essentials Saver → Essentials → Experience More → Experience Beyond, keeping Community/Partner/55 variants; Essentials 4-line → More. Price is for the account's line count. Blank on Beyond (top), 19.8% of accounts. |
+| `step_up_cost_cents` | next plan price − current plan list price (≥ 0). Median $30/month. |
+| `step_up_cost_pct_income` | 12 × step-up cost / household income × 100 (affordability). Median 0.52%. |
+
 ## Upgrade target (`upgrade_90d`): SYNTHETIC
-**ALL UPGRADE LABELS AND RATES ARE SYNTHETIC.** The target is "would accept a plan step-up or device upgrade within 90 days". It is independent of `--recipe`: the churn-risk term always uses the tuned churn hazard.
-`logit(p_upgrade_90d) = b0 + Σ coef × term`. b0 is solved so the mean p_upgrade_90d over the 5,000 regular accounts = **6.0%**. Source: the plan doc's v2 assumes 2.0% upgrades per account-month (Verizon's 2.6%/quarter phone upgrade rate × 2.37 lines per account), and 1 − (1 − 0.020)³ = 5.88%, rounded to 6.0%. This is a synthetic assumption; T-Mobile does not publish a per-account upgrade rate. b0 = -3.9492.
+**ALL UPGRADE LABELS AND RATES ARE SYNTHETIC.** The target is "would accept a plan step-up or device upgrade within 90 days". It is independent of `--recipe`: the churn-risk term always uses the tuned churn hazard. labels.py reads `out/enrichment.csv` for the affordability terms (run enrichment.py first).
+`logit(p_upgrade_90d) = b0 + Σ coef × term`. b0 is solved so the mean p_upgrade_90d over the 5,000 regular accounts = **6.0%**. Source: the plan doc's v2 assumes 2.0% upgrades per account-month (Verizon's 2.6%/quarter phone upgrade rate × 2.37 lines per account), and 1 − (1 − 0.020)³ = 5.88%, rounded to 6.0%. This is a synthetic assumption. b0 = -3.5132.
 
 | term | coef | definition |
 |---|---|---|
@@ -133,6 +149,7 @@ Both recipes print persona percentiles after each run.
 | `tier_standard` | +0.50 | plan_tier = standard |
 | `capped_plan` | +0.50 | plan has a data cap |
 | `top_tier` | -1.00 | already on experience_beyond (top) family |
+| `premium_nontop` | -0.40 | already on a premium non-top plan (experience_more family): less headroom |
 | `over_cap_share` | +1.50 | share of lines over plan cap (last 3 months) |
 | `near_cap` | +0.60 | capped plan and avg data per line >= 80% of cap (last 3 months) |
 | `usage_growth` | +0.80 | data_growth_pct clipped to [-0.5, 1.0] (last 3 vs prior 3 months) |
@@ -144,8 +161,13 @@ Both recipes print persona percentiles after each run.
 | `student` | +0.70 | segment or discount_group = student (life-stage step-up, e.g. graduation; doc lists student as an upgrade moment) |
 | `bill_increase_pct` | -4.00 | bill shock: max(0, last / prior avg - 1) |
 | `promo_expired_recent` | -1.00 | bill shock: promo expired in last 3 bill months |
+| `stepup_cost_pct_income` | -0.50 | affordability: 12 x monthly step-up cost to the next plan up (sandbox plans) / household income x 100, clipped to [0, 10]; 0 on the top plan (enrichment.csv) |
+| `log_income_ratio` | +0.30 | log(household income / ACS national median $80,734), clipped to [-2, 2] (enrichment.csv; income is synthetic) |
 | `churn_risk_z` | -0.25 | max(0, z-score of logit(tuned monthly churn hazard)): mild negative for above-average risk only; tuned recipe always |
 
-Results (synthetic, 5,000 regular accounts): mean p_upgrade_90d 6.00%; upgrade_90d positives 300 (6.00%); median 3.6%, max 0.71. Correlation with p_true_90d: Spearman −0.28, Pearson −0.16 (bill shock and risk push the two apart). Most common top driver: device age beyond 12 months (1,397 accounts), then tenure, standard tier, basic tier, student.
-Persona upgrade percentiles: 25 (upsell) 95.8 · 28 (graduating student) 93.8 · 22 (bill shock) 3.3 · 27 (bill shock) 3.9 · 24 (do nothing) **50.7, about the median** (p = 3.7%, below the 6% mean; premium plan, 55-month tenure). Others: 04 5.7 · 10 24.2 · 21 53.3 · 23 38.5 · 26 21.7.
-Tuning steps taken to reach these persona ranks, each a judgement call: churn-risk penalty applies only above average risk; tenure weight 0.10 per year; student weight 0.70; device age counts only after the first 12 months.
+Results (synthetic, 5,000 regular accounts): mean p_upgrade_90d 6.00%; upgrade_90d positives 322 (6.44%). Spearman with p_true_90d -0.25, Pearson -0.14.
+Persona upgrade percentiles after adding affordability (before, in parentheses): 25 **97.1** (95.8) · 28 **96.7** (93.8) · 22 **7.5** (3.3) · 27 **1.2** (3.9) · 24 **52.6** (50.7, still about the median: a premium non-top plan with a cheap $15/month step-up to Beyond; pushing it lower would take persona-specific hacks) · 04 8.8 · 10 56.2 · 21 66.5 · 23 36.3 · 26 42.4.
+Judgement calls: churn-risk penalty applies only above average risk; tenure 0.10 per year; student 0.70; device age counts only after 12 months; affordability −0.5 per point of income; log income +0.3; premium non-top −0.4.
+
+## Scaled synthetic dataset (out/scaled/): SYNTHETIC
+`scale_synth.py` writes **N synthetic accounts generated from the sandbox's distributions** (default N = 50,000, seed 2026, ids SYN-000001…). The method is a Gaussian copula: empirical marginals plus a normal-score rank-correlation matrix fitted to the 5,000 regular accounts (features + the sampled enrichment columns), with logical constraints enforced and the remaining columns derived from the sandbox plans table. Labels use the same labels.py recipe (tuned churn + upgrade), with b0s re-solved on the synthetic rows. `features_scaled.csv` has the features.csv columns followed by the enrichment columns; `labels_scaled.csv` has the labels.csv columns. Fidelity (KS, correlation difference, base rates, train-on-synthetic/test-on-real AUC) is in `out/scaled/FIDELITY.md`. out/features.csv and out/labels.csv are never overwritten.

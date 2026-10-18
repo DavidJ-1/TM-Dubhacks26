@@ -5,7 +5,8 @@ sandbox customer. Marginals = empirical distributions of the 5,000 regular sandb
 dependence = rank (normal-score) correlation matrix. ALL LABELS AND RATES ARE SYNTHETIC.
 
 Outputs (never touches out/features.csv or out/labels.csv):
-  out/scaled/features_scaled.csv  same columns as features.csv (+ enrichment columns if out/enrichment.csv exists)
+  out/scaled/features_scaled.csv  same columns as features.csv + enrichment.csv columns (if out/enrichment.csv exists;
+                                  household_income_usd + recent_job_change are sampled in the copula, the rest derived)
   out/scaled/labels_scaled.csv    same columns as labels.csv; same labels.py recipe (tuned churn + upgrade), b0s
                                   re-solved on the synthetic rows (0.99%/month churn, 6%/90d upgrade)
   out/scaled/FIDELITY.md          KS per column, correlation-matrix difference, base rates, TSTR AUC
@@ -34,7 +35,10 @@ CATEGORICAL = ["segment", "language", "contact_preference", "credit_tier", "disc
 CREDIT_ORDER = ["subprime", "near_prime", "prime"]
 # derived after sampling (not modelled directly)
 DERIVED = ["account_id", "is_persona", "plan_family", "plan_tier", "plan_data_cap_gb", "plan_is_unlimited",
-           "plan_price_cents", "financing_ends_within_3m", "support_90d"]
+           "plan_price_cents", "financing_ends_within_3m", "support_90d",
+           # enrichment columns derived after sampling (only recent_job_change + household_income_usd are sampled)
+           "income_band", "area_median_income_usd", "income_geo_level", "next_plan_sku", "next_plan_price_cents",
+           "step_up_cost_cents", "step_up_cost_pct_income"]
 TOPICS = ["billing_contacts_90d", "device_contacts_90d", "plan_change_contacts_90d", "network_contacts_90d",
           "cancellation_inquiry_contacts_90d"]
 # conditional columns: modelled only on rows where condition holds; otherwise set to the fill value
@@ -227,7 +231,15 @@ def generate(n: int, seed: int) -> pd.DataFrame:
         cols += [c for c in e.columns if c != "account_id"]
     cop = Copula().fit(real, rng)
     syn = cop.sample(n, rng)
-    syn = enforce(syn, load_plans())
+    plans = load_plans()
+    syn = enforce(syn, plans)
+    if ENRICH.exists():
+        import enrichment as EN
+        syn["income_band"] = EN.band(syn["household_income_usd"])
+        syn["area_median_income_usd"] = real["area_median_income_usd"].iloc[0]
+        syn["income_geo_level"] = real["income_geo_level"].iloc[0]
+        syn["recent_job_change"] = syn["recent_job_change"].round().astype(int)
+        syn = pd.concat([syn, EN.step_up(syn, plans)], axis=1)
     syn["account_id"] = [f"SYN-{k:06d}" for k in range(1, n + 1)]
     syn["is_persona"] = 0
     for c in cols:  # restore integer dtypes
@@ -243,7 +255,7 @@ def tstr(syn_f, syn_l, real_f, real_l, target):
     from sklearn.pipeline import make_pipeline
     from sklearn.preprocessing import StandardScaler
 
-    feats = [c for c in real_f.columns if c not in ("account_id", "is_persona", "plan_sku")]
+    feats = [c for c in real_f.columns if c not in ("account_id", "is_persona", "plan_sku", "income_geo_level")]
 
     def X(df, ref=None):
         d = pd.get_dummies(df[feats], columns=[c for c in feats if df[c].dtype == object or str(df[c].dtype) == "str"
