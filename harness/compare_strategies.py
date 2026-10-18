@@ -161,6 +161,8 @@ def main(argv=None):
                     "inputs (default: TM_OUT_DIR, else demo_data/ if it has offers.csv, else harness/out)")
     ap.add_argument("--save-scale", type=float, default=1.0, help="multiply ALL save rates (every strategy) by this "
                     "factor for the main table (default 1.0)")
+    ap.add_argument("--include-other-value", action="store_true", help="opt-in: add row '5b. Ours (incl. offer "
+                    "chooser's own upsell/lock-in/customer-benefit value)'. Off by default (not like-for-like).")
     ap.add_argument("--sweep", default="1.0,0.5,0.25", help="save-rate scales for the sensitivity table")
     args = ap.parse_args(argv)
     IN_DIR = resolve_input_dir(args.input_dir)
@@ -215,13 +217,13 @@ def main(argv=None):
     k10 = int(round(0.10 * n))
     top = pd.Series(False, index=base.index); top[p.sort_values(ascending=False).index[:k10]] = True
     rows.append(credit_strategy("4. Top 10% risk score only", top,
-                                f"${care_cost:.0f} care credit to the top {k10} by Model A risk"))
+                                f"${care_cost:.0f} care credit to the top {k10} by churn-model risk"))
 
     ch = cands[cands.is_chosen.astype(str) == "True"].set_index("account_id").reindex(base.index)
     contact = base.action_code != "do_nothing"
     sr = ch["save_rate"].fillna(0)
     other = (ch[["upsell_gain", "customer_benefit", "lock_value"]].fillna(0).sum(axis=1))[contact].sum()
-    rows.append(dict(strategy="5. Ours (Model A + EV engine)", description="per-customer pick from offers.csv; "
+    rows.append(dict(strategy="5. Ours", description="churn model + per-customer offer chooser; "
                      "do nothing allowed to win", contacted=int(contact.sum()),
                      expected_saves=(p * sr)[contact].sum(), offer_cost_usd=ch["offer_cost"].fillna(0)[contact].sum(),
                      contact_cost_usd=ch["annoyance"].fillna(0)[contact].sum(),
@@ -232,10 +234,11 @@ def main(argv=None):
                      - (contact & (base.action_code == "care_credit_fix_first")).sum() * C["FIX_FIRST_CALLBACK_COST"],
                      expected_saves_true_p=(ptrue * sr)[contact].sum(),
                      saved_margin_true_p_usd=(ptrue * sr * val)[contact].sum(), other_ev_usd=other))
-    o5 = dict(rows[-1]); o5.update(strategy="5b. Ours (incl. engine other value)",
-                                   description="same picks as 5; net value ALSO counts the engine's own upsell margin, "
+    o5 = dict(rows[-1]); o5.update(strategy="5b. Ours (incl. other value)",
+                                   description="same picks as 5; net value ALSO counts the offer chooser's own upsell margin, "
                                                "lock-in and customer-benefit credit (other_ev_usd)", include_other=True)
-    rows.append(o5)
+    if args.include_other_value:
+        rows.append(o5)
     raw = pd.DataFrame(rows)
     raw["include_other"] = raw.get("include_other", False)
     raw["include_other"] = raw["include_other"].fillna(False).astype(bool)
@@ -275,7 +278,7 @@ def main(argv=None):
     y = L.churn_90d.values
     rule_mask = L.support_90d >= 3
     lift = pd.DataFrame([
-        dict(method="Model A (out-of-fold)", auc=auc(y, L.p_churn_90d), top10_capture=topk_capture(y, L.p_churn_90d)),
+        dict(method="Our churn model (out-of-fold)", auc=auc(y, L.p_churn_90d), top10_capture=topk_capture(y, L.p_churn_90d)),
         dict(method="Support-call count (naive rule)", auc=auc(y, L.support_90d),
              top10_capture=topk_capture(y, L.support_90d)),
         dict(method="Random", auc=0.5, top10_capture=0.10),
@@ -297,7 +300,7 @@ def main(argv=None):
     def money(x):
         return "n/a" if pd.isna(x) else (f"-${-x:,.0f}" if x < 0 else f"${x:,.0f}")
     r = t.set_index("strategy")
-    ours, blanket, rule, score = (r.loc["5. Ours (Model A + EV engine)"], r.loc["2. Discount everyone"],
+    ours, blanket, rule, score = (r.loc["5. Ours"], r.loc["2. Discount everyone"],
                                   r.loc["3. 3+ support calls rule"], r.loc["4. Top 10% risk score only"])
     ccs = C["SAVE_RATE"]["care_credit"]; ff = C["SAVE_RATE"]["fix_first"]
     sr_txt = (f"{ccs['on_target']:.0%} if billing/service pain else {ccs['off_target']:.0%} "
@@ -318,7 +321,7 @@ def main(argv=None):
         f"Depends on assumed save rates: ~{ours.expected_saves:.0f} expected saves at {money(ours.cost_per_save_usd)} per save, "
         f"{cheaper:.0%} cheaper per save than a $25 credit to everyone, net {money(ours.net_value_usd)} vs "
         f"{money(blanket.net_value_usd)}.",
-        f"Model A puts {lift.loc[0,'top10_capture']:.0%} of actual churners in its top 10% (out-of-fold), vs "
+        f"Our churn model puts {lift.loc[0,'top10_capture']:.0%} of actual churners in its top 10% (out-of-fold), vs "
         f"{lift.loc[1,'top10_capture']:.0%} for ranking by support calls and 10% at random "
         f"(AUC {lift.loc[0,'auc']:.2f} vs {lift.loc[1,'auc']:.2f}).",
     ]
@@ -326,7 +329,7 @@ def main(argv=None):
           "**All customers and numbers are synthetic/simulated. We don't claim real lift until a holdout test.**", "",
           "## Headline", ""] + [f"- {h}" for h in headline] + [
           "", f"## 1. Assumption-free metrics ({n:,} synthetic accounts)", "",
-          f"These depend only on who each strategy contacts: no assumed save rates. Low risk = Model A risk < "
+          f"These depend only on who each strategy contacts: no assumed save rates. Low risk = churn-model risk < "
           f"{low_risk:.0%}. Churners reached = contacted accounts that churned in the simulated labels ({n_churn} total).", "",
           "| strategy | contacted | contacts to low-risk customers (risk < 5%) | credit / discount spend | actual churners reached |",
           "|---|---:|---:|---:|---:|"]
@@ -334,9 +337,12 @@ def main(argv=None):
         md.append(f"| {x.strategy} | {x.contacted:,} | {x.contacts_to_low_risk:,} ({0 if pd.isna(x.contacts_to_low_risk_share) else x.contacts_to_low_risk_share:.0%}) | "
                   f"{money(x.credit_spend_usd)} | {x.churners_reached} ({x.churners_reached_share:.0%}) |")
     md += ["", "## 2. Simulated value (depends on assumed save rates)" + (f" - save rates x{scale:g}" if scale != 1 else ""), "",
-           f"Assumed save rates (engine CONFIG, illustrative): $25 care credit {sr_txt}. Same for every strategy. "
-           "Row 5b uses the same picks as 5 but its net value also counts the engine's own upsell margin, lock-in and "
-           f"customer-benefit credit ({money(ours.other_ev_usd)}), which the baselines don't get; 5 is the like-for-like row.", "",
+           f"Assumed save rates (illustrative): $25 care credit {sr_txt}. Same for every strategy.", ""]
+    if args.include_other_value:
+        md += ["Row 5b uses the same picks as 5 but its net value also counts the offer chooser's own upsell margin, "
+               f"lock-in and customer-benefit credit ({money(ours.other_ev_usd)}), which the baselines don't get; "
+               "5 is the like-for-like row.", ""]
+    md += [
            "| strategy | expected saves | offer cost | cost per save | net expected value |",
            "|---|---:|---:|---:|---:|"]
     for _, x in t.iterrows():
@@ -357,7 +363,7 @@ def main(argv=None):
         md.append(f"| x{sc:g} saves | " + " | ".join(f"{S.loc[x, 'expected_saves']:.1f}" for x in t.strategy if not x.startswith("1.") ) + " |")
     md += ["", "Does Ours beat each baseline? (net value / saves)", ""]
     sens_lines = []
-    for o in ("5. Ours (Model A + EV engine)", "5b. Ours (incl. engine other value)"):
+    for o in [x for x in t.strategy if x.startswith("5")]:
         for sc in sweep:
             S = sens[sens.save_scale == sc].set_index("strategy")
             bits = []
@@ -368,9 +374,9 @@ def main(argv=None):
             line = f"- **{o.split('. ',1)[1]}, save rates x{sc:g}:** " + "; ".join(bits) + "."
             md.append(line); sens_lines.append(line)
     md += ["", "Saves and saved margin scale linearly with the save rate; offer and contact costs don't, so lower save "
-           "rates hurt the strategies that spend the most per contact first. Full table: comparison_sensitivity.csv.", "",
+           "rates hurt the strategies that spend the most per contact first. Full table in the sensitivity CSV.", "",
            f"Ours' {int(ours.contacts_to_low_risk)} low-risk contacts by action: " +
-           ", ".join(f"{k} {v}" for k, v in ours_low.items()) + ". None are credits (the engine blocks credits below 5% risk); "
+           ", ".join(f"{k} {v}" for k, v in ours_low.items()) + ". None are credits (our offer chooser never gives credits below 5% risk); "
            "upsells (step_up/family_upgrade/home_internet_bundle) are the ones a judge could question.", "",
            "## Churn model lift (out-of-fold, 5-fold CV)", "",
            f"{n_reg:,} regular accounts, {n_ch} actual churners in 90 days (base rate {n_ch/n_reg:.1%}).", "",
@@ -378,41 +384,43 @@ def main(argv=None):
     for _, x in lift.iterrows():
         md.append(f"| {x.method} | {x.auc:.3f} | {x.top10_capture:.0%} | {x.top10_lift_x:.1f}x |")
     md += ["", f"The literal 3+ calls rule flags {rule_info['n']:,} accounts ({rule_info['share']:.0%}) and catches "
-           f"{rule_info['cap']:.0%} of churners. Existing holdout backtest (harness/out/backtest_churn_churn_90d.md) "
-           "agrees: model_a CV top-10% recall 60.6% vs 26.2% for rule_support3.", "",
+           f"{rule_info['cap']:.0%} of churners. Our separate holdout backtest agrees: 5-fold CV top-10% recall 60.6% for "
+           "our churn model vs 26.2% for the yes/no 3+ calls rule.", "",
            "## How it's computed", "",
-           "- Expected saves = sum over contacted accounts of p_churn_90d (Model A) x save rate. Save value = that x "
-           "customer value (24 months x 50% service margin), exactly as in the engine.",
-           f"- Credit baselines (2-4) give the ${care_cost:.0f} care credit regardless of eligibility, with the engine's "
+           "- Expected saves = sum over contacted accounts of predicted 90-day churn risk x save rate. Save value = that x "
+           "customer value (24 months x 50% service margin), exactly as in our offer chooser.",
+           f"- Credit baselines (2-4) give the ${care_cost:.0f} care credit regardless of eligibility, with our offer chooser's "
            f"care-credit save rate per account (25% on target for billing/service pain, 5% off target, +5 pts after "
-           f"bill shock) and ${care_ann:.0f} contact/annoyance cost. Save-rate source: {cc_src}.",
-           "- Ours uses the chosen row in offer_candidates.csv (save rate, offer cost, annoyance) for each account.",
+           f"bill shock) and ${care_ann:.0f} contact/annoyance cost." + ("" if not cc_src.startswith("APPROX") else " (approximate driver flags)"),
+           "- Ours uses the offer chooser's pick for each account (its save rate, offer cost and contact cost).",
            "- Net value = saved margin - offer cost - contact/annoyance cost.",
-           "- Contact to a low-risk customer = contacted while Model A risk < 5% (the engine's MIN_CREDIT_P_CHURN).",
+           "- Contact to a low-risk customer = contacted while churn-model risk < 5% (the same threshold below which we never give credits).",
            "", "## Caveats", "",
            "- We don't claim real lift until a holdout test. Synthetic data; save rates and costs are made-up but consistent across strategies.",
            "- Ours' offer cost includes expected revenue given back on plan moves (right-size/variant) and $15 callbacks; credit spend counts only bill credits.",
-           "- Churners reached is in-sample for strategies 4-5 (Model A was fit on these labels); the out-of-fold lift table below is the honest model comparison.",
+           "- Churners reached is in-sample for strategies 4-5 (the churn model was fit on these labels); the out-of-fold lift table below is the honest model comparison.",
            "- Partly circular: ours is scored with the same assumptions it optimizes. The truth-check table and "
-           "harness/out/policy_eval.csv (simulated 50k randomized trial) are the less-circular views.",
-           "- Model A scores are in-sample for the strategy table; lift uses out-of-fold scores.",
-           "", "## Inputs used", "",
+           "the simulated 50k-account randomized trial below are the less-circular views.",
+           "- Churn-model scores are in-sample for the strategy table; lift uses out-of-fold scores.",
+           "", "## Reproducibility (inputs used)", "",
            f"- Input dir: `{IN_DIR.relative_to(ROOT) if IN_DIR.is_relative_to(ROOT) else IN_DIR}`",
            f"- offers.csv: `{SNAP['offers.csv']['source'].relative_to(ROOT) if SNAP['offers.csv']['source'].is_relative_to(ROOT) else SNAP['offers.csv']['source']}`, "
            f"mtime {pd.Timestamp(SNAP['offers.csv']['mtime'], unit='s', tz='UTC').tz_convert('America/Los_Angeles'):%Y-%m-%d %H:%M:%S %Z}, {len(offers):,} rows",
            f"- offer_candidates: `{SNAP['offer_candidates.csv']['source'].relative_to(ROOT) if SNAP['offer_candidates.csv']['source'].is_relative_to(ROOT) else SNAP['offer_candidates.csv']['source']}`, "
            f"mtime {pd.Timestamp(SNAP['offer_candidates.csv']['mtime'], unit='s', tz='UTC').tz_convert('America/Los_Angeles'):%Y-%m-%d %H:%M:%S %Z}",
-           "- Both were copied to a private snapshot before reading, so a concurrent tm-offers rerun can't mix runs.",
+           "- Both were copied to a private snapshot before reading, so a concurrent rerun can't mix runs.",
            f"- Main-table save-rate scale: x{scale:g}; sweep: {', '.join(f'x{x:g}' for x in sweep)}",
            "- Regenerate: `python3 harness/compare_strategies.py` (options: --input-dir, --save-scale, --sweep; env TM_OUT_DIR)."]
     pe = OUT / "policy_eval.csv"
     if pe.exists():
         P = pd.read_csv(pe)
-        md += ["", "## Cross-check: simulated 50k randomized trial (tm-offers' policy_eval.csv, test split, DR estimate)", "",
+        PNAME = {"Model B EV chooser": "Ours (offer chooser)", "Model C uplift policy": "Uplift model (experimental)",
+                 "oracle (true effects; reference only)": "Oracle (true effects; reference only)"}
+        md += ["", "## Cross-check: simulated 50k-account randomized trial (test split, doubly-robust estimate)", "",
                "| policy | contacted | churners saved | offer cost | cost per save | net value (no upsell) |",
                "|---|---:|---:|---:|---:|---:|"]
         for _, x in P.iterrows():
-            md.append(f"| {x.policy} | {int(x.n_contacted):,} | {x.churners_saved_dr:.1f} | {money(x.offer_cost_usd)} | "
+            md.append(f"| {PNAME.get(x.policy, x.policy)} | {int(x.n_contacted):,} | {x.churners_saved_dr:.1f} | {money(x.offer_cost_usd)} | "
                       f"{money(x.cost_per_save_dr_usd)} | {money(x.net_value_no_upsell_dr_usd)} |")
     (OUT / "COMPARISON.md").write_text("\n".join(md) + "\n")
 
@@ -435,7 +443,7 @@ def chart(t: pd.DataFrame, sr_txt: str):
     import matplotlib.pyplot as plt
     dall = t[t.contacted > 0].copy()
     d = dall[~dall.include_other].copy()
-    labels = [s.split(". ", 1)[1].replace(" (Model A + EV engine)", "") for s in d.strategy]
+    labels = [s.split(". ", 1)[1] for s in d.strategy]
     y = np.arange(len(d))
     pink, grey, dark = "#E20074", "#9AA0A6", "#555555"
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(13, 5.6))
@@ -458,7 +466,7 @@ def chart(t: pd.DataFrame, sr_txt: str):
     bars = a2.barh(y2, v, 0.6, color=cols)
     if dall.include_other.any():
         bars[len(dall) - 1].set_hatch("//"); bars[len(dall) - 1].set_alpha(0.55)
-    short = {"2": "Discount everyone", "3": "3+ calls rule", "4": "Score only", "5.": "Ours", "5b": "Ours + engine\nother value"}
+    short = {"2": "Discount everyone", "3": "3+ calls rule", "4": "Score only", "5.": "Ours", "5b": "Ours incl.\nother value"}
     a2.invert_yaxis(); a2.axvline(0, color="#333", lw=0.8)
     a2.set_yticks(y2, [next(v_ for k, v_ in short.items() if s_.startswith(k)) for s_ in dall.strategy], fontsize=8)
     for b, x, cps in zip(bars, v, dall.cost_per_save_usd):
@@ -472,7 +480,7 @@ def chart(t: pd.DataFrame, sr_txt: str):
     for ax in (a1, a2):
         ax.spines[["top", "right"]].set_visible(False)
     fig.suptitle("Same assumptions, different strategies (simulated) - 5,042 synthetic accounts", fontsize=13)
-    foot = ("Assumed save rates: \\$25 care credit " + sr_txt + ". We don't claim real lift until a holdout test.")
+    foot = ("Assumed save rates: \\$25 care credit " + sr_txt + ". ALL NUMBERS SYNTHETIC. We don't claim real lift until a holdout test.")
     fig.text(0.5, 0.012, "\n".join(textwrap.wrap(foot, 170)), ha="center", fontsize=8, color=dark)
     fig.tight_layout(rect=(0, 0.08, 1, 0.94))
     DEMO.mkdir(exist_ok=True)
