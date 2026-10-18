@@ -1,8 +1,10 @@
 """Each send backend. requests is mocked, and no customer number is passed."""
 
+import os
+
 import requests
 
-from harness.notify import send
+from harness.notify import default_topic, load_project_env, send
 
 
 def _block_network(monkeypatch):
@@ -68,3 +70,72 @@ def test_ntfy_posts_plain_text_to_the_topic(monkeypatch):
     assert fallback["sent"] is False
     assert fallback["message"] == "Draft only"
     assert "NTFY_TOPIC" in fallback["hint"]
+
+
+def test_ntfy_topic_argument_does_not_need_the_env(monkeypatch):
+    captured = {}
+
+    class _Response:
+        def raise_for_status(self):
+            return None
+
+    def fake_post(url, data=None, headers=None, timeout=None):
+        captured["url"] = url
+        captured["data"] = data
+        return _Response()
+
+    monkeypatch.delenv("SEND_BACKEND", raising=False)
+    monkeypatch.delenv("NTFY_TOPIC", raising=False)
+    monkeypatch.setattr(requests, "post", fake_post)
+    result = send("Draft", backend="ntfy", topic="tm-dubhacks26-lf3reo19tv")
+    assert result["sent"] is True
+    assert captured["url"] == "https://ntfy.sh/tm-dubhacks26-lf3reo19tv"
+    assert b"phone" not in captured["data"]
+
+
+def test_missing_env_file_changes_nothing(tmp_path, monkeypatch):
+    monkeypatch.setenv("SEND_BACKEND", "dryrun")
+    monkeypatch.delenv("NTFY_TOPIC", raising=False)
+    assert load_project_env(tmp_path / "missing.env") is False
+    assert os.environ["SEND_BACKEND"] == "dryrun"
+    assert "NTFY_TOPIC" not in os.environ
+
+
+def test_process_env_beats_dotenv_and_file_fills_the_rest(tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text("SEND_BACKEND=ntfy\nNTFY_TOPIC=from-file\n", encoding="utf-8")
+    monkeypatch.setenv("SEND_BACKEND", "dryrun")
+    monkeypatch.delenv("NTFY_TOPIC", raising=False)
+    assert load_project_env(env_file) is True
+    assert os.environ["SEND_BACKEND"] == "dryrun"
+    assert os.environ["NTFY_TOPIC"] == "from-file"
+
+
+def test_dotenv_is_used_when_the_process_env_is_unset(tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text("SEND_BACKEND=ntfy\nNTFY_TOPIC=topic-from-file\n", encoding="utf-8")
+    monkeypatch.delenv("SEND_BACKEND", raising=False)
+    monkeypatch.delenv("NTFY_TOPIC", raising=False)
+    assert load_project_env(env_file) is True
+
+    captured = {}
+
+    class _Response:
+        def raise_for_status(self):
+            return None
+
+    def fake_post(url, data=None, headers=None, timeout=None):
+        captured["url"] = url
+        captured["data"] = data
+        return _Response()
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    result = send("From the env file")
+    assert result["sent"] is True
+    assert captured["url"] == "https://ntfy.sh/topic-from-file"
+    assert b"phone" not in captured["data"]
+
+
+def test_in_app_topic_is_the_last_resort(monkeypatch):
+    monkeypatch.delenv("NTFY_TOPIC", raising=False)
+    assert default_topic() == "tm-dubhacks26-lf3reo19tv"

@@ -8,8 +8,8 @@ it draws its own app at import time. make run-ui still starts it unchanged.
 
 from __future__ import annotations
 
-import html
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
@@ -19,19 +19,23 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 from console_app import (  # noqa: E402
     action_page,
     apply_css,
-    banner,
     get_console,
     overview,
     projections,
     queue,
     targeting_page,
+    text_we_would_send,
     upgrades_page,
 )
+from harness.notify import default_topic  # noqa: E402
+
+DEFAULT_TOPIC = "tm-dubhacks26-lf3reo19tv"
 
 SYNTHETIC = "synthetic saved run"
 BADGE = "synthetic, not the live judge score"
@@ -65,7 +69,7 @@ _MESSAGES = _load("tm_ui_messages", APP / "messages.py")
 
 
 def _badge() -> None:
-    st.markdown(f"**{BADGE}**")
+    st.caption(BADGE)
 
 
 @st.cache_data(show_spinner="Loading the saved offer run…")
@@ -79,23 +83,7 @@ def saved_offers() -> tuple[pd.DataFrame, dict, bool]:
     return frame, _DATA.persona_titles(), _DATA.is_mock(loaded)
 
 
-def _phone(english: str, spanish: str) -> None:
-    def bubble(text: str) -> str:
-        cleaned = "" if text is None or str(text).strip() in {"", "nan"} else str(text).strip()
-        if not cleaned:
-            return "<div class='quiet'>No message. Doing nothing means we do not text this account.</div>"
-        return f"<div class='bubble'>{html.escape(cleaned)}</div>"
-
-    st.markdown(
-        "<div class='phone'><div class='phone-bar'></div>"
-        f"<div class='quiet'>English</div>{bubble(english)}"
-        f"<div class='quiet'>Español</div>{bubble(spanish)}"
-        "<div class='quiet'>Saved draft from the offer run. Nothing is sent from this phone.</div></div>",
-        unsafe_allow_html=True,
-    )
-
-
-def _story_card(frame: pd.DataFrame, titles: dict, account_id: str, story: str, note: str, index: int) -> None:
+def _story_card(frame: pd.DataFrame, titles: dict, account_id: str, story: str, note: str, index: int, key: str) -> None:
     rows = frame.loc[frame["account_id"] == account_id]
     st.markdown(f"**{index}. {story}**")
     st.caption(note)
@@ -105,28 +93,32 @@ def _story_card(frame: pd.DataFrame, titles: dict, account_id: str, story: str, 
     row = rows.iloc[0]
     title = titles.get(account_id) or account_id
     action = _MESSAGES.action_label(row.get("action_key"))
-    left, right = st.columns([1.3, 0.7])
-    with left:
-        st.markdown(f"**{title}**")
-        st.caption(f"{account_id} · {row.get('segment', '')} · {action}")
-        why = str(row.get("why_this_offer") or "").strip()
-        if why and why != "nan":
-            st.write(why)
-        risks = [row.get(f"risk_reason_{i}") for i in (1, 2, 3)]
-        stays, _dropped = _DATA.clean_stays(row)
-        if any(isinstance(item, str) and item for item in risks):
-            st.markdown("**Reasons to leave**")
-            for item in risks:
-                if isinstance(item, str) and item:
-                    st.write("· " + item)
-        if stays:
-            st.markdown("**Reasons to stay**")
-            for item in stays:
+    why = str(row.get("why_this_offer") or "").strip()
+    if why == "nan":
+        why = ""
+    text_we_would_send(
+        str(row.get("message_en") or ""),
+        str(row.get("message_es") or ""),
+        why or "Nothing would help them right now.",
+        account_id,
+        key,
+    )
+    st.markdown(f"**{title}**")
+    st.caption(f"{account_id} · {row.get('segment', '')} · {action}")
+    if why:
+        st.write(why)
+    risks = [row.get(f"risk_reason_{i}") for i in (1, 2, 3)]
+    stays, _dropped = _DATA.clean_stays(row)
+    if any(isinstance(item, str) and item for item in risks):
+        st.markdown("**Reasons to leave**")
+        for item in risks:
+            if isinstance(item, str) and item:
                 st.write("· " + item)
-    with right:
-        st.metric("Churn risk, 90 days", f"{float(row['p_churn_90d']):.1%}")
-        st.caption("Saved churn-risk file. Not the live judge score on the next screens.")
-        _phone(str(row.get("message_en") or ""), str(row.get("message_es") or ""))
+    if stays:
+        st.markdown("**Reasons to stay**")
+        for item in stays:
+            st.write("· " + item)
+    st.caption(f"Churn risk, 90 days, from the saved file: {float(row['p_churn_90d']):.1%}. Not the live judge score.")
 
 
 def _how_it_decides(frame: pd.DataFrame) -> None:
@@ -172,9 +164,11 @@ def landing_page() -> None:
         st.error("The saved sandbox run was not found, so this opener is the small placeholder file.")
     _how_it_decides(frame)
     st.divider()
+    st.subheader("Text messages")
+    st.caption("One draft for each opener. Nothing is sent until you click.")
     for index, (account_id, story, note) in enumerate(CARDS, start=1):
         with st.container(border=True):
-            _story_card(frame, titles, account_id, story, note, index)
+            _story_card(frame, titles, account_id, story, note, index, f"send_land_{account_id}")
     st.divider()
     st.subheader("Open any customer")
     _badge()
@@ -197,7 +191,7 @@ def landing_page() -> None:
     )
     if pick:
         with st.container(border=True):
-            _story_card(frame, titles, pick, "Customer lookup", "Saved offer run", 0)
+            _story_card(frame, titles, pick, "Customer lookup", "Saved offer run", 0, f"send_lookup_{pick}")
 
 
 def whos_at_risk(console) -> None:
@@ -207,19 +201,90 @@ def whos_at_risk(console) -> None:
     queue(console)
 
 
+_SHORT_STRATEGY = {
+    "Do nothing": "Do nothing",
+    "Discount everyone": "Discount everyone",
+    "3+ support calls rule": "3+ support calls",
+    "Top 10% risk score only": "Top 10% risk",
+    "Ours": "Ours",
+}
+
+
+def _k_dollars(value: float) -> str:
+    sign = "-" if value < 0 else ""
+    return f"{sign}${abs(value) / 1000:.0f}K"
+
+
+def strategy_figure(compared: pd.DataFrame) -> go.Figure:
+    """Fixed bar chart. Built here from comparison.csv. David's chart files stay untouched."""
+    frame = compared.copy()
+    frame["name"] = frame["strategy"].str.replace(r"^\d+\.\s*", "", regex=True)
+    frame["label"] = frame["name"].map(lambda name: _SHORT_STRATEGY.get(name, name))
+    values = frame["net_value_usd"].astype(float)
+    low = float(values.min())
+    high = float(values.max())
+    span = max(high - low, 1.0)
+    pad = span * 0.18
+    figure = go.Figure(
+        go.Bar(
+            y=frame["label"],
+            x=values,
+            orientation="h",
+            text=[_k_dollars(value) for value in values],
+            textposition="outside",
+            cliponaxis=False,
+            marker_color=["#8A7B84" if value < 0 else "#E20074" for value in values],
+            hoverinfo="skip",
+        )
+    )
+    figure.update_layout(
+        title="Same assumptions, different strategies",
+        margin=dict(l=170, r=72, t=48, b=40),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#1A1220", size=14),
+        height=360,
+        xaxis=dict(
+            title="Simulated net value",
+            range=[low - pad, high + pad],
+            fixedrange=True,
+            tickmode="array",
+            tickvals=[-80000, -40000, 0, 40000],
+            ticktext=["$-80K", "$-40K", "$0", "$40K"],
+            zeroline=True,
+            zerolinecolor="#1A1220",
+        ),
+        yaxis=dict(
+            title=None,
+            fixedrange=True,
+            automargin=True,
+            categoryorder="array",
+            categoryarray=list(frame["label"])[::-1],
+        ),
+    )
+    return figure
+
+
 def _comparison_chart() -> None:
     path = ROOT / "demo_data" / "comparison.csv"
     st.markdown("**Same assumptions, different strategies**")
+    _badge()
     if not path.exists():
         st.caption("comparison.csv is not in this checkout.")
         return
     compared = pd.read_csv(path)
     compared = compared.loc[~compared["strategy"].astype(str).str.match(r"^\s*\d+[a-z]\.")]
-    compared["Strategy"] = compared["strategy"].str.replace(r"^\d+\.\s*", "", regex=True)
-    st.bar_chart(compared.set_index("Strategy")["net_value_usd"], horizontal=True)
-    show = compared[["Strategy", "contacted", "churners_reached", "net_value_usd"]].copy()
+    st.plotly_chart(strategy_figure(compared), width="stretch", config={"staticPlot": True, "displayModeBar": False})
+    show = compared.copy()
+    show["Strategy"] = show["strategy"].str.replace(r"^\d+\.\s*", "", regex=True)
+    show = show[["Strategy", "contacted", "churners_reached", "net_value_usd"]]
     show["net_value_usd"] = show["net_value_usd"].map(lambda value: f"${value:,.0f}")
-    st.dataframe(show, hide_index=True, width="stretch")
+    st.dataframe(
+        show,
+        hide_index=True,
+        width="stretch",
+        column_config={"Strategy": st.column_config.TextColumn("Strategy", width=280)},
+    )
     st.caption(
         "Simulated net value from demo_data/comparison.csv. "
         "Scored with assumed acceptance. This is not measured lift, and it is not the Projections screen."
@@ -278,14 +343,30 @@ def evidence_page() -> None:
         st.caption("pipeline_flow.html is not in this checkout.")
 
 
+def send_sidebar() -> None:
+    """Seed the controls, then send only on a click.
+
+    Precedence for the seed: process environment, then .env (loaded by notify),
+    then the in-app topic. An empty SEND_BACKEND still turns ntfy on.
+    """
+    explicit = os.environ.get("SEND_BACKEND", "").strip().lower()
+    default_on = explicit != "dryrun"
+    topic_default = default_topic()
+    on = st.sidebar.toggle("Send texts via ntfy", value=default_on)
+    topic = st.sidebar.text_input("ntfy topic", value=topic_default).strip() or DEFAULT_TOPIC
+    st.sidebar.caption(f"Install the ntfy app and subscribe to {topic}.")
+    st.session_state["send_backend"] = "ntfy" if on else "dryrun"
+    st.session_state["send_topic"] = topic
+
+
 def main() -> None:
     st.set_page_config(page_title="Retention demo", layout="wide")
     apply_css()
-    banner()
     st.title("Retention demo")
-    st.caption("DubHacks '26 · T-Mobile track · live judge data, then the saved model checks")
+    st.caption("DubHacks '26 · T-Mobile track")
     page = st.sidebar.radio("Screen", SCREENS)
-    st.sidebar.caption("Landing and Model evidence are the saved synthetic run. Every other screen is the live sandbox.")
+    send_sidebar()
+    st.sidebar.caption("Landing and Model evidence use the saved run. Every other screen is the live sandbox.")
     if page.startswith("1"):
         landing_page()
         return

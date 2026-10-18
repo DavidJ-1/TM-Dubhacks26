@@ -2,14 +2,16 @@ PYTHON ?= python3
 VENV := .venv
 BIN := $(VENV)/bin
 DB := vendor/dubhacks/data/sandbox.db
+PORT ?= 8501
+UI_PORT ?= 8502
 
 .PHONY: run run-ui setup test life-signals
 
 run: setup
-	$(BIN)/streamlit run app/demo_app.py --server.headless true --server.address 0.0.0.0 --server.port 8501
+	$(BIN)/streamlit run app/demo_app.py --server.headless true --server.address 0.0.0.0 --server.port $(PORT)
 
 run-ui: setup
-	$(BIN)/streamlit run app/streamlit_app.py --server.headless true --server.address 0.0.0.0 --server.port 8501
+	$(BIN)/streamlit run app/streamlit_app.py --server.headless true --server.address 0.0.0.0 --server.port $(UI_PORT)
 
 setup: $(BIN)/streamlit $(DB)
 

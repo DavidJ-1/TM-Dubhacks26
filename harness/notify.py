@@ -2,22 +2,48 @@
 
 SEND_BACKEND selects the backend: dryrun (default) or ntfy.
 A click is the only thing that calls send().
+
+Value precedence is process environment, then a project .env file, then the
+in-app default topic. load_project_env() never overrides a variable that is
+already set, and a missing .env is a no-op.
 """
 
 import os
+from pathlib import Path
 
 import requests
+from dotenv import load_dotenv
 
 from harness.sms_send import send_sms
 
 # TODO: a webhook or Twilio backend plugs in as another _BACKENDS entry.
 # Keep customer phone numbers out of this module. Call it only from send().
 
+DEFAULT_TOPIC = "tm-dubhacks26-lf3reo19tv"
+_ROOT = Path(__file__).resolve().parents[1]
 
-def send(message: str, backend: str | None = None) -> dict:
+
+def load_project_env(path: Path | None = None) -> bool:
+    """Load SEND_BACKEND and NTFY_TOPIC from .env. Existing env vars win."""
+    env_file = Path(path) if path is not None else _ROOT / ".env"
+    if not env_file.is_file():
+        return False
+    return bool(load_dotenv(env_file, override=False))
+
+
+load_project_env()
+
+
+def default_topic() -> str:
+    """Process env, then .env (already loaded), then the in-app topic."""
+    return _topic(None) or DEFAULT_TOPIC
+
+
+def send(message: str, backend: str | None = None, topic: str | None = None) -> dict:
     """Send the drafted demo message, or return it unchanged on dryrun."""
     name = _backend_name(backend)
-    if name == "ntfy" and not _topic():
+    chosen = _topic(topic)
+    if name == "ntfy" and not chosen:
         preview = _dryrun(message)
         preview["hint"] = "SEND_BACKEND is ntfy but NTFY_TOPIC is unset, so this stayed a preview."
         return preview
@@ -26,12 +52,16 @@ def send(message: str, backend: str | None = None) -> dict:
         preview = _dryrun(message)
         preview["hint"] = f"SEND_BACKEND {name} is not wired up. Preview only."
         return preview
+    if name == "ntfy":
+        return _ntfy(message, chosen)
     return handler(message)
 
 
-def will_send() -> bool:
+def will_send(backend: str | None = None, topic: str | None = None) -> bool:
     """True only when a click would post to ntfy. Does not send."""
-    return _backend_name(None) == "ntfy" and bool(_topic())
+    name = _backend_name(backend) if backend is not None else _backend_name(None)
+    chosen = _topic(topic) if topic is not None else _topic(None)
+    return name == "ntfy" and bool(chosen)
 
 
 def hint() -> str:
@@ -46,8 +76,9 @@ def _backend_name(backend: str | None) -> str:
     return (chosen or "dryrun").strip().lower()
 
 
-def _topic() -> str:
-    topic = (os.environ.get("NTFY_TOPIC") or "").strip()
+def _topic(override: str | None = None) -> str:
+    topic = override if override is not None else os.environ.get("NTFY_TOPIC")
+    topic = (topic or "").strip()
     if not topic or "/" in topic:
         return ""
     return topic
@@ -74,8 +105,7 @@ def _dryrun(message: str) -> dict:
     }
 
 
-def _ntfy(message: str) -> dict:
-    topic = _topic()
+def _ntfy(message: str, topic: str) -> dict:
     try:
         response = requests.post(
             f"https://ntfy.sh/{topic}",

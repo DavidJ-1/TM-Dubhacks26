@@ -12,7 +12,7 @@ make run
 
 That creates a virtualenv, installs the Python dependencies, clones the judge sandbox if it is not already in `vendor/dubhacks`, and starts the judging demo (`app/demo_app.py`) at <http://localhost:8501>. The demo uses the Retention Console for the live sandbox screens. The landing and the model-evidence screen read the saved synthetic run and are labeled as such.
 
-Install the ntfy app, subscribe to the topic, set `NTFY_TOPIC` and `SEND_BACKEND=ntfy`, then click Send.
+Install the ntfy app and subscribe to `tm-dubhacks26-lf3reo19tv`. A `.env` in the project root is loaded when it exists; variables already set in the environment win. The sidebar **Send texts via ntfy** is on by default with that topic, so a click sends without exporting variables. Nothing is sent until you click, and it never goes to a customer number.
 
 The teammate demo UI is a second Streamlit app, `app/streamlit_app.py`. It reads `harness/out/*.csv` when those files exist and otherwise the synthetic mocks in `app/mock/`. Its Charts screen reads the bench and Model C artifacts. Those numbers are labeled synthetic and are not used by `make run`. See `app/README.md`.
 

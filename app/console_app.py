@@ -15,8 +15,8 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from harness.engine import build_console
-from harness.messages import outbound_title
-from harness.notify import hint, send, will_send
+from harness.messages import draft, outbound_title
+from harness.notify import send, will_send
 from harness.playbook.send import frequency_open, record_send
 from harness.playbook.rules import ASSUMPTION_CREDIT_CENTS, FREQUENCY_CAP_DAYS, RULES, VALUE_FORMULA
 from harness.upsell.config import INCLUDE_SYNTHETIC_DEFAULT, SYNTHETIC_BADGE
@@ -369,18 +369,59 @@ def queue(console) -> None:
     chart(fig, height=480)
 
 
-def _send_to_my_phone(action: dict, message: dict, account_id: str | None = None) -> None:
+def _delivery() -> tuple[str | None, str | None]:
+    """Sidebar choice from the demo. Unset means the env-var backend."""
+    if "send_backend" not in st.session_state:
+        return None, None
+    topic = str(st.session_state.get("send_topic") or "").strip()
+    return str(st.session_state.get("send_backend") or "dryrun"), topic
+
+
+def _subscribe_line() -> str:
+    _backend, topic = _delivery()
+    shown = topic or "tm-dubhacks26-lf3reo19tv"
+    return f"Install the ntfy app and subscribe to {shown}."
+
+
+def text_we_would_send(english: str, spanish: str, why: str, account_id: str, key: str) -> None:
+    """Phone mockup and the send button. A click is the only send."""
+    st.subheader("Text message we'd send")
+    en = "" if english is None or str(english).strip() in {"", "nan"} else str(english).strip()
+    es = "" if spanish is None or str(spanish).strip() in {"", "nan"} else str(spanish).strip()
+    if not en and not es:
+        st.write(f"No message sent, here's why: {why}")
+        return
+    st.markdown(
+        "<div class='phone'><div class='phone-bar'></div>"
+        f"<div class='quiet'>English</div><div class='bubble'>{html.escape(en) if en else '—'}</div>"
+        f"<div class='quiet'>Español</div><div class='bubble'>{html.escape(es) if es else '—'}</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    parts = []
+    if en:
+        parts.append(f"English\n{en}")
+    if es:
+        parts.append(f"Español\n{es}")
+    _send_to_my_phone({"why": why}, {"text": "\n\n".join(parts)}, account_id, key=key)
+
+
+def _send_to_my_phone(action: dict, message: dict, account_id: str | None = None, key: str | None = None) -> None:
     if not message.get("text"):
         st.write(f"No message sent, here's why: {action['why']}")
         return
-    note = hint()
-    if note:
-        st.caption(note)
-    if st.button("Send to my phone", key=f"send_{account_id or 'next'}"):
-        if account_id and will_send() and not frequency_open(account_id):
+    backend, topic = _delivery()
+    st.caption(_subscribe_line())
+    button_key = key or f"send_{account_id or 'next'}"
+    if st.button("Send to my phone", key=button_key):
+        live = will_send(backend, topic) if backend is not None else will_send()
+        if account_id and live and not frequency_open(account_id):
             st.toast(f"Frequency cap: one nudge per {FREQUENCY_CAP_DAYS} days. Nothing sent.")
             return
-        result = send(message["text"])
+        if backend is None:
+            result = send(message["text"])
+        else:
+            result = send(message["text"], backend=backend, topic=topic)
         if result.get("hint"):
             st.caption(result["hint"])
         if result.get("sent") and account_id:
@@ -409,6 +450,15 @@ def action_page(console) -> None:
     action = detail["action"]
     moment = detail["moment"]
     message = detail["message"]
+    english = draft({**detail, "language": "en"}, action, moment)
+    spanish = draft({**detail, "language": "es"}, action, moment)
+    text_we_would_send(
+        english.get("text") or "",
+        spanish.get("text") or "",
+        action["why"],
+        choice,
+        f"send_action_{choice}",
+    )
 
     left, right = st.columns([1.15, 0.85])
     with left:
@@ -460,7 +510,6 @@ def action_page(console) -> None:
                 st.write("No device promotion is eligible on a single trade-in plus one new phone.")
     with right:
         customer_card(detail, message)
-        _send_to_my_phone(action, message, choice)
 
 
 def _label(console, account_id: str) -> str:
@@ -497,20 +546,6 @@ def customer_card(detail: dict, message: dict) -> None:
             line_table[["member_label", "device_name", "age_months", "balance", "plan_name", "usage_3m_gb"]],
             hide_index=True,
             width="stretch",
-        )
-    st.markdown(f"Draft for {message['channel']} · {message['language']} · not sent")
-    if message["text"]:
-        st.markdown(
-            "<div class='phone'><div class='phone-bar'></div><div class='bubble'>"
-            + message["html"]
-            + "</div></div>",
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            "<div class='phone'><div class='phone-bar'></div>"
-            "<div class='quiet'>No outbound message. Doing nothing means we do not text this account.</div></div>",
-            unsafe_allow_html=True,
         )
 
 
@@ -754,15 +789,24 @@ def upgrades_page(console) -> None:
     )
     choice = st.selectbox("One customer", list(ranked["account_id"]), index=0, key="upsell_account")
     decision = upsell.decision(choice, include)
-    detail = console.account(choice)
+    if decision["send"]:
+        text_we_would_send(
+            decision["message_en"],
+            decision["message_es"],
+            decision["why"],
+            choice,
+            f"send_grow_{choice}",
+        )
+    else:
+        st.subheader("Text message we'd send")
+        st.write(f"No message sent, here's why: {decision['why']}")
     st.markdown(f"**{choice}** · {decision['action']}")
     if decision["badge"]:
         st.markdown(f"**{decision['badge']}**")
     st.write(decision["why"])
-    columns = st.columns(2)
-    columns[0].metric("Trigger", decision["trigger"])
     diff = decision["diff_cents"]
-    columns[1].metric("Monthly difference", "n/a" if diff is None else dollars(int(diff)))
+    st.write(f"Trigger: {decision['trigger']}")
+    st.write(f"Monthly difference: {'n/a' if diff is None else dollars(int(diff))}")
     offer = decision["offer_name"]
     if decision.get("promo_savings_cents"):
         offer += f" · promo savings {dollars(int(decision['promo_savings_cents']))} subtracted by us"
@@ -771,22 +815,6 @@ def upgrades_page(console) -> None:
     st.write(f"Why the runner-up was rejected: {decision['rejected']}")
     if decision.get("assumption_note"):
         st.caption(decision["assumption_note"])
-    english = decision["message_en"]
-    spanish = decision["message_es"]
-    st.markdown("**Draft**")
-    st.markdown(
-        "<div class='phone'><div class='phone-bar'></div>"
-        f"<div class='quiet'>English</div><div class='bubble'>{html.escape(english)}</div>"
-        f"<div class='quiet'>Español</div><div class='bubble'>{html.escape(spanish)}</div>"
-        "<div class='quiet'>On-screen mockup. Nothing is sent from this phone.</div></div>",
-        unsafe_allow_html=True,
-    )
-    text = english if detail.get("language") != "es" else spanish
-    _send_to_my_phone(
-        {"why": decision["why"]},
-        {"text": text if decision["send"] else None},
-        choice,
-    )
 
 
 def main() -> None:
