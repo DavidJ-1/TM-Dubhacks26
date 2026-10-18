@@ -37,7 +37,8 @@ def guard(monkeypatch, tmp_path):
 def test_dry_run_default_exact_payload_and_log(guard):
     r = pp.send_to_my_phone(BODY, "ACC-X", "en")
     assert r["ok"] and r["mode"] == "dry-run" and r["sent"] is False
-    assert r["preview"]["text"] == "[DEMO, synthetic] " + BODY
+    assert r["preview"]["text"] == BODY  # exactly the engine text, no prefix
+    assert "synthetic" not in r["preview"]["text"].lower()
     log = [json.loads(x) for x in guard.read_text().splitlines()]
     assert log[-1]["event"] == "dry-run" and log[-1]["text"] == r["preview"]["text"]
 
@@ -75,7 +76,7 @@ def test_live_path_calls_notify_once_with_masked_output(monkeypatch, guard):
     monkeypatch.setenv("TM_SEND_LIVE", "1")
     monkeypatch.setenv("NTFY_TOPIC", TOPIC)
     r = pp.send_to_my_phone(BODY, "ACC-X", "en")
-    assert r["sent"] and calls == [("[DEMO, synthetic] " + BODY, "ntfy", TOPIC)]
+    assert r["sent"] and calls == [(BODY, "ntfy", TOPIC)]
     assert TOPIC not in json.dumps(r) + guard.read_text()
     assert pp.send_to_my_phone(BODY, "ACC-X", "en")["sent"] is False and len(calls) == 1  # double click
 
@@ -92,7 +93,7 @@ def test_engine_text_and_cli(tmp_path, capsys):
     assert pp.engine_text("38", "es", p) == "Hola es"
     assert pp.engine_text("ACC-PERSONA-24", "en", p) is None
     assert pp.main(["--account", "38", "--offers", str(p)]) == 0
-    assert json.loads(capsys.readouterr().out)["preview"]["text"] == "[DEMO, synthetic] Hello en"
+    assert json.loads(capsys.readouterr().out)["preview"]["text"] == "Hello en"
 
 
 def test_notify_has_no_hardcoded_topic():

@@ -1,4 +1,4 @@
-"""'Send to my phone' for the live demo, via harness/notify.py's ntfy push backend. ALL TEXTS ARE SYNTHETIC.
+"""'Send to my phone' for the live demo, via harness/notify.py's ntfy push backend.
 
 notify.py (copied unchanged from feature/retention-console) does NOT honour TM_SMS_DRY_RUN: with
 SEND_BACKEND=ntfy and NTFY_TOPIC set it posts to the public ntfy.sh server, and it loads .env at import.
@@ -9,7 +9,7 @@ So this wrapper enforces dry run itself:
   * In dry run notify.py is not even imported: zero network calls, no .env side effects.
     It returns the exact payload (url with masked topic, headers, body) and writes a log line.
   * The topic is masked everywhere it is shown or logged (ntfy topics are readable by anyone who knows them).
-  * Body = '[DEMO, synthetic] ' + the engine's message_en / message_es, otherwise unchanged. No LLM.
+  * Body = the engine's message_en / message_es exactly as given (no prefix, no edits). No LLM.
 
 Env:  TM_SEND_LIVE=1 (arm), NTFY_TOPIC=<private random topic>, TM_SEND_LOG (default <repo>/out/phone_push_log.jsonl)
 CLI:  .venv/bin/python -m harness.phone_push --account ACC-PERSONA-38 [--lang es]
@@ -27,7 +27,6 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PREFIX = "[DEMO, synthetic] "
 MAX_CHARS = 1000
 COOLDOWN_S = 20
 _last: dict[str, float] = {}
@@ -57,7 +56,7 @@ def mode() -> tuple[str, str]:
 
 
 def preview(body: str) -> dict:
-    text = PREFIX + body.strip()
+    text = body
     return {"url": f"https://ntfy.sh/{mask_topic(_topic())}", "topic_masked": mask_topic(_topic()),
             "headers": {"Content-Type": "text/plain"}, "text": text, "chars": len(text)}
 
