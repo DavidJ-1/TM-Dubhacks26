@@ -13,7 +13,15 @@ demo_data/ or to harness/out (temp dirs). Deterministic: no randomness is used (
 Numbers are synthetic; that label stays out of the CSV's on-screen text columns (David's rule).
 
 Run from the repo root:  DUBHACKS_DB=/path/to/sandbox.db python3 scripts/live_events.py [--account ACC-...]
-Writes data/live_events/live_events.csv
+Writes data/live_events/live_events.csv and, per step, the sidecar data/live_events/live_events_steps.json:
+  inputs_changed  model-input fields this event changed: [{field, old, new}] (old = value before this event)
+  engine_changed  engine-frame fields this event changed: [{field, old, new}] (old = None when the field was unset)
+  inputs_now      every model-input field changed so far vs the start, with its current value (cumulative edits)
+  intercept       Model A's intercept (logit)
+  contributions   Model A's full per-signal logit contributions for this row ({feature: logit})
+  groups          the same, summed by reason group (what reason_changed is chosen from)
+  risk            the rescored risk (same value as the CSV's risk column, unrounded)
+All of these are values the script already computes; nothing is added or estimated.
 """
 from __future__ import annotations
 
@@ -44,6 +52,7 @@ from experiments.engine_rules.apply_rules import _db_path, connect_ro  # noqa: E
 
 cs.OUT = _TMP                                  # scorer cache to temp, nothing written in the repo
 OUT_CSV = ROOT / "data" / "live_events" / "live_events.csv"
+OUT_STEPS = ROOT / "data" / "live_events" / "live_events_steps.json"
 SUMMARY = json.loads((ROOT / "experiments/engine_rules/out/demo/summary.json").read_text())["guardrail"]
 FROZEN_SCALE = float(SUMMARY["save_rate_scale"])   # the scale behind the shipped 184; frozen so no other row moves
 SHIPPED_GUARD = ROOT / "experiments/engine_rules/out/demo/guardrail_detail.csv"
@@ -159,7 +168,7 @@ def grouped_contrib(f: dict, aid: str):
     C = st["model"].contributions(X.loc[[aid]])
     G = C.T.groupby([cm.reason_group(c) for c in C.columns]).sum().T.iloc[0]
     G = G.drop([c for c in G.index if c in cm.NON_REASON_GROUPS])
-    return G, table[table.account_id == aid].set_index("account_id").iloc[0]
+    return G, table[table.account_id == aid].set_index("account_id").iloc[0], C.iloc[0], float(st["model"].intercept_)
 
 
 def decision_for(aid: str, g: pd.Series, chan_pref: str, offers_row: pd.Series) -> dict:
@@ -188,8 +197,24 @@ def decision_for(aid: str, g: pd.Series, chan_pref: str, offers_row: pd.Series) 
     return {"pick": "silent", "pick_code": "do_nothing", "pick_label": "Do nothing", "channel": "none", "why": why}
 
 
-def run_path(W: World, aid: str, keys: list[str], check_book: bool = True) -> pd.DataFrame:
+def _plain(v):
+    """JSON-safe scalar (numpy -> python; NaN -> None)."""
+    try:
+        if pd.isna(v):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return v.item() if hasattr(v, "item") else v
+
+
+def _diff(before: dict, after: dict) -> list[dict]:
+    return [{"field": k, "old": _plain(before.get(k)), "new": _plain(after[k])}
+            for k in after if _plain(before.get(k)) != _plain(after[k])]
+
+
+def run_path(W: World, aid: str, keys: list[str], check_book: bool = True, steps_out: list | None = None) -> pd.DataFrame:
     f = W.feats_m.loc[aid].to_dict()
+    f0 = dict(f)
     e = {}
     rows = []
     sup_add = []
@@ -197,11 +222,20 @@ def run_path(W: World, aid: str, keys: list[str], check_book: bool = True) -> pd
     for step, key in enumerate(["start"] + keys):
         if key != "start":
             label, line, fn, topic = EVENTS[key]
+            f_before, e_before = dict(f), dict(e)
             fn(f, e)
             if topic:
                 sup_add.append({"account_id": aid, "interaction_date": str(as_of.date()), "topic": topic, "resolved": 0})
         p, risks, stays = cs.score_account({**f, "account_id": aid})
-        Gc, raw = grouped_contrib(f, aid)
+        Gc, raw, Cfull, b0 = grouped_contrib(f, aid)
+        if steps_out is not None:
+            steps_out.append({
+                "account_id": aid, "step": step, "event": key,
+                "inputs_changed": [] if key == "start" else _diff(f_before, f),
+                "engine_changed": [] if key == "start" else _diff(e_before, e),
+                "inputs_now": {d["field"]: d["new"] for d in _diff(f0, f)},
+                "intercept": b0, "contributions": {k: float(v) for k, v in Cfull.items()},
+                "groups": {k: float(v) for k, v in Gc.items()}, "risk": float(p)})
         if step == 0:
             changed, prevG = "", Gc
         else:   # the reason group that moved most this step (up = a risk phrase, down = a stay phrase)
@@ -283,13 +317,16 @@ def main(argv=None):
     shipped = pd.read_csv(SHIPPED_GUARD).set_index("account_id")
     bg = W.base_G.set_index("account_id")
     print("matches shipped guardrail:", bool((bg.contact_ok == shipped.contact_ok.reindex(bg.index)).all()))
-    P = run_path(W, a.account, a.events.split(","))
+    steps = []
+    P = run_path(W, a.account, a.events.split(","), steps_out=steps)
+    P["inputs_changed"] = [",".join(d["field"] for d in s_["inputs_changed"]) for s_ in steps]
     pd.set_option("display.width", 250)
     print(P.to_string())
     if a.write:
         OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
         P.to_csv(OUT_CSV, index=False)
-        print("wrote", OUT_CSV)
+        OUT_STEPS.write_text(json.dumps(steps, indent=1) + "\n")
+        print("wrote", OUT_CSV, OUT_STEPS)
 
 
 if __name__ == "__main__":

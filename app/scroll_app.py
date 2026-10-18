@@ -98,9 +98,57 @@ if opts is None:
 dec_all = dec
 if not SHOW_MONEY:   # backstop: no company dollars in anything handed to the sections module
     cand, econ, dec, opts = D.strip_money(cand), D.economics_no_money(econ), D.strip_money(dec), D.strip_money(opts)
-_call(O.render_customer, df if SHOW_MONEY else D.strip_money(df), acc, contributions_fn=D.contributions, candidates=cand,
-      inputs=D.engine_inputs(), events=D.events(), decisions=dec, options=opts,
-      live=live if SHOW_MONEY or live is None else live.drop(columns=["policy_ev_usd"], errors="ignore"))
+# ---- 'the account ticks': for the live account, a thin event rail at the top of the customer section drives the
+# whole view (header risk + chip, step 1 inputs, step 2 tower and reasons). Buttons only, no timer. The rest of the
+# page stays frozen (it is drawn from df, never from the ticked row).
+TICK_KEY = f"tick_{D.LIVE_ACC}"
+TICK_CSS = (f"<style>.st-key-orbit_tick{{position:sticky;top:0;z-index:20;background:{O.BG};padding:8px 0 0;margin-bottom:10px}}"
+            f".o-tick{{display:flex;align-items:center;gap:0;font:400 12px 'SM';color:{O.INK};height:34px}}"
+            f".o-tick .seg{{flex:1;height:1px;background:{O.INK}}}"
+            f".o-tick .dot{{width:12px;height:12px;border-radius:50%;border:1.5px solid {O.INK};background:{O.BG};flex:none}}"
+            f".o-tick .dot.past{{background:{O.INK}}}.o-tick .dot.now{{background:{O.MAG};border-color:{O.MAG}}}"
+            f".o-tick .lab{{margin:0 10px 0 6px;white-space:nowrap}}.o-tick .lab.now{{color:{O.MAG}}}.o-tick .lab.fut{{color:{O.MUTED}}}"
+            f".o-tickline{{font:400 16px/1.35 'SG';margin-top:4px;padding-bottom:10px;border-bottom:1px solid {O.INK}}}</style>")
+
+
+def _tick_go(i: int) -> None:
+    st.session_state[TICK_KEY] = i
+
+
+def _tick_rail(t: dict):
+    def draw():
+        i, n, labs = t["step"], t["n"], t["labels"]
+        with st.container(key="orbit_tick"):
+            st.markdown(TICK_CSS, unsafe_allow_html=True)
+            a, b, c = st.columns([7, 1.2, 0.8], vertical_alignment="center")
+            parts = []
+            for j in range(1, n + 1):
+                k = "now" if j == i else ("past" if j < i else "fut")
+                parts.append(f"<span class='dot {k}'></span><span class='lab {k}'>{j:02d} · {O.esc(labs[j]) if j <= i else '?'}</span>")
+            a.markdown(f"<div class='o-tick'><span class='lab'>EVENTS</span>{'<span class=seg></span>'.join(parts)}</div>",
+                       unsafe_allow_html=True)
+            b.button("Next event →", key=f"{TICK_KEY}_next", disabled=i >= n, on_click=_tick_go, args=(i + 1,),
+                     type="primary", width="stretch")
+            c.button("Reset", key=f"{TICK_KEY}_reset", disabled=i == 0, on_click=_tick_go, args=(0,), width="stretch")
+            line = t["line"] or "Nothing new yet. Press Next event to see what happens."
+            st.markdown(f"<div class='o-tickline'>{O.esc(line)}</div>", unsafe_allow_html=True)
+    return draw
+
+
+@st.fragment
+def customer_section():
+    acc_ = st.session_state["acc"]
+    inp = D.engine_inputs()
+    t = D.live_tick(df, acc_, int(st.session_state.get(TICK_KEY, 0)), inp) if acc_ == D.LIVE_ACC else None
+    view, cfn = df, D.contributions
+    if t is not None:
+        t["rail"] = _tick_rail(t)
+        view, cfn = D.live_row(df, acc_, t["step"]), D.live_contributions(t["step"], acc_)
+    _call(O.render_customer, view if SHOW_MONEY else D.strip_money(view), acc_, contributions_fn=cfn, candidates=cand,
+          inputs=inp, events=D.events(), decisions=dec, options=opts, tick=t)
+
+
+customer_section()
 clicked = _call(O.render_dashboard, df if SHOW_MONEY else D.strip_money(df), econ, typical_risk=D.typical_risk(),
                 decisions=dec, summary=D.dashboard_summary() if SHOW_MONEY else None)
 if clicked and clicked != st.session_state.get("_last_row_pick"):

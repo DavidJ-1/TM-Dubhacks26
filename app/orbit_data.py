@@ -675,3 +675,103 @@ def live_events() -> pd.DataFrame | None:
         if c in e:
             e[c] = e[c].fillna("").astype(str).map(clean)
     return e
+
+
+# ------------------------------------------------------------------ 'the account ticks': per-step data for the customer view
+LIVE_STEPS = ROOT / "data" / "live_events" / "live_events_steps.json"
+# chip wording per scripted event: "+3.4 pts after a dropped call"
+LIVE_AFTER = {"app": "after an app login", "drop": "after a dropped call", "comp": "after a competitor's site visit",
+              "port": "after asking about moving their number", "bill": "after a higher bill"}
+
+
+@st.cache_data(show_spinner=False)
+def live_steps() -> list[dict] | None:
+    """scripts/live_events.py's sidecar: per step the inputs that changed (old/new), the cumulative input edits, and
+    Model A's full per-signal contributions. Read-only; None if missing."""
+    import json
+    if not LIVE_STEPS.exists():
+        return None
+    try:
+        return json.loads(LIVE_STEPS.read_text())
+    except Exception as e:  # noqa: BLE001
+        print(f"[scroll] {LIVE_STEPS.name} unreadable: {type(e).__name__}: {e}")
+        return None
+
+
+def live_row(df: pd.DataFrame, acc: str, i: int) -> pd.DataFrame:
+    """df with this account's model inputs set to their values after event i (cumulative), and its risk set to the
+    rescored one. Only that one row changes; the frame passed to the rest of the page stays as it is."""
+    S, L = live_steps(), live_events()
+    if not S or L is None or i <= 0:
+        return df
+    s = next((x for x in S if x["account_id"] == acc and int(x["step"]) == i), None)
+    if s is None:
+        return df
+    out = df.copy()
+    m = out.account_id == acc
+    for k, v in s["inputs_now"].items():
+        if k in out.columns:
+            out.loc[m, k] = v
+    out.loc[m, "p_churn_90d"] = float(s["risk"])
+    return out
+
+
+def live_contributions(i: int, acc: str):
+    """contributions_fn for the live account at event i: Model A's contributions as the script saved them (the
+    standardized values, used only to word each block, come from the same rescored row)."""
+    S = live_steps() or []
+    s = next((x for x in S if x["account_id"] == acc and int(x["step"]) == i), None)
+
+    def fn(account_id, edits=None):
+        if s is None or account_id != acc or edits:
+            return contributions(account_id, edits)
+        _, _, _, Z = contributions(account_id, s["inputs_now"] or None)
+        return float(s["intercept"]), pd.Series(s["contributions"], dtype=float), float(s["risk"]), Z
+    return fn
+
+
+def live_tick(df: pd.DataFrame, acc: str, i: int, inputs: pd.DataFrame | None) -> dict | None:
+    """What the customer view needs at event i: risk, the header chip, the step-1 'was' values, the tower block that
+    moved most, and the top reasons (from the CSV; reason_changed marked new). All read from the script's files."""
+    import orbit_sections as O
+    S, L = live_steps(), live_events()
+    if not S or L is None or acc not in set(L.account_id):
+        return None
+    L = L[L.account_id == acc].sort_values("step").reset_index(drop=True)
+    n = len(L) - 1
+    i = max(0, min(int(i), n))
+    cur = L.iloc[i]
+    t = {"step": i, "n": n, "risk": float(cur.risk), "labels": [str(x) for x in L.event_label],
+         "line": str(cur.event_line or "") if i else "", "chip": "", "was": {}, "hl": None, "reasons": []}
+    reasons = [str(cur.get(f"reason_{k}") or "") for k in (1, 2, 3)]
+    reasons = [x for x in reasons if x]
+    if i == 0:
+        t["reasons"] = [(x, False) for x in reasons]
+        return t
+    prev = L.iloc[i - 1]
+    d = (float(cur.risk) - float(prev.risk)) * 100
+    t["chip"] = f"{'+' if d >= 0 else '−'}{abs(d):.1f} pts {LIVE_AFTER.get(str(cur.event), 'after ' + str(cur.event_label).lower())}"
+    ch = str(cur.reason_changed or "")
+    t["reasons"] = [(x, x == ch) for x in reasons]   # 'new' marks the CSV's reason_changed only
+    if ch and ch not in reasons:
+        t["reasons"].append((ch, True))
+    # step 1: every input row whose shown value differs between the row before and after this event
+    if inputs is not None and len(inputs):
+        r_new = live_row(df, acc, i)
+        r_new = r_new[r_new.account_id == acc].iloc[0]
+        r_old = live_row(df, acc, i - 1)
+        r_old = r_old[r_old.account_id == acc].iloc[0]
+        for it in inputs.item.astype(str):
+            fn = O.INPUT_VALUES.get(it)
+            if fn:
+                a, b = fn(r_old), fn(r_new)
+                if a != b and b is not None:
+                    t["was"][it] = a if a is not None else "—"
+    # step 2: the signal whose contribution moved most this event
+    s1 = next((x for x in S if x["account_id"] == acc and int(x["step"]) == i), None)
+    s0 = next((x for x in S if x["account_id"] == acc and int(x["step"]) == i - 1), None)
+    if s1 and s0:
+        dc = pd.Series(s1["contributions"]).sub(pd.Series(s0["contributions"]), fill_value=0).abs()
+        if len(dc) and float(dc.max()) > 1e-9:
+            t["hl"] = str(dc.idxmax())
+    return t

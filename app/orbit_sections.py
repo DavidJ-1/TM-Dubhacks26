@@ -478,18 +478,25 @@ def breakdown(b0: float, C: pd.Series, p: float, Z: pd.Series | None = None, k: 
     return base, top.reset_index(drop=True), rest, overlap, p * 100
 
 
-def _tower(base, top, rest, overlap, p_now, key) -> go.Figure:
+def _tower(base, top, rest, overlap, p_now, key, hl: str | None = None) -> go.Figure:
+    """hl (optional): feature whose block gets a magenta outline (the 'Other' block when it isn't in the top)."""
     cols = [("Typical customer", "base", base, 0.0)]
     cum = base
+    hl_i = None
     for _, t in top.iterrows():
+        if hl is not None and t.feat == hl:
+            hl_i = len(cols)
         cols.append((t.label, t.lane, t.pts, cum))
         cum += t.pts
     if abs(rest + overlap) >= 0.005:
+        if hl is not None and hl_i is None:
+            hl_i = len(cols)
         cols.append(("Other small signals + overlap", "Other", rest + overlap, cum))
     cols.append(("This customer", "total", p_now, 0.0))
     lane_y = {"Commerce": 0, "Customer": 1, "Live": 2, "Other": 1, "base": 1, "total": 1}
     fig, W = go.Figure(), 0.36
     ex, ey, ez, ann = [], [], [], []
+    hx, hy, hz = [], [], []
     for i, (lab, lane, v, z0) in enumerate(cols):
         x, y = float(i), lane_y[lane]
         lo, hi = ((0.0, v) if lane in ("base", "total") else ((z0, z0 + v) if v >= 0 else (z0 + v, z0)))
@@ -505,6 +512,12 @@ def _tower(base, top, rest, overlap, p_now, key) -> go.Figure:
                                 f"{esc(lab)}<br>{v:.2f}%<extra></extra>", showscale=False))
         for a, b in [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)]:
             ex += [X[a], X[b], None]; ey += [Y[a], Y[b], None]; ez += [Z[a], Z[b], None]
+            if i == hl_i:   # magenta outline drawn just outside the block so it reads on a magenta fill too
+                g, gz = 0.14, max(0.06 * (hi - lo), 0.03)
+                OX = [x - W - g, x + W + g, x + W + g, x - W - g] * 2
+                OY = [y - W - g, y - W - g, y + W + g, y + W + g] * 2
+                OZ = [max(lo - gz, 0.0)] * 4 + [hi + gz] * 4
+                hx += [OX[a], OX[b], None]; hy += [OY[a], OY[b], None]; hz += [OZ[a], OZ[b], None]
         if lane in ("base", "total"):
             ann.append(dict(x=x, y=y, z=hi, text=f"<b>{'TYPICAL' if lane == 'base' else 'THIS CUSTOMER'}</b><br>{pct(v)}",
                             showarrow=True, arrowhead=0, arrowwidth=1, arrowcolor=INK, ax=0, ay=-40,
@@ -515,6 +528,8 @@ def _tower(base, top, rest, overlap, p_now, key) -> go.Figure:
         cx += [i + W, i + 1 - W, None]; cy += [lane_y[cols[i][1]], lane_y[lane], None]; cz += [run, run, None]
         run += v
     fig.add_trace(go.Scatter3d(x=ex, y=ey, z=ez, mode="lines", line=dict(color=INK, width=1.6), hoverinfo="skip", showlegend=False))
+    if hx:
+        fig.add_trace(go.Scatter3d(x=hx, y=hy, z=hz, mode="lines", line=dict(color=MAG, width=7), hoverinfo="skip", showlegend=False))
     fig.add_trace(go.Scatter3d(x=cx, y=cy, z=cz, mode="lines", line=dict(color=INK, width=1.4, dash="dash"), hoverinfo="skip", showlegend=False))
     for n in range(min(3, len(top))):
         t, i = top.loc[n], n + 1
@@ -619,7 +634,8 @@ INPUT_VALUES: dict[str, Callable] = {  # considerations item -> this customer's 
 }
 
 
-def _inputs_html(r, inputs: pd.DataFrame) -> tuple[str, int, int]:
+def _inputs_html(r, inputs: pd.DataFrame, was: dict | None = None) -> tuple[str, int, int]:
+    """was (optional): {item: previous shown value}; those rows get a magenta left hairline and a grey 'was X'."""
     cols, shown, total = "", 0, 0
     for g, x in inputs.groupby("group", sort=False):
         name = re.sub(r"^\w+\.\s*(Inputs:\s*)?", "", str(g)).strip().title()
@@ -629,7 +645,10 @@ def _inputs_html(r, inputs: pd.DataFrame) -> tuple[str, int, int]:
             val = fn(r) if fn else None
             total += 1
             shown += val is not None
-            rows += (f"<div class='o-kv'><span>{esc(str(it.item))}</span><span>{esc(str(val)) if val is not None else '<i style=\"color:#6B675F\">not in this view</i>'}</span></div>")
+            w = (was or {}).get(str(it.item))
+            sty = f" style='border-left:2px solid {MAG};padding-left:8px'" if w is not None else ""
+            wtxt = f" <span style='color:{MUTED};font-size:12px'>was {esc(str(w))}</span>" if w is not None else ""
+            rows += (f"<div class='o-kv'{sty}><span>{esc(str(it.item))}</span><span>{esc(str(val)) + wtxt if val is not None else '<i style=\"color:#6B675F\">not in this view</i>'}</span></div>")
         cols += f"<div class='col'><div class='gh'>{esc(name)} · {len(x)}</div>{rows}</div>"
     return cols, shown, total
 
@@ -1064,7 +1083,7 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
                     candidates: pd.DataFrame | None = None, inputs: pd.DataFrame | None = None,
                     decisions: pd.DataFrame | None = None, options: pd.DataFrame | None = None,
                     events: pd.DataFrame | None = None, show_money: bool = True, key: str = "orbit",
-                    live: pd.DataFrame | None = None) -> None:
+                    live: pd.DataFrame | None = None, tick: dict | None = None) -> None:
     """Act 2. contributions_fn(account_id, edits) -> (intercept_logit, contributions Series, p, standardized-values Series or None).
     candidates: every option row for this account (action, eligible, expected_value, blocked_or_ineligible_reason, is_chosen).
     events (optional): account_id, event_date, event_type[, event_text, timing, wait_until] for the 'Latest on the account' strip
@@ -1074,7 +1093,9 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
     inputs: the engine-input rows of the considerations table (groups 1a-1c: group, item); step 1 lists this customer's value for each.
     show_money=False hides step 4's net-value bar; the customer's own savings (bill lines) stay.
     live (optional): precomputed 'what if this happens next' rows (step, event_label, event_line, risk, reason_changed,
-    pick, pick_label, why, policy_ev_usd) for the one account they belong to; renders the Next event / Reset strip."""
+    pick, pick_label, why, policy_ev_usd) for the one account they belong to; renders the Next event / Reset strip.
+    tick (optional, 'the account ticks'): {risk (0-1), chip, was {item: old value}, hl (feature), reasons [(text, is_new)],
+    rail (callable drawing the event rail)}; the header, step 1 and step 2 then show that event's state."""
     _act("02 / 05", "One customer, step by step", "why this score · why this action")
     if account_id not in set(df.account_id):
         st.markdown(f"<div class='o-lbl'>No customer {esc(account_id)} in this data.</div>", unsafe_allow_html=True)
@@ -1100,10 +1121,16 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
         except Exception as e:  # noqa: BLE001
             print(f"[orbit] breakdown unavailable: {type(e).__name__}: {e}")
     p_now = bd[4] if bd else p_orig
+    if tick and tick.get("risk") is not None:
+        p_now = float(tick["risk"]) * 100
     base = bd[0] if bd else None
 
     was = f"<div class='was'>(what-if, was {pct(p_orig)})</div>" if edits and bd else ""
     lines = int(_n(r, "n_lines"))
+    if tick and tick.get("chip"):
+        was = f"<div class='was' style='color:{MAG}'>{esc(tick['chip'])}</div>"
+    if tick and callable(tick.get("rail")):
+        tick["rail"]()
     sub = (f"typical customer {pct(base)} · " if base else "") + (f"risk rank {int(r.risk_rank):,} of {len(df):,}" if "risk_rank" in r else "")
     st.markdown(f"""<div class='o-cust'><div><div class='o-lbl'>Customer {esc(cid(account_id))}</div>
 <div class='name'>{esc(str(r.get('segment', '')).title())} account · {(str(int(_n(r, 'tenure_months')) // 12) + ' yrs') if _n(r, 'tenure_months') >= 12 else (str(int(_n(r, 'tenure_months'))) + ' months')} with us · {lines} line{'s' if lines != 1 else ''}</div>
@@ -1126,7 +1153,7 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
     with panel:
         if step == 0:
             if inputs is not None and len(inputs):
-                cols, shown, total = _inputs_html(r, inputs)
+                cols, shown, total = _inputs_html(r, inputs, (tick or {}).get("was"))
                 st.markdown(f"<div class='o-ph'>Every input the engine uses, and this customer's value<small>{total} inputs</small></div>"
                             f"<div class='o-know o-know-sm' style='margin-bottom:16px'>{cols}</div>", unsafe_allow_html=True)
             else:
@@ -1142,7 +1169,7 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
                 b, top, rest, overlap, pn = bd
                 a, z = st.columns([1.5, 1], gap="large")
                 with a:
-                    st.plotly_chart(_tower(b, top, rest, overlap, pn, key), width="stretch", theme=None, config=CFG3D,
+                    st.plotly_chart(_tower(b, top, rest, overlap, pn, key, (tick or {}).get("hl")), width="stretch", theme=None, config=CFG3D,
                                     key=f"{key}_tower")
                     st.markdown("<div class='o-hint'>drag to rotate · hover a block</div>", unsafe_allow_html=True)
                 with z:
@@ -1151,6 +1178,10 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
                                    f"<span class='p {'up' if t.pts > 0 else ''}'>{t.pts:+.2f} pts</span></div>" for i, t in top.iterrows())
                     rows += (f"<div class='o-drv'><span class='n'>··</span><span>Other small signals + overlap</span><span></span>"
                              f"<span class='p'>{rest + overlap:+.2f} pts</span></div>")
+                    if tick and tick.get("reasons"):
+                        rows = "".join(f"<div class='o-drv'><span class='n'>{i + 1:02d}</span><span>{esc(t_)}</span><span></span>"
+                                       f"<span class='p up'>{'new' if nw else ''}</span></div>" for i, (t_, nw) in enumerate(tick["reasons"])) \
+                            + "<div class='o-lbl' style='margin:14px 0 4px'>Biggest signals</div>" + rows
                     st.markdown(f"<div class='o-ph'>Typical {pct(b)} → this customer {pct(pn)}</div>{rows}", unsafe_allow_html=True)
         elif step == 2:
             nv = _next_version(r, decisions)
