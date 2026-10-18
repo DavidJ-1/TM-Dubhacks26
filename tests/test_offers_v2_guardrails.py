@@ -147,5 +147,5 @@ def test_plan_moves_receipt_only(run):
     assert not o.action_code.isin(["variant_switch", "right_size"]).any()
     assert set(o.receipt_action.dropna()) <= {"variant_switch", "right_size"}
     assert (o.loc[o.action_code == "do_nothing", "channel"] == "none").all()
-    assert (o.loc[o.action_code != "do_nothing", "channel"] == "sms").all()
+    assert o.loc[o.action_code != "do_nothing", "channel"].isin(["sms", "save_attempt"]).all()   # v2: port-out line
     assert (o.loc[o.action_code == "do_nothing", "message_en"].fillna("") == "").all()

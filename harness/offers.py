@@ -212,13 +212,17 @@ CONFIG = {
     #   customer. Sandbox signal: account_signals.port_out_inquiry, "1 if the account asked about porting its number
     #   away" (vendor/dubhacks/docs/data-dictionary.md: a customer-initiated inquiry proxy, NOT a carrier port
     #   request; the sandbox has no carrier port-request field). So PORT_OUT_SIGNAL_ORIGIN = "self_initiated".
-    #   off: port-out accounts get no outreach at all. self_initiated_only / all: one save attempt, reported in
+    #   Default "all" (the signal is the customer's own port_out_inquiry). off: port-out accounts get no outreach. self_initiated_only / all: one save attempt, reported in
     #   already_leaving_save_attempt, NEVER in the headline count or net (in_headline=False).
-    "PORT_OUT_CONTACT": "off",
+    "PORT_OUT_CONTACT": "all",       # v2 default 'all' (Grok Bot): the sandbox signal is the customer's own inquiry
     "PORT_OUT_SIGNAL_ORIGIN": "self_initiated",
-    # v2 (Grok Bot's call): an open unresolved support ticket (unresolved_90d >= 1) FORCES the fix-first callback
-    #   (or care credit + fix-first if that is worth more). Forced, so not removed by the profit gate.
-    "FIX_FIRST_FORCED_OPEN_TICKET": True,
+    # v2: an open unresolved support ticket (unresolved_90d >= 1) makes fix-first (or care credit + fix-first) the
+    #   ONLY allowed message type for the account (no upsell / other offers). FIX_FIRST_FORCE (David can flip):
+    #     "ev_positive" (default): contact only when the best fix-first option's own EV > 0, else silent with reason
+    #                              open_ticket_ev_le0 ("open ticket, fix-first expected to cost more than it saves").
+    #     "all_open":              contact every open-ticket account (forced; EV <= 0 contacts reported separately).
+    #   A port-out save attempt (when PORT_OUT_CONTACT allows) on an open-ticket account uses fix-first regardless.
+    "FIX_FIRST_FORCE": "ev_positive",
     "STEP_UP_MARGIN": 0.80,              # share of incremental plan revenue that is margin
     "DEVICE_UPGRADE_MARGIN": 80.0,       # $ margin on a device sale + new 24-month financing (synthetic)
     # --- batch 4/5 (tm-strategy proposals + prompt-fit audit). All synthetic.
@@ -258,8 +262,8 @@ if os.environ.get("TM_KEPT_VALUE_MONTHS") is not None:
     CONFIG["KEPT_VALUE_MONTHS"] = float(os.environ["TM_KEPT_VALUE_MONTHS"])
 if os.environ.get("TM_PORT_OUT_CONTACT") is not None:
     CONFIG["PORT_OUT_CONTACT"] = os.environ["TM_PORT_OUT_CONTACT"]
-if os.environ.get("TM_FIX_FIRST_FORCED_OPEN_TICKET") is not None:
-    CONFIG["FIX_FIRST_FORCED_OPEN_TICKET"] = os.environ["TM_FIX_FIRST_FORCED_OPEN_TICKET"] not in ("0", "false", "False", "")
+if os.environ.get("TM_FIX_FIRST_FORCE") is not None:
+    CONFIG["FIX_FIRST_FORCE"] = os.environ["TM_FIX_FIRST_FORCE"]
 if os.environ.get("TM_PROFIT_GATE") is not None:
     CONFIG["PROFIT_GATE"] = os.environ["TM_PROFIT_GATE"] not in ("0", "false", "False", "")
 
@@ -1208,19 +1212,27 @@ def pick(res: dict, key: str = "ev", exclude: tuple = (), port_out: bool = False
             and action not in PROBLEM_ACTIONS and action not in ("variant_switch", "right_size")):
         action, evv, override = "variant_switch", vs[key], "same_coverage"
     # batch 7: a port-out inquiry never gets silence: check-in, or fix-first when a ticket is open
-    if port_out and CONFIG["PORT_OUT_ALWAYS_CONTACT"] and port_out_allowed() and action == "do_nothing":
+    po_forced = bool(port_out and CONFIG["PORT_OUT_ALWAYS_CONTACT"] and port_out_allowed())
+    if po_forced and action == "do_nothing":
         for alt in ("check_in", "fix_first"):
             if res.get(alt, {}).get("eligible") and alt not in exclude:
                 action, evv, override = alt, res[alt][key], "port_out"
                 break
-    # v2: open unresolved ticket -> fix-first is forced (FIX_FIRST_FORCED_OPEN_TICKET)
-    if (open_ticket and CONFIG["FIX_FIRST_FORCED_OPEN_TICKET"]
-            and action not in ("fix_first", "care_credit_fix_first")):
+    # v2: open unresolved ticket -> fix-first types are the ONLY allowed message (FIX_FIRST_FORCE decides forcing)
+    if open_ticket:
+        mode = CONFIG["FIX_FIRST_FORCE"]
+        assert mode in ("ev_positive", "all_open"), mode
         ff = [(a, res[a][key]) for a in ("care_credit_fix_first", "fix_first")
               if res.get(a, {}).get("eligible") and a not in exclude]
-        if ff:
-            action, evv = max(ff, key=lambda t: t[1])
-            override = "open_ticket"
+        best_ff = max(ff, key=lambda t: t[1]) if ff else None
+        if best_ff is not None and (best_ff[1] > 0 or mode == "all_open" or po_forced):
+            if best_ff[1] <= 0:     # forced: all_open, or the port-out save attempt
+                override = "port_out" if (po_forced and mode == "ev_positive") else "open_ticket"
+            elif best_ff[0] != action:   # EV > 0, but the open ticket restricted the message type
+                override = "open_ticket_fix_only"
+            action, evv = best_ff
+        else:
+            action, evv, override = "do_nothing", 0.0, "open_ticket_ev_le0"
     rest = [s for s in scored if s[0] != action]
     runner = ("do_nothing", 0.0) if action != "do_nothing" and (not rest or rest[0][1] < 0) else \
         (rest[0] if rest else None)
@@ -1262,13 +1274,16 @@ def choose(df: pd.DataFrame, promos: pd.DataFrame, plans: pd.DataFrame) -> tuple
             "why_this_offer": ("Stay silent: expected to cost more than it saves." if gated
                                else ("Stay silent: they asked about porting their number out; we don't contact on "
                                      "that signal until the port-out policy is decided (PORT_OUT_CONTACT=off).")
-                               if override == "port_out_off" else why_this_offer(action, row, ev)),
+                               if override == "port_out_off"
+                               else "Stay silent: open ticket, fix-first expected to cost more than it saves."
+                               if override == "open_ticket_ev_le0" else why_this_offer(action, row, ev)),
             "lock_in_months": int(res[action].get("lock_in_months", 0) or 0) if res[action]["eligible"] else 0,
             "drivers": driver_list(row, ev["drivers"]),
             "promo_skus": res[action].get("skus", "") if action != "do_nothing" else "",
             "action_detail": res[action]["detail"],
-            "do_nothing_reason": ("profit_gate" if gated else "port_out_off" if override == "port_out_off"
-                                  else do_nothing_reason(row, ev)[0]) if action == "do_nothing" else "",
+            "do_nothing_reason": ("profit_gate" if gated else override if override in ("port_out_off",
+                                  "open_ticket_ev_le0") else do_nothing_reason(row, ev)[0])
+                                 if action == "do_nothing" else "",
             "pick_override": override,
             "customer_monthly_delta": customer_monthly_delta(action, res[action]),
             "runner_up_action": ACTION_LABEL[runner[0]] if runner else "",

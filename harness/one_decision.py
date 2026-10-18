@@ -76,6 +76,9 @@ def decide(o: pd.DataFrame, cands: pd.DataFrame, moments: pd.DataFrame | None, g
     o["retention_net"] = retention_net(o, cands, "final_action").round(2)
     rs = receipt_sets()
     save_attempt = o.get("already_leaving_save_attempt", pd.Series("", index=o.index)).fillna("") != ""
+    # bill rule never rewrites a port-out save attempt (its own line)
+    o.loc[save_attempt, ["final_action", "final_ev"]] = o.loc[save_attempt, ["action_code", "expected_value"]].values
+    o["retention_net"] = retention_net(o, cands, "final_action").round(2)
     wait = {}
     if moments is not None and len(moments):
         w = moments[moments.decision == "wait_until"]
@@ -98,26 +101,41 @@ def decide(o: pd.DataFrame, cands: pd.DataFrame, moments: pd.DataFrame | None, g
     return gj.join(o, g)
 
 
+UPSELLS = {"step_up", "family_upgrade", "device_upgrade", "home_internet_bundle"}
+
+
 def reconcile(o: pd.DataFrame) -> dict:
     t = o[o.decision == "text_now"]
     h = t[t.in_headline]
-    forced_ot = h[h.pick_override.fillna("") == "open_ticket"]
-    disc = h[h.pick_override.fillna("") != "open_ticket"]
-    sa = t[~t.in_headline]
+    ov = h.pick_override.fillna("")
+    forced_ot = h[ov == "open_ticket"]            # FIX_FIRST_FORCE=all_open only (EV <= 0 forced contacts)
+    up = h[h.final_action.isin(UPSELLS)]
+    ret = h[~h.final_action.isin(UPSELLS)]
+    sa = o[o.get("already_leaving_save_attempt", pd.Series("", index=o.index)).fillna("") != ""]
     return {
         "decision_counts": o.decision.str.split(" ").str[0].value_counts().to_dict(),
-        "headline_contacts": int(len(h)), "headline_retention_net": round(float(h.retention_net.sum()), 2),
-        "discretionary_contacts": int(len(disc)), "discretionary_retention_net": round(float(disc.retention_net.sum()), 2),
-        "discretionary_mix": disc.final_action.value_counts().to_dict(),
+        "headline_contacts": int(len(h)),
+        "headline_retention_contacts": int(len(ret)), "headline_retention_net": round(float(ret.retention_net.sum()), 2),
+        "headline_retention_ev": round(float(ret.final_ev.sum()), 2),
+        "headline_upsell_contacts": int(len(up)), "headline_upsell_ev": round(float(up.final_ev.sum()), 2),
+        "headline_upsell_retention_part": round(float(up.retention_net.sum()), 2),
+        "headline_ev_le0": int((h.final_ev <= 0).sum()),
+        "headline_mix": h.final_action.value_counts().to_dict(),
+        "open_ticket_fix_only_restricted": int((ov == "open_ticket_fix_only").sum()),
         "forced_open_ticket_contacts": int(len(forced_ot)),
-        "forced_open_ticket_ev_le0": int((forced_ot.final_ev <= 0).sum()),
         "forced_open_ticket_retention_net": round(float(forced_ot.retention_net.sum()), 2),
-        "port_out_save_attempts": int(len(sa)),
-        "port_out_save_attempt_ev_le0": int((sa.final_ev <= 0).sum()),
+        "open_ticket_silent_ev_le0": int((o.get("do_nothing_reason", pd.Series("", index=o.index)) ==
+                                          "open_ticket_ev_le0").sum()),
+        "port_out_save_attempts": int(len(sa)), "port_out_mix": sa.final_action.value_counts().to_dict(),
+        "port_out_ev_sum_all": round(float(sa.final_ev.sum()), 2),
+        "port_out_ev_le0": int((sa.final_ev <= 0).sum()),
+        "port_out_ev_pos_count": int((sa.final_ev > 0).sum()),
+        "port_out_ev_sum_counted_ev_pos_only": round(float(sa.final_ev[sa.final_ev > 0].sum()), 2),
+        "port_out_retention_net_ev_pos_only": round(float(sa.retention_net[sa.final_ev > 0].sum()), 2),
         "bill_rule": o.bill_rule_note.value_counts().to_dict(),
         "receipt_only": int((o.decision == "receipt_only").sum()),
         "mean_kept_value_usd": round(float(o.customer_value_usd.mean()), 2),
-        "data_note": "SYNTHETIC",
+        "data_note": "SYNTHETIC; port-out save attempts never in headline; their EV<=0 rows never in any net",
     }
 
 

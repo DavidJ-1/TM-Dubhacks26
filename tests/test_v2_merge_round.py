@@ -20,8 +20,8 @@ OUT = Path(os.environ.get("TM_OUT_DIR", ROOT / "harness" / "out"))
 
 def test_defaults():
     assert abs(C["KEPT_VALUE_MONTHS"] - 19.338) < 1e-9 and C["VALUE_HORIZON_MONTHS"] == 24
-    assert C["PORT_OUT_CONTACT"] == "off" and C["PORT_OUT_SIGNAL_ORIGIN"] == "self_initiated"
-    assert C["FIX_FIRST_FORCED_OPEN_TICKET"] is True
+    assert C["PORT_OUT_CONTACT"] == "all" and C["PORT_OUT_SIGNAL_ORIGIN"] == "self_initiated"
+    assert C["FIX_FIRST_FORCE"] == "ev_positive"
 
 
 def test_port_out_modes(monkeypatch):
@@ -43,12 +43,30 @@ def _res(**ev):
     return base
 
 
-def test_open_ticket_forces_fix_first():
-    r = _res(perk_reminder=3.0, fix_first=-4.0, care_credit_fix_first=-6.0)
-    assert eng.pick(r)[0] == "perk_reminder"
+def test_open_ticket_fix_first_only(monkeypatch):
+    r = _res(perk_reminder=3.0, step_up=9.0, fix_first=-4.0, care_credit_fix_first=-6.0)
+    assert eng.pick(r)[0] == "step_up"
+    # ev_positive (default): fix-first is the only allowed type; EV <= 0 -> silent with its own reason
+    a, ev, _, _ = eng.pick(r, open_ticket=True)
+    assert a == "do_nothing" and eng.PICK_OVERRIDE[0] == "open_ticket_ev_le0"
+    a, ev, _, _ = eng.pick(_res(step_up=9.0, fix_first=2.0, care_credit_fix_first=5.0), open_ticket=True)
+    assert a == "care_credit_fix_first" and ev == 5.0 and eng.PICK_OVERRIDE[0] == "open_ticket_fix_only"
+    # all_open: forced even at EV <= 0
+    monkeypatch.setitem(C, "FIX_FIRST_FORCE", "all_open")
     a, ev, _, _ = eng.pick(r, open_ticket=True)
     assert a == "fix_first" and ev == -4.0 and eng.PICK_OVERRIDE[0] == "open_ticket"
-    assert eng.pick(_res(care_credit_fix_first=5.0, fix_first=2.0), open_ticket=True)[0] == "care_credit_fix_first"
+    monkeypatch.setitem(C, "FIX_FIRST_FORCE", "nope")
+    with pytest.raises(AssertionError):
+        eng.pick(r, open_ticket=True)
+
+
+def test_port_out_open_ticket_save_attempt_is_fix_first(monkeypatch):
+    monkeypatch.setitem(C, "PORT_OUT_CONTACT", "all")
+    r = _res(check_in=-1.0, fix_first=-4.0)
+    a, _, _, _ = eng.pick(r, port_out=True, open_ticket=True)
+    assert a == "fix_first" and eng.PICK_OVERRIDE[0] == "port_out"
+    a, _, _, _ = eng.pick(r, port_out=True)
+    assert a == "check_in" and eng.PICK_OVERRIDE[0] == "port_out"
 
 
 def test_receipt_limited_time(monkeypatch):
@@ -99,6 +117,21 @@ def test_port_out_never_in_headline(offers):
     assert not po.in_headline.astype(bool).any()
     if not eng.port_out_allowed():
         assert (po.action_code == "do_nothing").all() and (po.already_leaving_save_attempt.fillna("") == "").all()
+    else:   # every port-out inquiry gets exactly one save attempt on its own line
+        sa = po[po.action_code != "do_nothing"]
+        assert (sa.already_leaving_save_attempt.str.startswith("already leaving, one save attempt")).all()
+        assert (sa.channel == "save_attempt").all()
+
+
+def test_open_ticket_only_fix_first(offers):
+    f = pd.read_csv(OUT / "features.csv", usecols=["account_id", "unresolved_90d"])
+    t = offers.merge(f, on="account_id").query("unresolved_90d >= 1")
+    assert t.action_code.isin(["do_nothing", "fix_first", "care_credit_fix_first"]).all()
+    if C["FIX_FIRST_FORCE"] == "ev_positive":
+        hl = t[t.in_headline.astype(bool)]
+        assert (hl.expected_value > 0).all()
+        s = t[t.do_nothing_reason == "open_ticket_ev_le0"]
+        assert (s.why_this_offer == "Stay silent: open ticket, fix-first expected to cost more than it saves.").all()
 
 
 def test_limited_time_receipts_are_4_line(offers):

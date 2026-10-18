@@ -59,7 +59,7 @@ def code_in(*codes):
 
 
 PO_OFF = not _eng.port_out_allowed()                              # v2: PORT_OUT_CONTACT=off (pending David)
-FF_FORCED = bool(_eng.CONFIG.get("FIX_FIRST_FORCED_OPEN_TICKET"))  # v2: open ticket forces fix-first
+FF_ONLY = True   # v2: open ticket -> fix-first types only (FIX_FIRST_FORCE ev_positive / all_open)
 
 
 def field_held(o, pid):
@@ -68,7 +68,8 @@ def field_held(o, pid):
 
 def ff_forced(o, pid):
     r = _row(o, pid)
-    return FF_FORCED and r.get("pick_override") == "open_ticket" and r["action_code"] in ("fix_first", "care_credit_fix_first")
+    return FF_ONLY and (r["action_code"] in ("fix_first", "care_credit_fix_first")
+                        or r.get("do_nothing_reason") == "open_ticket_ev_le0")
 
 
 def bill_shock_with_callback(o, lt, pid):

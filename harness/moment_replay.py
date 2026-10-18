@@ -335,7 +335,8 @@ def options_table(ctx: Context, decisions: pd.DataFrame, max_alt: int = 3) -> pd
         if po and not eng.port_out_allowed():
             continue                      # PORT_OUT_CONTACT=off: never scheduled
         # forced CONTACT (must be scheduled, now): port-out save attempt (when allowed) or open-ticket fix-first
-        open_t = bool(eng.CONFIG["FIX_FIRST_FORCED_OPEN_TICKET"] and (row.get("unresolved_90d", 0) or 0) >= 1
+        has_ticket = bool((row.get("unresolved_90d", 0) or 0) >= 1)
+        open_t = bool(eng.CONFIG["FIX_FIRST_FORCE"] == "all_open" and has_ticket
                       and d["now_action"] in ("fix_first", "care_credit_fix_first"))
         forced = bool(((po and eng.CONFIG["PORT_OUT_ALWAYS_CONTACT"]) or open_t) and d["now_action"] != "do_nothing")
         pm = eng.PLAN_MOVES if eng.CONFIG.get("PLAN_MOVES_RECEIPT_ONLY") else ()
@@ -345,6 +346,7 @@ def options_table(ctx: Context, decisions: pd.DataFrame, max_alt: int = 3) -> pd
             cands = [(d["now_action"], res[d["now_action"]])]
         else:
             cands = sorted(((a, v) for a, v in res.items() if a != "do_nothing" and a not in pm
+                            and (not has_ticket or a in ("fix_first", "care_credit_fix_first"))   # fix-first only
                             and v["eligible"] and v["ev"] > 0), key=lambda t: -t[1]["ev"])[:max_alt]
         for a, v in cands:
             rows.append(_opt(aid, 0, a, v["ev"], v["cost"], forced))

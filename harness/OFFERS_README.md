@@ -211,11 +211,11 @@ Persona golden tests: `tests/test_persona_golden.py` (42 personas).
 - `KEPT_VALUE_MONTHS` 19.338 (default): kept-account value = monthly margin x 19.338 (survival-discounted 24 months,
   tm-research s13; tm-models' $1,478). Env `TM_KEPT_VALUE_MONTHS=24` restores the old undiscounted value. Upsell and
   lock horizons stay at `VALUE_HORIZON_MONTHS` 24.
-- `PORT_OUT_CONTACT` off | self_initiated_only | all (default off, pending David). Sandbox signal
+- `PORT_OUT_CONTACT` off | self_initiated_only | all (default all: the signal is the customer's own inquiry). Sandbox signal
   `account_signals.port_out_inquiry` = the customer asked about porting away (self-initiated inquiry), not a carrier
   port request (FCC 2008, 47 U.S.C. 222(b)). Port-out rows are never `in_headline`; when allowed they appear in
   `already_leaving_save_attempt` / channel `save_attempt`.
-- `FIX_FIRST_FORCED_OPEN_TICKET` (default on): unresolved_90d >= 1 forces fix-first (pick_override `open_ticket`).
+- `FIX_FIRST_FORCE` ev_positive (default) | all_open: an open ticket (unresolved_90d >= 1) allows only fix-first / care credit + fix-first; ev_positive contacts only when that EV > 0, else silent (`open_ticket_ev_le0`); all_open forces it (`open_ticket`). Env `TM_FIX_FIRST_FORCE`.
 - Receipt: `receipt_limited_time` / `receipt_plan_end_date` (blank: neither plans nor promotions has an end-date
   field); limited-time target plans (plans.status) get a "check it's still offered" line.
 - `harness/one_decision.py`: one `decision` column {text_now, wait_until <date>, receipt_only, silent}, tm-models'
