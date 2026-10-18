@@ -3,7 +3,7 @@ VENV := .venv
 BIN := $(VENV)/bin
 DB := vendor/dubhacks/data/sandbox.db
 
-.PHONY: run run-ui setup test
+.PHONY: run run-ui setup test life-signals
 
 run: setup
 	$(BIN)/streamlit run app/console_app.py --server.headless true --server.address 0.0.0.0 --server.port 8501
@@ -23,3 +23,6 @@ $(DB):
 
 test: setup
 	DUBHACKS_DB=$(DB) $(BIN)/python -m pytest -q tests
+
+life-signals: setup
+	DUBHACKS_DB=$(DB) $(BIN)/python -m harness.upsell.signals
