@@ -106,6 +106,21 @@ def test_money_stays_in_cents_until_display(console):
     assert any(cents > 100 for cents in owed)
 
 
+def test_queue_open_button_selects_that_account():
+    from pathlib import Path
+
+    from streamlit.testing.v1 import AppTest
+
+    script = Path(__file__).resolve().parents[1] / "app" / "console_app.py"
+    app = AppTest.from_file(script, default_timeout=120)
+    app.run()
+    app.session_state["queue_open_click"] = {"row": 1, "label": "Open"}
+    app.sidebar.radio[0].set_value("At-risk queue").run()
+    assert not app.exception
+    assert app.subheader[0].value == "ACC-00301"
+    assert app.selectbox[0].value == "ACC-00301"
+
+
 def test_projections_are_labeled_and_move_with_assumptions(console):
     population = console.frame.loc[console.frame["is_persona"] == 0]
     baseline = project(population, acceptance=0.0, save_given_accept=1.0, upgrade_acceptance=0.0)

@@ -223,14 +223,41 @@ def overview(console) -> None:
     )
 
 
+def _position_from_state(state) -> int | None:
+    """Row index from a dataframe selection. A cell click counts; the grid highlights those without a checkbox."""
+    if state is None:
+        return None
+    rows = selected_rows(state)
+    if rows:
+        return int(rows[0])
+    selection = getattr(state, "selection", None)
+    if selection is None and isinstance(state, dict):
+        selection = state.get("selection")
+    cells = getattr(selection, "cells", None) if selection is not None else None
+    if cells is None and isinstance(selection, dict):
+        cells = selection.get("cells")
+    if not cells:
+        return None
+    cell = cells[0]
+    return int(cell[0])
+
+
+def _open_click_position() -> int | None:
+    click = st.session_state.get("queue_open_click")
+    if not click:
+        return None
+    row = click["row"] if isinstance(click, dict) else getattr(click, "row", None)
+    if row is None:
+        return None
+    return int(row)
+
+
 def _table_account(show: pd.DataFrame) -> tuple[str | None, int | None]:
-    """Row the queue table has selected, using the widget state Streamlit stores before the script runs."""
-    state = st.session_state.get("risk_queue")
-    rows = selected_rows(state) if state is not None else []
-    if not rows:
-        return None, None
-    position = int(rows[0])
-    if position < 0 or position >= len(show):
+    """Account for the queue row the user just opened or selected."""
+    position = _open_click_position()
+    if position is None:
+        position = _position_from_state(st.session_state.get("risk_queue"))
+    if position is None or position < 0 or position >= len(show):
         return None, None
     return str(show.iloc[position]["account_id"]), position
 
@@ -267,16 +294,27 @@ def queue(console) -> None:
     display = show.copy()
     display["model_p"] = display["model_p"].map(lambda value: f"{value:.1%}")
     display["sandbox_p"] = display["sandbox_p"].map(lambda value: f"{value:.1%}")
+    display.insert(0, "open", "Open")
     st.dataframe(
         display,
         hide_index=True,
         width="stretch",
         on_select="rerun",
-        selection_mode="single-row",
+        selection_mode=["single-row", "single-cell"],
         key="risk_queue",
         height=420,
+        column_config={
+            "open": st.column_config.ButtonColumn(
+                "Open",
+                help="Show this account's reasons",
+                width="small",
+                pinned=True,
+                type="primary",
+                key="queue_open_click",
+            ),
+        },
     )
-    st.caption("Click a row in the table, or use the account menu. The reasons below follow that account.")
+    st.caption("Click Open on a row, or use the account menu. The reasons below follow that account.")
     detail = console.account(account_id)
     st.subheader(account_id)
     if detail.get("title"):
