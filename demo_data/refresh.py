@@ -12,7 +12,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE.parent / "harness" / "out"
-PLAIN = ["churn_scores.csv", "offers.csv", "features.csv", "labels.csv", "enrichment.csv", "line_tradein.csv"]
+PLAIN = ["churn_scores.csv", "offers.csv", "features.csv", "labels.csv", "enrichment.csv", "line_tradein.csv",
+         "churn_oof_pred.csv"]
 GZIPPED = ["offer_candidates.csv"]
 MAX_BYTES = 10 * 1024 * 1024
 

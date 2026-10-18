@@ -12,6 +12,7 @@ show real output without rerunning the pipeline. The 50k/250k scaled sets are le
 | `enrichment.csv` | `harness/enrichment.py` |
 | `labels.csv` | `harness/labels.py` |
 | `churn_scores.csv` | `harness/churn_model.py` (Model A) |
+| `churn_oof_pred.csv` | `harness/churn_model.py` (out-of-fold predictions) |
 | `offers.csv`, `line_tradein.csv` | `harness/offers.py` (Model B) |
 | `offer_candidates.csv.gz` | `harness/offers.py` (gzipped, ~16 MB raw; `pd.read_csv` reads `.gz` directly) |
 
