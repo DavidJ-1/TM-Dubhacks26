@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold, train_test_split
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 HERE = Path(__file__).resolve().parent
@@ -282,6 +282,20 @@ def main(argv=None):
           f"mean p {p_te.mean():.4f} vs observed {ytr.iloc[i_te].mean():.4f}; "
           + ", ".join(f"{k} {v:.3f}" for k, v in extra.items()))
 
+    # out-of-fold predictions (5-fold stratified, regular accounts only): every row is scored by a model that never
+    # saw it, so charts (gain, calibration) can use honest held-out scores instead of in-sample ones.
+    oof = np.full(len(ytr), np.nan)
+    fold_id = np.zeros(len(ytr), dtype=int)
+    okw = {k: v for k, v in kw.items() if k != "target_rate"}
+    for f, (a_tr, a_te) in enumerate(StratifiedKFold(n_splits=5, shuffle=True, random_state=SEED).split(Xtr, ytr)):
+        oof[a_te] = get_model(a.model, **okw).fit(Xtr.iloc[a_tr], ytr.iloc[a_tr]).predict_proba(Xtr.iloc[a_te])
+        fold_id[a_te] = f
+    oof_df = pd.DataFrame({"account_id": Xtr.index, "p_churn_90d": np.round(oof, 6), "fold": fold_id})
+    oof_df.to_csv(out_dir / "churn_oof_pred.csv", index=False)
+    oof_auc = roc_auc_score(ytr, oof)
+    print(f"[SYNTHETIC] 5-fold out-of-fold AUC {oof_auc:.3f} (n={len(ytr)}, positives={int(ytr.sum())}), "
+          f"mean p {oof.mean():.4f}; wrote churn_oof_pred.csv")
+
     # final model on all labeled regular accounts, score everyone
     model = get_model(a.model, **kw).fit(Xtr, ytr)
     p = model.predict_proba(X)
@@ -328,6 +342,7 @@ formula over these same features, so a high AUC and LR ~ p_true_90d are expected
   churn-raising value (> {FLIP_Z} sd) is never a stay reason; blocked {getattr(model, 'flips_blocked_', 0)} candidate reasons.
 - Synthetic metrics: holdout AUC **{auc:.3f}** (stratified 25%, n={len(i_te)}, {int(ytr.iloc[i_te].sum())} churners);
   {'; '.join(f'{k} {v:.3f}' for k, v in extra.items()) or ''}.
+  5-fold out-of-fold AUC **{oof_auc:.3f}** (all {len(ytr)} regular accounts; held-out scores in `churn_oof_pred.csv`).
   Label base rate {rate:.4f} per 90 days (~{1 - (1 - rate) ** (1 / 3):.4%}/month); mean scored p (regular) {reg_p.mean():.4f}.
 - Persona check (high = top 10%, low = below median): {'PASS' if ok else 'FAIL'} (provisional; see churn_persona_check.txt).
 - Largest standardized coefficients (synthetic): {', '.join(f'{k} {v:+.2f}' for k, v in top.items())}.
