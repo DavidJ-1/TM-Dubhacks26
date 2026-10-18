@@ -101,7 +101,7 @@ def ev_bill(f, e):     # next bill comes in higher (not a new phone)
     e["days_since_bill_shock"] = 0
 
 
-def ev_comp(f, e):     # visits a competitor's site
+def ev_comp(f, e):     # carrier-shopping score rises (a field in the account data)
     v = max(float(f.get("competitor_research_score", 0) or 0), 0.8)
     f["competitor_research_score"] = v; e["competitor_research_score"] = v
 
@@ -120,7 +120,7 @@ EVENTS = {
     "drop": ("Dropped call", "A call dropped, and their support chat about coverage is still open.", ev_drop,
              "network"),
     "bill": ("Bill went up", "Their next bill came in about 18% higher.", ev_bill, None),
-    "comp": ("Visited a competitor's site", "They spent time on a competitor's plans page.", ev_comp, None),
+    "comp": ("Carrier-shopping score up", "Their score for comparing other carriers jumped from 0.21 to 0.80.", ev_comp, None),
     "port": ("Asked to move their number", "They asked how to move their number to another carrier.", ev_port,
              None),
 }

@@ -30,7 +30,7 @@ Python 3.11 or newer. The stack is pandas, scikit-learn, and Streamlit. There is
 ## Live what-if (this branch)
 
 Open the scroll page and press **Live what-if** (customer #02363). Each **Next event** press adds one scripted event
-(app login, dropped call with an open coverage chat, competitor-site visit, asked to move their number); **Reset**
+(app login, dropped call with an open coverage chat, carrier-shopping score rising, asked to move their number); **Reset**
 clears it. The risk, the reason that moved and the decision come from `data/live_events/live_events.csv`, precomputed
 offline by `scripts/live_events.py`: the same Model A rescoring the app uses, the offer engine rerun on the edited row,
 and the do-not-contact guardrail rerun over the whole book with only this customer swapped (save-rate scale frozen, so

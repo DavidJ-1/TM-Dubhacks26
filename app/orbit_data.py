@@ -817,7 +817,7 @@ def live_events() -> pd.DataFrame | None:
 # ------------------------------------------------------------------ 'the account ticks': per-step data for the customer view
 LIVE_STEPS = ROOT / "data" / "live_events" / "live_events_steps.json"
 # chip wording per scripted event: "+3.4 pts after a dropped call"
-LIVE_AFTER = {"app": "after an app login", "drop": "after a dropped call", "comp": "after a competitor's site visit",
+LIVE_AFTER = {"app": "after an app login", "drop": "after a dropped call", "comp": "after their carrier-shopping score rose",
               "port": "after asking about moving their number", "bill": "after a higher bill"}
 
 
