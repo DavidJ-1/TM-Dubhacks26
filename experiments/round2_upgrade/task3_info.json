@@ -1,0 +1,12 @@
+{
+ "model": "LR generator-matched transforms only (16)",
+ "n": 5000,
+ "upgraders": 322,
+ "excluded_churn_top10": 500,
+ "excluded_support_3plus": 1462,
+ "excluded_total": 1486,
+ "eligible": 3514,
+ "upgraders_lost_to_guardrail": 87,
+ "upgrade_rate_excluded": 0.0585,
+ "upgrade_rate_eligible": 0.0669
+}
