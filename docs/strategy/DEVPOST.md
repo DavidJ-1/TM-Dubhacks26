@@ -35,12 +35,12 @@ Every action a customer qualifies for is priced against doing nothing, which is 
 ## Challenges we ran into
 - With no real outcomes, we couldn't measure lift, so we label every number simulated and don't claim one.
 - Texts that quote prices have to be right every time.
-- Profit depends on a save rate we can only simulate: retention-only outreach breaks even at about 4.8% and is a coin flip at 5%. Measured retention campaigns run from about 2% to 11% relative; this pays off in the stronger ones and loses money in the weakest (simulated).
-- With every account valued the same, the plan pays above about a 5% save rate. If saved customers stay as risky as they were, it barely breaks even, so the first real test is whether saves stick (simulated).
+- Profit depends on a save rate we can only simulate: retention-only outreach breaks even at a 5.17% save rate and comes out ahead only 41% of the time at 5%. Measured retention campaigns run from about 2% to 11% relative; this pays off in the stronger ones and loses money in the weakest (simulated).
+- We value a saved account at its own monthly margin times 19.3 months, about $1,500 for an average account and about $2,000 for the ones we message. If a saved customer stays as risky as before, most of the money disappears. That's the first thing a real rollout tests.
 
 ## Accomplishments that we're proud of
 - Restraint you can check: most accounts get no text at all.
-- **The next version pays at realistic save rates (simulated).** In the next version of the engine, we re-ran it assuming a 10% save rate and sent retention messages only where they still pay off, after our do-not-contact rules: 184 accounts, each reached by the channel they prefer (text, app, email or a call). It breaks even at about a 4.8% save rate. Measured retention campaigns run from about 2% to 11% relative ([Ascarza 2018](https://doi.org/10.1509/jmr.16.0163); [Verhelst et al. 2023](https://arxiv.org/abs/2312.07206); [Marketing Science 2018](https://doi.org/10.1287/mksc.2018.1099)), so this pays off in the stronger campaigns and loses money in the weakest. At 10% it comes out ahead in about 4 of 5 resamples, and at 5% it's a coin flip. When an offer isn't worth it, the engine picks doing nothing.
+- **The next version pays at realistic save rates (simulated).** In the next version of the engine, we re-ran it assuming a 10% save rate, our central assumption, and sent retention messages only where they still pay off, after our do-not-contact rules. Of 5,042 accounts scored, 505 are flagged and 184 get a message, each by the channel the customer prefers (64 by text; the rest in-app, by email or a call). Those 184 messages come out +$3,938 ahead, with a 95% range of −$3,186 to +$13,148, and break even at a 5.17% save rate. Customers with an open support ticket get a fix-your-issue-first message instead of a perk reminder, and we charge about $15 of agent time for each fix-first contact, because an open issue takes an agent to fix. Measured retention campaigns run from about 2% to 11% relative ([Ascarza 2018](https://doi.org/10.1509/jmr.16.0163); [Verhelst et al. 2023](https://arxiv.org/abs/2312.07206); [Marketing Science 2018](https://doi.org/10.1287/mksc.2018.1099)), so this pays off in the stronger campaigns and loses money in the weakest. There's an 80% chance of coming out ahead at our central 10% assumption (41% at 5%). When an offer isn't worth it, the engine picks doing nothing.
 - One customer moved to a cheaper plan with the same features.
 - **A fairness audit we'd run weekly (simulated).** In our test on simulated data, at the same churn risk, accounts labeled senior or student were about 2.7 points less likely to get a retention message, roughly 10 and 16 accounts. Counting the cheaper-plan savings on the bill, they were shown a savings line more often than others, about 8 and 5 points. This is the audit we'd run weekly on real data.
 
@@ -48,7 +48,7 @@ Every action a customer qualifies for is priced against doing nothing, which is 
 Contact can backfire, high risk isn't the same as persuadable, and a churn score is only an input. The useful part is choosing the action and explaining it.
 
 ## What's next
-- **A holdout test with real customers** to see whether it keeps them for less.
-- **Uplift-ready:** each decision is written out with the data fields behind it, and adding a random holdout group would let us measure the true effect over time. At our roughly 5,000-account scale it could only catch very large effects; a reliable read needs about 12,800 accounts per group (synthetic power estimate).
+- **A rollout with real customers** to see whether it keeps them for less.
+- **Uplift-ready:** each decision is written out with the data fields behind it, and a holdout is built in so a rollout can measure saves.
 - **Safer plan moves:** the 2016 study's harm was concentrated among customers with volatile or falling usage, so we'd exclude volatile-usage customers from plan moves.
 - Testing the simulated upgrade score against real purchases.
