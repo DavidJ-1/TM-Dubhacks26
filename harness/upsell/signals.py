@@ -69,35 +69,29 @@ def load_usage(path=None) -> pd.DataFrame:
 
     frame["near"] = frame["data_cap_gb"].notna() & (frame["data_gb"] + 1e-9 >= CAP_RATIO * frame["data_cap_gb"])
     near = frame.groupby(["account_id", "line_id"])["near"].sum().groupby("account_id").max()
-    details = []
-    for account_id, lines in frame.groupby("account_id"):
-        grew = []
-        for _, line in lines.groupby("line_id"):
-            ordered = line.sort_values("month")
-            if len(ordered) < 2:
-                continue
-            prior = ordered.iloc[:-1]
-            latest = ordered.iloc[-1]
-            for column, label in (
-                ("data_gb", "data"),
-                ("hotspot_gb", "hotspot"),
-                ("streaming_hours", "streaming"),
-            ):
-                base = float(prior[column].mean() or 0)
-                if base <= 0:
-                    continue
-                if float(latest[column]) >= GROWTH_RATIO * base:
-                    grew.append(label)
-                    break
-        details.append(
-            {
-                "account_id": account_id,
-                "near_cap_months": int(near.get(account_id, 0)),
-                "usage_growth": bool(grew),
-                "growth_detail": ", ".join(sorted(set(grew))) if grew else "",
-            }
-        )
-    return pd.DataFrame(details)
+    ordered = frame.sort_values(["line_id", "month"])
+    size = ordered.groupby("line_id")["month"].transform("size")
+    comparable = ordered.loc[size >= 2]
+    latest = comparable.loc[~comparable.duplicated("line_id", keep="last")].set_index("line_id")
+    prior = comparable.loc[comparable.duplicated("line_id", keep="last")]
+    prior_mean = prior.groupby("line_id")[["data_gb", "hotspot_gb", "streaming_hours"]].mean()
+    shared = latest.index.intersection(prior_mean.index)
+    latest = latest.loc[shared]
+    prior_mean = prior_mean.loc[shared]
+    label = pd.Series("", index=shared, dtype=object)
+    for column, name in (("data_gb", "data"), ("hotspot_gb", "hotspot"), ("streaming_hours", "streaming")):
+        base = prior_mean[column]
+        grew = (base > 0) & (latest[column] >= GROWTH_RATIO * base) & (label == "")
+        label = label.mask(grew, name)
+    pairs = pd.DataFrame({"account_id": latest["account_id"].to_numpy(), "label": label.to_numpy()})
+    pairs = pairs.loc[pairs["label"] != ""]
+    detail = pairs.groupby("account_id")["label"].agg(lambda values: ", ".join(sorted(set(values))))
+    accounts = frame["account_id"].drop_duplicates()
+    out = pd.DataFrame({"account_id": accounts.to_numpy()})
+    out["near_cap_months"] = out["account_id"].map(near).fillna(0).astype(int)
+    out["growth_detail"] = out["account_id"].map(detail).fillna("")
+    out["usage_growth"] = out["growth_detail"] != ""
+    return out.reset_index(drop=True)
 
 
 def load_late_payments(path=None) -> dict[str, int]:

@@ -53,6 +53,13 @@ def dollars(cents: int | None) -> str:
     return f"${cents / 100:,.2f}"
 
 
+def show(text) -> str:
+    """Streamlit markdown treats a pair of $ signs as code. Keep amounts as text."""
+    if text is None:
+        return ""
+    return str(text).replace("$", "\\$")
+
+
 @st.cache_resource(show_spinner="Scoring the sandbox…")
 def get_console():
     return build_console()
@@ -65,7 +72,7 @@ def get_playbook():
     return build_playbook(get_console())
 
 
-@st.cache_resource(show_spinner="Building upgrades and life moments…")
+@st.cache_data(show_spinner="Building upgrades and life moments…")
 def get_upsell():
     from harness.upsell.build import build_upsell
 
@@ -408,8 +415,8 @@ def action_page(console) -> None:
     left, right = st.columns([1.15, 0.85])
     with left:
         st.subheader(outbound_title(action, moment))
-        st.write(action["why"])
-        st.caption(action["formula"])
+        st.write(show(action["why"]))
+        st.caption(show(action["formula"]))
         considered = pd.DataFrame(action["considered"])
         if not considered.empty:
             view = considered.copy()
@@ -425,10 +432,10 @@ def action_page(console) -> None:
         if moment is None:
             st.write("No paid-off phone, no usage over the plan cap, and no phone 36 months or older.")
         else:
-            st.write(moment["headline"])
-            st.caption(moment.get("assumption", ""))
-            st.write(moment.get("battery_note", ""))
-            st.caption(moment.get("condition_note", ""))
+            st.write(show(moment["headline"]))
+            st.caption(show(moment.get("assumption", "")))
+            st.write(show(moment.get("battery_note", "")))
+            st.caption(show(moment.get("condition_note", "")))
             triggers = ", ".join(moment["triggers"])
             st.write(f"Triggers: {triggers}.")
             if moment.get("usage_3m_gb") is not None and moment.get("data_cap_gb"):
@@ -438,14 +445,18 @@ def action_page(console) -> None:
             promo = moment.get("promo")
             if promo:
                 st.write(
-                    f"One device promo: {promo['name']} ({dollars(promo['savings_cents'])}) "
-                    f"on {promo['device_name']}. A second device promo is not applied."
+                    show(
+                        f"One device promo: {promo['name']} ({dollars(promo['savings_cents'])}) "
+                        f"on {promo['device_name']}. A second device promo is not applied."
+                    )
                 )
                 st.write(
-                    f"Good-condition trade-in {dollars(moment.get('tradein_value_cents'))}. "
-                    f"Balance charged today {dollars(moment.get('balance_cents'))}. "
-                    f"Net after we subtract the promo {dollars(moment.get('net_cents'))}. "
-                    "The sandbox cart total does not subtract promo savings."
+                    show(
+                        f"Good-condition trade-in {dollars(moment.get('tradein_value_cents'))}. "
+                        f"Balance charged today {dollars(moment.get('balance_cents'))}. "
+                        f"Net after we subtract the promo {dollars(moment.get('net_cents'))}. "
+                        "The sandbox cart total does not subtract promo savings."
+                    )
                 )
             elif moment.get("when") == "now":
                 st.write("No device promotion is eligible on a single trade-in plus one new phone.")
@@ -467,9 +478,11 @@ def customer_card(detail: dict, message: dict) -> None:
         f"prefers {detail['contact_preference']} · language {detail['language']}"
     )
     st.write(
-        f"Latest bill {dollars(detail['last_bill_cents'])}. "
-        f"Bill vs prior average {detail['bill_increase_pct'] * 100:.0f}%. "
-        f"Autopay {'on' if detail['autopay'] else 'off'}."
+        show(
+            f"Latest bill {dollars(detail['last_bill_cents'])}. "
+            f"Bill vs prior average {detail['bill_increase_pct'] * 100:.0f}%. "
+            f"Autopay {'on' if detail['autopay'] else 'off'}."
+        )
     )
     if detail.get("top_topic"):
         st.write(
@@ -480,10 +493,10 @@ def customer_card(detail: dict, message: dict) -> None:
         st.caption(detail["scenario"])
     lines = pd.DataFrame(detail["lines"])
     if not lines.empty:
-        show = lines[["member_label", "device_name", "age_months", "financing_balance_cents", "plan_name", "usage_3m_gb"]].copy()
-        show["balance"] = show["financing_balance_cents"].map(dollars)
+        line_table = lines[["member_label", "device_name", "age_months", "financing_balance_cents", "plan_name", "usage_3m_gb"]].copy()
+        line_table["balance"] = line_table["financing_balance_cents"].map(dollars)
         st.dataframe(
-            show[["member_label", "device_name", "age_months", "balance", "plan_name", "usage_3m_gb"]],
+            line_table[["member_label", "device_name", "age_months", "balance", "plan_name", "usage_3m_gb"]],
             hide_index=True,
             width="stretch",
         )
@@ -721,7 +734,19 @@ def upgrades_page(console) -> None:
         )
     st.markdown("**Ranked targets**")
     st.caption("Order is satisfaction, affordability, and the signal, with the upgrade-propensity score when that file is already built. This list is not a projected save.")
-    st.dataframe(shown, hide_index=True, width="stretch", height=360)
+    st.dataframe(
+        shown,
+        hide_index=True,
+        width="stretch",
+        height=360,
+        column_config={
+            "rejected": st.column_config.TextColumn(
+                "rejected",
+                width=420,
+                help="Why the runner-up was rejected",
+            ),
+        },
+    )
     export = display_frame(ranked)
     st.download_button(
         "Download the target list (CSV)",

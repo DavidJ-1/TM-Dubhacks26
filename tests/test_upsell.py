@@ -160,6 +160,29 @@ def test_satisfied_customer_is_not_sold_to():
     assert "not a reason to sell" in decision["why"]
 
 
+def test_message_drafts_do_not_say_cents(upsell):
+    import re
+
+    word = re.compile(r"\bcents\b", re.IGNORECASE)
+    hits = []
+    for decision in list(upsell.real.values()) + list(upsell.with_synthetic.values()):
+        for language in ("message_en", "message_es"):
+            text = decision[language]
+            if word.search(text):
+                hits.append((decision["account_id"] if "account_id" in decision else decision["rule_id"], language, text))
+    assert hits == []
+
+
+def test_plan_step_up_draft_is_dollars_in_both_languages():
+    decision = decide(_ctx(near_cap_months=2), include_synthetic=False)
+    assert "$25.00" in decision["message_en"]
+    assert "$25.00" in decision["message_es"]
+    assert "cents" not in decision["message_en"].lower()
+    assert "cents" not in decision["message_es"].lower()
+    assert "Next catalog plan" not in decision["message_es"]
+    assert "Siguiente plan del catálogo Experience More" in decision["message_es"]
+
+
 def test_personas_and_one_offer(upsell):
     assert upsell.decision("ACC-PERSONA-24")["action"] == "DO NOTHING"
     for account_id in ("ACC-PERSONA-07", "ACC-PERSONA-31"):

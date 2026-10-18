@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from harness.config import FINANCING_TERM_MONTHS
 from harness.upsell.config import (
     AT_RISK_BANDS,
     BILL_JUMP_PCT,
@@ -9,6 +10,7 @@ from harness.upsell.config import (
     LOW_CREDIT_TIER,
     RULES,
     SATISFIED_TENURE_MONTHS,
+    UPGRADE_MIN_AGE_MONTHS,
 )
 
 _BY_ID = {rule["id"]: rule for rule in RULES}
@@ -99,7 +101,8 @@ def _near_cap(ctx: dict) -> dict | None:
         plan=plan,
         why="The next catalog tier covers the cap. The monthly difference is the catalog price.",
         rejected="Upgrade timing was not reached. A cap this wide is a plan problem, and a device was not added.",
-        offer_line=f"Next catalog plan {plan['name']}. Monthly difference {plan['diff_cents']} cents.",
+        offer_line_en=f"Next catalog plan {plan['name']}. Monthly difference {_money(plan['diff_cents'])}.",
+        offer_line_es=f"Siguiente plan del catálogo {plan['name']}. Diferencia mensual {_money(plan['diff_cents'])}.",
     )
 
 
@@ -124,7 +127,8 @@ def _usage_growth(ctx: dict) -> dict | None:
         plan=plan,
         why="A real plan costs the same or less and adds data or hotspot.",
         rejected="A step-up that costs more was not used. A device was not added.",
-        offer_line=f"Catalog plan {plan['name']} costs the same or less. Monthly difference {plan['diff_cents']} cents.",
+        offer_line_en=f"Catalog plan {plan['name']} costs the same or less. Monthly difference {_money(plan['diff_cents'])}.",
+        offer_line_es=f"El plan del catálogo {plan['name']} cuesta lo mismo o menos. Diferencia mensual {_money(plan['diff_cents'])}.",
         action="PLAN FIT",
     )
 
@@ -140,14 +144,14 @@ def _paid_off(ctx: dict) -> dict | None:
         outcome = "keep"
     promo = moment.get("promo") if outcome == "now" and isinstance(moment.get("promo"), dict) else None
     if outcome == "keep":
-        line = "Keep the phone. No upgrade push."
         name = "Keep"
+        line_en, line_es = _keep_lines()
     elif outcome == "wait":
-        line = moment.get("headline") or "Wait. Upgrade eligibility follows the 12-month ownership rule."
         name = "Wait"
+        line_en, line_es = _wait_lines(moment)
     else:
         name = (promo or {}).get("name") or moment.get("device_name") or "Upgrade now"
-        line = f"Upgrade now. {name}."
+        line_en, line_es = (f"Upgrade now. {name}.", f"Cambia ahora. {name}.")
     return {
         "trigger": "Phone paid off and upgrade-eligible",
         "offer_name": name,
@@ -158,7 +162,8 @@ def _paid_off(ctx: dict) -> dict | None:
         "upgrade_outcome": outcome,
         "why": "Not Yet timing is upgrade now, wait, or keep. Keep is a valid answer. At most one device promo.",
         "rejected": "A second device promo is not stacked. A plan change is not added on the same nudge.",
-        "offer_line": line,
+        "offer_line_en": line_en,
+        "offer_line_es": line_es,
         "assumption_note": (moment or {}).get("assumption") or "",
         "send": True,
     }
@@ -171,17 +176,25 @@ def _student(ctx: dict) -> dict | None:
     if not plan:
         return None
     same = plan["diff_cents"] == 0
-    line = (
-        f"You are already on the closest standard plan, {plan['name']}. This is not an upsell."
-        if same
-        else f"Move to {plan['name']} before the discount ends, so the bill is not a surprise. Monthly difference {plan['diff_cents']} cents."
-    )
+    if same:
+        line_en = f"You are already on the closest standard plan, {plan['name']}. This is not an upsell."
+        line_es = f"Ya estás en el plan estándar más cercano, {plan['name']}. Esto no es una venta adicional."
+    else:
+        line_en = (
+            f"Move to {plan['name']} before the discount ends, so the bill is not a surprise. "
+            f"Monthly difference {_money(plan['diff_cents'])}."
+        )
+        line_es = (
+            f"Pasa a {plan['name']} antes de que termine el descuento, para que la factura no sea una sorpresa. "
+            f"Diferencia mensual {_money(plan['diff_cents'])}."
+        )
     return _plan_hit(
         trigger="Student or discount plan",
         plan=plan,
         why="This moves a student or discount plan to the closest standard catalog plan. It is framed as avoiding a surprise bill, not as an upsell.",
         rejected="A device upgrade was not added. A premium tier was not added on top.",
-        offer_line=line,
+        offer_line_en=line_en,
+        offer_line_es=line_es,
         action="AVOID SURPRISE BILL",
         send=not same,
     )
@@ -208,7 +221,8 @@ def _kid(ctx: dict) -> dict | None:
             "diff_cents": 0,
             "why": f"Add a line on {kid['device_name']} with one eligible line promo. {controls}",
             "rejected": f"A second promo was not stacked. {controls}",
-            "offer_line": f"Add a line. Device {kid['device_name']}. Promo {promo['name']}.",
+            "offer_line_en": f"Add a line. Device {kid['device_name']}. Promo {promo['name']}.",
+            "offer_line_es": f"Agrega una línea. Dispositivo {kid['device_name']}. Promoción {promo['name']}.",
             "source": "synthetic signal",
             "send": True,
         }
@@ -219,7 +233,8 @@ def _kid(ctx: dict) -> dict | None:
         plan=plan,
         why=f"No kids or family line promo was eligible. The cheapest real plan for the extra line is {plan['name']}. {controls}",
         rejected=f"A device promo was not attached. {controls}",
-        offer_line=f"Add a line on {plan['name']}. Monthly difference {plan['diff_cents']} cents.",
+        offer_line_en=f"Add a line on {plan['name']}. Monthly difference {_money(plan['diff_cents'])}.",
+        offer_line_es=f"Agrega una línea en {plan['name']}. Diferencia mensual {_money(plan['diff_cents'])}.",
         source="synthetic signal",
     )
 
@@ -239,7 +254,8 @@ def _promotion(ctx: dict) -> dict | None:
             "upgrade_outcome": "now",
             "why": "The Not Yet timing says upgrade now, so this nudge is the device, not a plan as well.",
             "rejected": "The premium plan was not included. One nudge does not carry both a plan and a device.",
-            "offer_line": f"Upgrade now. {device.get('name') or 'A catalog device'}.",
+            "offer_line_en": f"Upgrade now. {device.get('name') or 'A catalog device'}.",
+            "offer_line_es": f"Cambia ahora. {device.get('name') or 'A catalog device'}.",
             "source": "synthetic signal",
             "send": True,
         }
@@ -249,7 +265,8 @@ def _promotion(ctx: dict) -> dict | None:
             plan=plan,
             why="The Not Yet timing does not say upgrade now, so the real catalog step-up is the one offer.",
             rejected="A device was not added on the same nudge.",
-            offer_line=f"Premium tier {plan['name']}. Monthly difference {plan['diff_cents']} cents.",
+            offer_line_en=f"Premium tier {plan['name']}. Monthly difference {_money(plan['diff_cents'])}.",
+            offer_line_es=f"Nivel premium {plan['name']}. Diferencia mensual {_money(plan['diff_cents'])}.",
             source="synthetic signal",
         )
     return None
@@ -264,7 +281,8 @@ def _moving(ctx: dict) -> dict | None:
             "diff_cents": 0,
             "why": "Home Internet is already on the account, or it is not in the catalog. This is a coverage check and an address update, not a sale.",
             "rejected": "No home-internet add-on was attached.",
-            "offer_line": "Check coverage at the new address. No sale on this message.",
+            "offer_line_en": "Check coverage at the new address. No sale on this message.",
+            "offer_line_es": "Revisa la cobertura en la nueva dirección. Este mensaje no es una venta.",
             "source": "synthetic signal",
             "send": True,
         }
@@ -280,7 +298,8 @@ def _moving(ctx: dict) -> dict | None:
         "diff_cents": home["monthly_cents"],
         "why": "Home Internet is in the add-on catalog, so the coverage check can include it. One promo at most.",
         "rejected": "A phone upgrade was not added.",
-        "offer_line": f"Check coverage, and Home Internet {home['name']} is {home['monthly_cents']} cents a month.",
+        "offer_line_en": f"Check coverage, and Home Internet {home['name']} is {_money(home['monthly_cents'])} a month.",
+        "offer_line_es": f"Revisa la cobertura, y Home Internet {home['name']} cuesta {_money(home['monthly_cents'])} al mes.",
         "source": "synthetic signal",
         "send": True,
     }
@@ -294,13 +313,17 @@ def _merge(ctx: dict) -> dict | None:
         trigger="New partner or household merge",
         plan=plan,
         why=(
-            f"Combined catalog bill for {plan.get('added_lines')} lines is {plan['monthly_cents']} cents. "
-            f"The current catalog bill is {plan.get('current_monthly_cents')} cents."
+            f"Combined catalog bill for {plan.get('added_lines')} lines is {_money(plan['monthly_cents'])}. "
+            f"The current catalog bill is {_money(plan.get('current_monthly_cents'))}."
         ),
         rejected="A device promo was not stacked on the plan comparison.",
-        offer_line=(
-            f"Compare {plan['name']} at {plan['monthly_cents']} cents with the current "
-            f"{plan.get('current_monthly_cents')} cents. Monthly difference {plan['diff_cents']} cents."
+        offer_line_en=(
+            f"Compare {plan['name']} at {_money(plan['monthly_cents'])} with the current "
+            f"{_money(plan.get('current_monthly_cents'))}. Monthly difference {_money(plan['diff_cents'])}."
+        ),
+        offer_line_es=(
+            f"Compara {plan['name']} a {_money(plan['monthly_cents'])} con el actual "
+            f"{_money(plan.get('current_monthly_cents'))}. Diferencia mensual {_money(plan['diff_cents'])}."
         ),
         source="synthetic signal",
         action="HOUSEHOLD MERGE",
@@ -316,7 +339,8 @@ def _retirement(ctx: dict) -> dict | None:
         plan=plan,
         why="A cheaper real plan is a valid offer. A downgrade can be an upgrade of trust.",
         rejected="A premium tier and a device were not offered.",
-        offer_line=f"Cheaper catalog plan {plan['name']}. Monthly difference {plan['diff_cents']} cents.",
+        offer_line_en=f"Cheaper catalog plan {plan['name']}. Monthly difference {_money(plan['diff_cents'])}.",
+        offer_line_es=f"Plan más barato del catálogo {plan['name']}. Diferencia mensual {_money(plan['diff_cents'])}.",
         source="synthetic signal",
         action="CHEAPER PLAN",
     )
@@ -342,7 +366,63 @@ def _satisfied(ctx: dict) -> dict | None:
     }
 
 
-def _plan_hit(*, trigger, plan, why, rejected, offer_line, action=None, source=None, send=True) -> dict:
+def _money(cents) -> str:
+    if cents is None:
+        return "n/a"
+    value = int(cents) / 100
+    if value < 0:
+        return f"-${abs(value):,.2f}"
+    return f"${value:,.2f}"
+
+
+def _keep_lines() -> tuple[str, str]:
+    return (
+        "Keep the phone. No upgrade push.",
+        "Conserva el teléfono. No hay oferta de cambio.",
+    )
+
+
+def _wait_lines(moment: dict) -> tuple[str, str]:
+    headline = (moment or {}).get("headline") or "Wait. Upgrade eligibility follows the 12-month ownership rule."
+    age = (moment or {}).get("age_months")
+    balance = int((moment or {}).get("balance_cents") or 0)
+    value = (moment or {}).get("tradein_value_cents")
+    value_later = (moment or {}).get("tradein_value_in_6_cents")
+    months_left = (moment or {}).get("months_remaining")
+    if age is None:
+        return headline, "Espera. Esta línea no tiene un teléfono para entregar."
+    if int(age) < UPGRADE_MIN_AGE_MONTHS:
+        wait = UPGRADE_MIN_AGE_MONTHS - int(age)
+        unit = "mes" if wait == 1 else "meses"
+        return headline, (
+            f"Espera {wait} {unit} hasta que el teléfono tenga {UPGRADE_MIN_AGE_MONTHS} meses. "
+            f"Esa es la regla de cambio del sandbox (la mitad del plazo de financiamiento de {FINANCING_TERM_MONTHS} meses)."
+        )
+    if balance > 0 and value is not None and int(value) < balance:
+        left = int(months_left or 0)
+        unit = "mes" if left == 1 else "meses"
+        return headline, (
+            f"Espera. Entregar este teléfono hoy cobraría el saldo restante de {_money(balance)}, "
+            f"y el canje en condición buena es {_money(value)}. Quedan {left} {unit} de cuota."
+        )
+    if balance == 0:
+        drop = 0 if value is None or value_later is None else int(value) - int(value_later)
+        return headline, (
+            f"Está pagado y es elegible para cambio, pero el canje en condición buena solo se mueve {_money(drop)} en 6 meses. "
+            "Esperar es una suposición modelada."
+        )
+    if value is None:
+        return headline, (
+            f"Elegible para cambio. Entregarlo hoy cobra el saldo restante de {_money(balance)}. "
+            "Este teléfono no está marcado como elegible para canje, así que no se cita un valor de la curva."
+        )
+    return headline, (
+        f"Elegible para cambio. Entregarlo hoy cobra el saldo restante de {_money(balance)}. "
+        f"El valor de canje en condición buena es {_money(value)}."
+    )
+
+
+def _plan_hit(*, trigger, plan, why, rejected, offer_line_en, offer_line_es, action=None, source=None, send=True) -> dict:
     hit = {
         "trigger": trigger,
         "offer_name": plan["name"],
@@ -350,7 +430,8 @@ def _plan_hit(*, trigger, plan, why, rejected, offer_line, action=None, source=N
         "diff_cents": int(plan["diff_cents"]),
         "why": why,
         "rejected": rejected,
-        "offer_line": offer_line,
+        "offer_line_en": offer_line_en,
+        "offer_line_es": offer_line_es,
         "send": send,
     }
     if action:
@@ -367,7 +448,7 @@ def _keep(hit: dict) -> dict:
     hit["offer_sku"] = None
     hit["promo_skus"] = []
     hit["promo_savings_cents"] = None
-    hit["offer_line"] = "Keep the phone. No upgrade push."
+    hit["offer_line_en"], hit["offer_line_es"] = _keep_lines()
     hit["rejected"] = "Upgrade push blocked for persona 07 or 31."
     hit["why"] = "This persona never gets an upgrade push. Keep is the outcome."
     return hit
@@ -375,7 +456,8 @@ def _keep(hit: dict) -> dict:
 
 def _pack(rule: dict | None, **hit) -> dict:
     promo_skus = [sku for sku in (hit.get("promo_skus") or []) if sku][:1]
-    offer_line = hit.get("offer_line") or "No upsell."
+    offer_en = hit.get("offer_line_en") or hit.get("offer_line") or "No upsell."
+    offer_es = hit.get("offer_line_es") or offer_en
     tier = hit.get("tier") or (rule["tier"] if rule else "none")
     source = hit.get("source") or (rule["source"] if rule else "")
     if tier == "tier2":
@@ -401,8 +483,8 @@ def _pack(rule: dict | None, **hit) -> dict:
         "assumption_note": hit.get("assumption_note") or "",
         "badge": "synthetic, consented, illustrative" if tier == "tier2" else "",
         "send": bool(hit.get("send")),
-        "message_en": templates["en"].format(offer_line=offer_line),
-        "message_es": templates["es"].format(offer_line=offer_line),
+        "message_en": templates["en"].format(offer_line=offer_en),
+        "message_es": templates["es"].format(offer_line=offer_es),
     }
 
 
