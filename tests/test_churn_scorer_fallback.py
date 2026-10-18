@@ -1,4 +1,4 @@
-"""Fresh-clone fallback: the churn scorer reads demo_data/ when harness/out has no inputs (synthetic data)."""
+"""Churn scorer input order: demo_data/ first, harness/out second (synthetic data)."""
 import sys
 from pathlib import Path
 
@@ -19,9 +19,11 @@ def test_scorer_falls_back_to_demo_data(tmp_path, monkeypatch):
     assert st["model"] is not None and len(st["feats"]) > 0
 
 
-def test_scorer_prefers_harness_out(tmp_path, monkeypatch):
+def test_scorer_prefers_demo_data(tmp_path, monkeypatch):
     import churn_scorer as cs
     for f in ("features.csv", "labels.csv"):
         (tmp_path / f).write_text("account_id\n")
     monkeypatch.setattr(cs, "OUT", tmp_path)
+    assert cs._input_dir() == cs.DEMO
+    monkeypatch.setattr(cs, "DEMO", tmp_path / "no_demo")
     assert cs._input_dir() == tmp_path
