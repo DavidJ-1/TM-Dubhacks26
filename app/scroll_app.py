@@ -98,6 +98,13 @@ def _from_pick():
         _forget_dot()
 
 
+def _on_quick(account_id: str):
+    """Deal quick pick: write the shared customer before the deal section draws."""
+    if account_id:
+        D.apply_shared_selection(st.session_state, account_id)
+        _forget_dot()
+
+
 def _from_live():
     """Open the scripted account (#02363) through the same selection as the dropdown."""
     D.apply_shared_selection(st.session_state, D.LIVE_ACC)
@@ -233,6 +240,6 @@ if hasattr(O, "render_deal_engine"):
     allo = D.all_options()
     _call(O.render_deal_engine, df, acc, options=allo if SHOW_MONEY else D.strip_money(allo),
           decisions=dec_all if SHOW_MONEY else D.strip_money(dec_all),
-          demo_ids=[f"{D.PERSONA}{d}" for d in D.DEMO])
+          demo_ids=[f"{D.PERSONA}{d}" for d in D.DEMO], on_quick=_on_quick)
 _call(O.render_considered, D.considerations() if SHOW_MONEY else D.considerations_no_money(D.considerations()),
       summary=D.considered_summary() if SHOW_MONEY else None)

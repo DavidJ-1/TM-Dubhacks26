@@ -363,13 +363,14 @@ def _pick_sentence(r, d, o) -> str:
 
 def render_deal_engine(df: pd.DataFrame, account_id: str, options: pd.DataFrame | None = None,
                        decisions: pd.DataFrame | None = None, show_money: bool = True, *,
-                       candidates: pd.DataFrame | None = None, demo_ids: list[str] | None = None, key: str = "orbit") -> str:
-    """Act 2 'How we pick the deal': five-box flow, then a live example for one demo customer.
+                       candidates: pd.DataFrame | None = None, demo_ids: list[str] | None = None,
+                       on_quick: Callable | None = None, key: str = "orbit") -> str:
+    """Act 2 'How we pick the deal': five-box flow, then a live example for the selected customer.
     options: options.csv (account_id, option_label, verdict picked/not_sent/ruled_out, reason, net_mid_usd; do nothing first).
     decisions: decisions.csv (decision, channel, offer_label, decision_reason) for the closing sentence.
     candidates (optional, every account): fallback for the per-customer averages when options is missing.
-    demo_ids: optional quick-pick account ids (the four demo personas). They do not replace account_id;
-    the cards are always for the shared selection. Picking one writes _pending_acc for the next run.
+    demo_ids: optional quick-pick account ids. on_quick(account_id) runs on click, before this section draws,
+    so the cards below are whoever was just selected.
     show_money=False: no net figures; weighing is described without cost. Returns the account shown."""
     st.markdown(f"<style>{CSS_DEAL}</style>", unsafe_allow_html=True)
     _act("04 / 05", "How we pick the deal", "the same five steps for every customer")
@@ -391,23 +392,18 @@ def render_deal_engine(df: pd.DataFrame, account_id: str, options: pd.DataFrame 
     st.markdown(f"<div class='o-flow'>{flow}</div>" + (f"<div class='o-lbl' style='margin-bottom:22px'>{esc(cap)}</div>" if cap else ""),
                 unsafe_allow_html=True)
 
-    # The live example is whoever is selected above. demo_ids are quick-pick suggestions only
-    # (they write _pending_acc; they are not a second customer list).
+    # Heading and cards use account_id, the shared selection, on this run.
+    # Quick-pick clicks call on_quick before the rerun, so the first paint already matches.
     ids = [a for a in (demo_ids or []) if a in set(df.account_id)]
     acc = account_id
     st.markdown(f"<div class='o-lbl'>Live example · the customer selected above</div>"
                 f"<div style='font:500 22px/1.2 SG,sans-serif;margin:4px 0 12px'>Customer {esc(cid(acc))}</div>",
                 unsafe_allow_html=True)
-    if ids:
-        pk = f"{key}_deal_quick"
-        st.session_state[pk] = acc if acc in ids else None
-
-        def _on_quick(pick_key=pk):
-            v = st.session_state.get(pick_key)
-            if v:
-                st.session_state["_pending_acc"] = v
-
-        st.segmented_control("Demo quick picks", ids, key=pk, format_func=lambda x: f"Customer {cid(x)}", on_change=_on_quick)
+    if ids and on_quick is not None:
+        cols = st.columns(len(ids))
+        for col, aid in zip(cols, ids):
+            col.button(f"Customer {cid(aid)}", key=f"{key}_q_{aid}", on_click=on_quick, args=(aid,),
+                       type="primary" if aid == acc else "secondary", width="stretch")
     if acc not in set(df.account_id):
         return acc
     r = df[df.account_id == acc].iloc[0]
