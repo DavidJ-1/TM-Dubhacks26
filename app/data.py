@@ -151,7 +151,7 @@ def stay_conflict(stay: str, r, risks: list[str]) -> str | None:
         return "bill went up / promo ended"
     if s.startswith("not shopping") and (_num(r, "competitor_research_score") >= 0.5 or _num(r, "port_out_inquiry") > 0
                                          or "shopping" in rk or "porting" in rk):
-        return "is researching competitors or asked about porting out"
+        return "is researching competitors or asked about transferring their number"
     if s.startswith("positive experiences") and (_num(r, "negative_contacts_90d") > 0 or _num(r, "avg_sentiment_90d") < 0
                                                  or "unhappy" in rk):
         return "has unhappy support contacts"

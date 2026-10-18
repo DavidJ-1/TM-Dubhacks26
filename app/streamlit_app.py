@@ -100,7 +100,7 @@ def money(v) -> str:
     return "—" if pd.isna(v) else f"${v:,.0f}"
 
 
-tab2, tab1, tabj, tab3 = st.tabs(["Four customers", "How it decides", "Customer journey", "Pipeline visual"])
+tab2, tabj, tab3 = st.tabs(["How it decides · four customers", "Customer journey", "Pipeline visual"])
 
 # ---------------- Customer journey (HTML built by another worker; embedded as-is) ----------------
 with tabj:
@@ -137,13 +137,20 @@ def clean_text(t) -> str:
     t = re.sub(r"\bEV\b", "expected value", t)
     t = t.replace("Model A + EV engine", "churn risk model + offer engine").replace("Model A", "churn risk model")
     t = t.replace("expected value engine", "offer engine").replace("Model B", "offer engine")
+    t = re.sub(r"(?i)\b(live:)?port_out_inquiry\b", "Asked us about transferring their number", t)
+    t = re.sub(r"(?i)\bno port-out inquir(y|ies)\b", "hasn't asked us about transferring their number", t)
+    t = re.sub(r"(?i)\bport-out inquir(y|ies)\b", "asked us about transferring their number", t)
+    t = re.sub(r"(?i)\basked about porting out\b", "asked us about transferring their number", t)
+    t = re.sub(r"(?i)\basked (us )?about porting (their |the |a )?number( out)?\b", "Asked us about transferring their number", t)
+    t = re.sub(r"(?i)\bport(ing)?[- ]out\b", "number transfer", t)
+    t = re.sub(r"(?i)\bporting\b", "transferring", t)
     return t.strip()
 
 
 def signal_type(text: str) -> str:
-    """Commerce (plan/price/bill/device/financing) · Customer (support, sentiment, tenure) · Real-time (port-out, carriers, app)."""
+    """Commerce (plan/price/bill/device/financing) · Customer (support, sentiment, tenure) · Real-time (number transfer, carriers, app)."""
     t = str(text).lower()
-    if any(w in t for w in ("porting", "port-out", "shopping", "carriers", "app user", "uses the app", "sessions")):
+    if any(w in t for w in ("porting", "port-out", "transferring their number", "number transfer", "shopping", "carriers", "app user", "uses the app", "sessions")):
         return "Real-time"
     if any(w in t for w in ("support", "unresolved", "unhappy", "complaint", "positive experiences",
                             "long-time", "new customer", "cancel")):
@@ -162,14 +169,14 @@ def chip(text: str, kind: str) -> str:
 
 LEGEND = ("<div class='legend'><span class='pill p-com'>Commerce</span>plan, price, bill, device, financing "
           "<span class='pill p-cus'>Customer</span>support, sentiment, tenure "
-          "<span class='pill p-rt'>Real-time</span>port-out, comparing carriers, app use "
+          "<span class='pill p-rt'>Real-time</span>transfer questions, comparing carriers, app use "
           "&nbsp;·&nbsp; ▲ risk &nbsp;● reason to stay</div>")
 TOGGLES = [  # key, label, relevant-if, edits applied to features.csv / engine row
     # Toggles start ON (the fact as it is in the data); switching one OFF removes that fact and re-decides.
     ("tickets", "Open support tickets", lambda r: float(r.get("unresolved_90d", 0) or 0) > 0
      or float(r.get("negative_contacts_90d", 0) or 0) > 0,
      {"unresolved_90d": 0, "unresolved_270d": 0, "negative_contacts_90d": 0, "network_contacts_90d": 0}),
-    ("port", "Port-out inquiry", lambda r: float(r.get("port_out_inquiry", 0) or 0) > 0, {"port_out_inquiry": 0}),
+    ("port", "Asked us about transferring their number", lambda r: float(r.get("port_out_inquiry", 0) or 0) > 0, {"port_out_inquiry": 0}),
     ("comp", "Comparing carriers", lambda r: float(r.get("competitor_research_score", 0) or 0) >= 0.3,
      {"competitor_research_score": 0.0}),
 ]
@@ -364,7 +371,7 @@ def key_facts(r) -> str:
         bits.append(f"{int(n('support_270d'))} support contacts in 270 days, {int(n('unresolved_270d') or 0)} unresolved"
                     + (f", avg sentiment {sent:+.2f}" if pd.notna(sent) and n("support_270d") > 0 else ""))
     if pd.notna(n("port_out_inquiry")):
-        bits.append("asked about porting out" if n("port_out_inquiry") > 0 else "no port-out inquiry")
+        bits.append("asked us about transferring their number" if n("port_out_inquiry") > 0 else "hasn't asked about transferring their number")
     if pd.notna(n("competitor_research_score")):
         bits.append(f"shopping score {n('competitor_research_score'):.2f}")
     if pd.notna(n("bill_change_3m_pct")):
@@ -378,7 +385,7 @@ FEATURE_LABELS = {  # churn model column -> (plain label, signal type)
     "is_byod": ("Bring-your-own phone", "Commerce"), "neg_sentiment": ("Negative support sentiment", "Customer"),
     "cancel_inquiries_270d": ("Asked about cancelling", "Customer"), "short_history": ("Short account history", "Customer"),
     "has_home_internet": ("Home Internet bundle", "Commerce"), "low_app_use": ("Rarely uses the app", "Real-time"),
-    "plan_misfit_share": ("Plan doesn't fit usage", "Commerce"), "port_out_inquiry": ("Port-out inquiry", "Real-time"),
+    "plan_misfit_share": ("Plan doesn't fit usage", "Commerce"), "port_out_inquiry": ("Asked us about transferring their number", "Real-time"),
     "early_tenure": ("First year with us", "Customer"), "promo_expired_recent": ("Promo just ended", "Commerce"),
     "max_device_age_months": ("Phone age", "Commerce"), "troubled_4plus": ("4+ support contacts", "Customer"),
     "bill_increase_pct": ("Bill went up", "Commerce"), "unresolved_90d": ("Unresolved support, 90 days", "Customer"),
@@ -513,7 +520,7 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
         st.markdown("**What if?** Switch a fact off and our models re-decide live.")
         rel = [(key, lab, ed) for key, lab, cond, ed in TOGGLES if cond(r)]
         if not rel:
-            st.caption("Nothing to switch off: no open tickets, no port-out inquiry, not comparing carriers.")
+            st.caption("Nothing to switch off: no open tickets, hasn't asked about transferring their number, not comparing carriers.")
         edits = {}
         cols = st.columns(max(1, len(rel)))
         for (key, lab, ed), c in zip(rel, cols):
@@ -578,6 +585,9 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
         st.markdown(phone(msg, lang), unsafe_allow_html=True)
         if msg and allow_send and res is None:
             send_button(msg, f"{kp}{acc}_{lang}")
+        elif not msg:
+            st.info("No text is sent to this customer: the offer engine chose to wait." if k_now == "do_nothing"
+                    else "No text is sent to this customer.", icon="🤫")
         st.caption(("What-if text from the offer engine." if res is not None else "The exact text the offer engine wrote.")
                    + " Mockup only, nothing is sent.")
     sp, _gap = st.columns([2.4, 1])
@@ -586,22 +596,7 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
 
 
 with tab2:
-    st.markdown("### Open any customer")
-    _lk = df.sort_values("risk_rank")
-    _labels = {a: f"Customer {a.rsplit('-', 1)[-1] if a.startswith('ACC-PERSONA') else a.replace('ACC-', '').lstrip('0')}"
-                  f"{' (test persona)' if a.startswith('ACC-PERSONA') else ''} · {seg} · risk {fmt_prob(p)}"
-               for a, seg, p in zip(_lk.account_id, _lk.get("segment", pd.Series("", index=_lk.index)), _lk.p_churn_90d)}
-    SHORTLIST = ["ACC-PERSONA-38", "ACC-PERSONA-04", "ACC-PERSONA-21", "ACC-PERSONA-24", "ACC-PERSONA-39", "ACC-PERSONA-05"]
-    full = st.checkbox(f"Search all {len(_labels):,}", key="lookup_all")
-    opts = list(_labels) if full else [a for a in SHORTLIST if a in _labels]
-    pick = st.selectbox("Customer (type to filter by number, segment or risk)", [None] + opts,
-                        format_func=lambda a: "Pick a customer…" if a is None else _labels[a],
-                        key="lookup_full" if full else "lookup_short")
-    if pick:
-        with st.container(border=True):
-            if pick not in SHORTLIST:
-                st.caption("Not pre-checked for the demo (synthetic).")
-            card(pick, "Customer lookup", set(), 0, kp="lk_", allow_send=pick in SHORTLIST)
+    top_c = st.container()
     st.markdown("### Four customers, four different right answers")
     st.caption("Same pipeline, different decision for each customer, including staying silent. All synthetic.")
     for i, (acc, story, fits) in enumerate(CARDS, 1):
@@ -629,9 +624,29 @@ with tab2:
                 elif m2:
                     st.markdown(f"Saves **${m2.group(1)}/mo**")
                 st.markdown(phone(me.strip() or None, "en"), unsafe_allow_html=True)
+                if me.strip() and mr.get("action_key") != "do_nothing" and macc != "ACC-PERSONA-39":
+                    send_button(me.strip(), f"mx_{macc}_en")
 
-# ---------------- TAB: How it decides ----------------
-with tab1:
+    st.markdown("### Open any customer")
+    _lk = df.sort_values("risk_rank")
+    _labels = {a: f"Customer {a.rsplit('-', 1)[-1] if a.startswith('ACC-PERSONA') else a.replace('ACC-', '').lstrip('0')}"
+                  f"{' (test persona)' if a.startswith('ACC-PERSONA') else ''} · {seg} · risk {fmt_prob(p)}"
+               for a, seg, p in zip(_lk.account_id, _lk.get("segment", pd.Series("", index=_lk.index)), _lk.p_churn_90d)}
+    SHORTLIST = ["ACC-PERSONA-38", "ACC-PERSONA-04", "ACC-PERSONA-21", "ACC-PERSONA-24", "ACC-PERSONA-05"]
+    full = st.checkbox(f"Search all {len(_labels):,}", key="lookup_all")
+    opts = list(_labels) if full else [a for a in SHORTLIST if a in _labels]
+    pick = st.selectbox("Customer (type to filter by number, segment or risk)", [None] + opts,
+                        format_func=lambda a: "Pick a customer…" if a is None else _labels[a],
+                        key="lookup_full" if full else "lookup_short")
+    if pick:
+        with st.container(border=True):
+            if pick not in SHORTLIST:
+                st.caption("Not pre-checked for the demo (synthetic).")
+            card(pick, "Customer lookup", set(), 0, kp="lk_", allow_send=pick in SHORTLIST)
+    bottom_c = st.container()
+
+# ---------------- How it decides: band (top of first tab) + across-all charts (end) ----------------
+with top_c:
     import plotly.express as px
     import plotly.graph_objects as go
     D = df.copy()
@@ -685,7 +700,7 @@ with tab1:
         st.markdown(f"<div class='big'>{n_acc:,}</div><div class='sub'>synthetic accounts</div>", unsafe_allow_html=True)
         st.markdown("<span class='pill p-com'>Commerce</span> plan, bill, device<br>"
                     "<span class='pill p-cus'>Customer</span> support, sentiment, tenure<br>"
-                    "<span class='pill p-rt'>Real-time</span> port-out, comparing carriers, app use",
+                    "<span class='pill p-rt'>Real-time</span> transfer questions, comparing carriers, app use",
                     unsafe_allow_html=True)
     with steps[1], st.container(border=True):
         st.markdown("<div class='step'>2 · Churn risk score</div>", unsafe_allow_html=True)
@@ -708,7 +723,7 @@ with tab1:
                     "texts are ready, each with a plain-language reason.</div>", unsafe_allow_html=True)
 
     # ---- follow one customer through it ----
-    FOLLOW = ["ACC-PERSONA-38", "ACC-PERSONA-04", "ACC-PERSONA-21", "ACC-PERSONA-24", "ACC-PERSONA-39", "ACC-PERSONA-05"]
+    FOLLOW = ["ACC-PERSONA-38", "ACC-PERSONA-04", "ACC-PERSONA-21", "ACC-PERSONA-24", "ACC-PERSONA-05"]
     FOLLOW = [a for a in FOLLOW if a in set(df.account_id)]
     if FOLLOW:
         fa = st.selectbox("Follow one customer through it", FOLLOW, index=0, key="follow",
@@ -735,7 +750,7 @@ with tab1:
                         f"{_v('last_bill_cents', 'usd')} ({_v('bill_change_3m_pct', 'pct')}) · phone {_v('max_device_age_months')} mo<br>"
                         f"<span class='pill p-cus'>Customer</span> {_v('support_270d')} support contacts (270d), "
                         f"{_v('unresolved_270d')} unresolved · sentiment {_v('avg_sentiment', 'f2')} · {_v('tenure_months')} mo tenure<br>"
-                        f"<span class='pill p-rt'>Real-time</span> port-out {_v('port_out_inquiry', 'yn')} · comparing carriers "
+                        f"<span class='pill p-rt'>Real-time</span> asked about transferring number: {_v('port_out_inquiry', 'yn')} · comparing carriers "
                         f"{_v('competitor_research_score', 'f2')} · {_v('app_sessions_30d')} app sessions/30d",
                         unsafe_allow_html=True)
         with fs[1], st.container(border=True):
@@ -776,6 +791,10 @@ with tab1:
                 st.markdown(f"<div class='bubble' style='font-size:.78rem'>{html.escape(m_.strip())}</div>", unsafe_allow_html=True)
             else:
                 st.markdown("<div class='sub'>🤫 No message sent: we decided to wait.</div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align:center;font-size:1.05rem;margin:.4rem 0 1rem'>⬇ <b>Step 5 in full:</b> "
+                "Customer #38's card is right below, then three more customers (synthetic).</div>", unsafe_allow_html=True)
+with bottom_c:
+    st.divider()
     st.markdown(f"#### Across all {n_acc:,} customers")
     k = st.columns(6)
     k[0].metric("Accounts", f"{n_acc:,}", help="Judge sandbox accounts incl. 42 personas (synthetic).")
@@ -950,7 +969,7 @@ with tab1:
                 ("Support contacts (90d)", "support_90d", [-1, 0, 2, 4, 999], ["0", "1-2", "3-4", "5+"]),
                 ("Competitor research", "competitor_research_score", [-1, 0.25, 0.5, 0.75, 9], ["<0.25", "0.25-0.5", "0.5-0.75", "0.75+"]),
                 ("Bill change (3 mo)", "bill_change_3m_pct", [-9, 0.0, 0.05, 99], ["flat / down", "up 0-5%", "up >5%"]),
-                ("Port-out inquiry", "port_out_inquiry", [-1, 0, 9], ["no", "yes"]),
+                ("Asked us about transferring their number", "port_out_inquiry", [-1, 0, 9], ["no", "yes"]),
                 ("Tenure", "tenure_months", [-1, 12, 36, 9999], ["<1 yr", "1-3 yrs", "3+ yrs"]),
             ]:
                 if col in j:
@@ -982,7 +1001,6 @@ with tab1:
                 st.caption(f"{dn:,} of {len(df):,} accounts get no contact at all. Risk = churn risk model. "
                            "Note: texts also go to customers who aren't high-risk (money-saving and fix-first texts), "
                            "so the message count is not a subset of the flagged at-risk count. Synthetic.")
-
 
 
 # ---------------- TAB 3: Pipeline visual ----------------
