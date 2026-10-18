@@ -582,6 +582,63 @@ UPGRADE_PHRASES: Dict[str, Callable[[float, bool], str]] = {
 }
 
 
+# Upgrade reason-direction guard (same idea as tm-churn's SIGN_PRIOR guard). feature group -> (sign, mode).
+# sign +1 = more of it makes an upgrade MORE likely, -1 = LESS likely. mode "presence": the account either has
+# the condition (value > 0) or not, and the reason wording says which; "vs_typical": compared with the typical
+# account (the model's reference row). A group is shown as a reason FOR upgrading only when the account sits on
+# the side that its sign says helps, and AGAINST only on the side that hurts; otherwise it is skipped and the
+# next group is used. So e.g. unresolved support issues, money still owed on phones, a bill jump or an unhappy
+# support tone can only ever be reasons against (their absence may be a reason for: "Phones fully paid off").
+UPGRADE_DIRECTION: Dict[str, Tuple[int, str]] = {
+    # hurts an upgrade when present
+    "unresolved_90d": (-1, "presence"), "unresolved_270d": (-1, "presence"),
+    "financing_balance_total_cents": (-1, "presence"), "n_financed_lines": (-1, "presence"),
+    "monthly_installment_total_cents": (-1, "presence"), "max_financing_months_remaining": (-1, "presence"),
+    "new_installment_recent": (-1, "presence"),
+    "bill_increase_pct": (-1, "presence"), "bill_change_3m_pct": (-1, "presence"),
+    "promo_expired_recent": (-1, "presence"),
+    "neg_sentiment": (-1, "presence"), "negative_contacts_90d": (-1, "presence"), "troubled_4plus": (-1, "presence"),
+    "cancel_inquiries_270d": (-1, "presence"), "cancellation_inquiry_contacts_90d": (-1, "presence"),
+    "port_out_inquiry": (-1, "presence"),
+    # hurts an upgrade when above the typical account (shopping around is a churn sign, not an upgrade sign)
+    "competitor_research_score": (-1, "vs_typical"),
+    # helps an upgrade when present
+    "n_lines_over_cap_3m": (1, "presence"), "n_lines_usage_up_30pct": (1, "presence"),
+    "plan_misfit_share": (1, "presence"), "n_tradein_eligible_lines": (1, "presence"),
+    "n_lines_device_36m_plus": (1, "presence"), "financing_ends_within_3m": (1, "presence"),
+    "installment_ended_recent": (1, "presence"), "no_financing": (1, "presence"),
+    # helps an upgrade when above the typical account
+    "max_device_age_months": (1, "vs_typical"), "data_gb_3m_avg": (1, "vs_typical"),
+    "data_growth_pct": (1, "vs_typical"), "hotspot_gb_3m_avg": (1, "vs_typical"),
+}
+
+
+def upgrade_direction_ok(g: str, up: bool, row, xr=None, reference=None) -> bool:
+    """True if group g may be shown as an upgrade reason in this direction (up=True -> FOR, False -> AGAINST)."""
+    if g not in UPGRADE_DIRECTION:
+        return True
+    sign, mode = UPGRADE_DIRECTION[g]
+    try:
+        if mode == "presence":
+            v = row.get(g, np.nan) if hasattr(row, "get") else np.nan
+            if v is None or (isinstance(v, float) and v != v):
+                v = xr.get(g, np.nan) if xr is not None and hasattr(xr, "get") else np.nan
+            v = float(v)
+            if v != v:
+                return False
+            side = 1 if v > 0 else -1                       # has the condition / doesn't
+        else:
+            if xr is None or reference is None or g not in getattr(xr, "index", []) or g not in reference.index:
+                return True
+            d = float(xr[g]) - float(reference[g])
+            if d == 0:
+                return False
+            side = 1 if d > 0 else -1
+    except (TypeError, ValueError):
+        return False
+    return (side * sign > 0) == bool(up)
+
+
 def _upgrade_sentence(g: str, row, up: bool, cat: Optional[str] = None) -> str:
     """Short customer-card sentence for the upgrade target. Never returns raw column names or underscores."""
     if cat is not None or g in _CATEGORY_TEXT:
@@ -603,7 +660,7 @@ def _upgrade_sentence(g: str, row, up: bool, cat: Optional[str] = None) -> str:
 
 
 def contributions_to_reasons(contrib: pd.DataFrame, X: pd.DataFrame, k: int = 3, eps: float = 1e-6,
-                             target: str = "churn") -> pd.DataFrame:
+                             target: str = "churn", reference: Optional[pd.Series] = None) -> pd.DataFrame:
     """contrib: rows = accounts, cols = feature groups (one-hot columns already merged); positive raises risk.
     Groups are merged again into tm-churn's reason groups (churn_features.REASON_GROUPS) when available, and
     worded with churn_features.phrase() so harness and Model A speak the same language; else REASONS above."""
@@ -644,12 +701,20 @@ def contributions_to_reasons(contrib: pd.DataFrame, X: pd.DataFrame, k: int = 3,
         return _sentence(g, "risk" if risk else "stay", d)
 
     rows = []
+    ref = None
+    if target == "upgrade":
+        ref = reference if reference is not None else _reference_row(X)
+    blocked = 0
     for aid, r in contrib.iterrows():
         row, xr = raw.loc[aid], X.loc[aid]
         s_ = r.sort_values()
         def pick(groups, up):
+            nonlocal blocked
             seen, out_ = set(), []
             for g_ in groups:
+                if target == "upgrade" and not upgrade_direction_ok(g_, up, row, xr, ref):
+                    blocked += 1
+                    continue
                 t_ = text(g_, row, xr, up)
                 if t_ and t_ not in seen:
                     seen.add(t_)
@@ -667,7 +732,9 @@ def contributions_to_reasons(contrib: pd.DataFrame, X: pd.DataFrame, k: int = 3,
             rec[f"stay_reason_{i + 1}"] = stay[i]
         rows.append(rec)
     cols = ["account_id"] + [f"risk_reason_{i + 1}" for i in range(k)] + [f"stay_reason_{i + 1}" for i in range(k)]
-    return pd.DataFrame(rows, columns=cols)
+    out = pd.DataFrame(rows, columns=cols)
+    out.attrs["direction_blocked"] = blocked
+    return out
 
 
 # --------------------------------------------------------------------------------------------- model interface
@@ -705,7 +772,8 @@ class ChurnModel:
 
     def explain(self, X: pd.DataFrame, k: int = 3) -> pd.DataFrame:
         """risk_reason_* = pushes the probability UP (churn risk / upgrade likelihood); stay_reason_* = DOWN."""
-        return contributions_to_reasons(self.contributions(X), X, k, target=getattr(self, "target_", "churn"))
+        return contributions_to_reasons(self.contributions(X), X, k, target=getattr(self, "target_", "churn"),
+                                        reference=getattr(self, "reference_", None))
 
 
 class SupportCallsRule(ChurnModel):

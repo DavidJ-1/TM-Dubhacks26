@@ -313,3 +313,30 @@ def test_upgrade_reasons_on_real_data_have_no_raw_names():
     assert len(texts) > 0
     bad = [t for t in texts.unique() if _bad_reason(t, raw_cols)]
     assert not bad, bad[:10]
+
+
+def test_upgrade_direction_guard():
+    """Reasons FOR upgrading never cite support problems, money owed, a bill jump or an unhappy tone; the next
+    reason is used instead. Absence of a negative may still be a FOR reason."""
+    ids = ["A", "B"]
+    X = pd.DataFrame({"unresolved_90d": [2.0, 0.0], "financing_balance_total_cents": [95800.0, 0.0],
+                      "bill_increase_pct": [0.25, 0.0], "neg_sentiment": [0.7, 0.0],
+                      "n_lines_over_cap_3m": [1.0, 0.0], "tenure_capped60": [30.0, 30.0]}, index=ids)
+    # contributions: every negative-domain feature pushes UP (as a collinear model might) and is the strongest
+    C = pd.DataFrame({"unresolved_90d": [0.9, 0.9], "financing_balance_total_cents": [0.8, 0.8],
+                      "bill_increase_pct": [0.7, 0.7], "neg_sentiment": [0.6, 0.6],
+                      "n_lines_over_cap_3m": [-0.5, 0.5], "tenure_capped60": [0.1, -0.1]}, index=ids)
+    r = mh.contributions_to_reasons(C, X, k=3, target="upgrade").set_index("account_id")
+    a_for = [r.at["A", f"risk_reason_{i}"] for i in (1, 2, 3)]
+    joined = " ".join(a_for).lower()
+    for bad in ("unresolved", "owes", "bill jump", "jumped", "unhappy"):
+        assert bad not in joined, a_for
+    assert a_for[0] == "Customer for 2 years"          # next allowed group is used
+    # over-cap line pushes DOWN for A but the condition helps upgrades -> not an AGAINST reason
+    assert "data cap" not in " ".join(r.loc["A", [f"stay_reason_{i}" for i in (1, 2, 3)]]).lower()
+    # B has none of the negatives: their absence may be shown as a reason FOR
+    b_for = [r.at["B", f"risk_reason_{i}"] for i in (1, 2, 3)]
+    assert "No unresolved support issues" in b_for and "Phones fully paid off" in b_for
+    assert r.attrs.get("direction_blocked", 0) >= 4
+    assert mh.upgrade_direction_ok("unresolved_90d", False, pd.Series({"unresolved_90d": 2}))
+    assert not mh.upgrade_direction_ok("unresolved_90d", True, pd.Series({"unresolved_90d": 2}))
