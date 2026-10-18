@@ -195,7 +195,7 @@ function land(c){const el=bucketEl[c.bucket];el.classList.add("hit");setTimeout(
   bucketDots[c.bucket].push(c.col);const k=el.querySelector("canvas"),w=k.clientWidth,h=k.clientHeight;k.width=w*DPR;k.height=h*DPR;
   const g=k.getContext("2d");g.setTransform(DPR,0,0,DPR,0,0);const per=Math.floor((w-8)/7);const dots=bucketDots[c.bucket].slice(-per*3);
   dots.forEach((col,i)=>{g.fillStyle=col;g.beginPath();g.arc(6+(i%per)*7,h-5-Math.floor(i/per)*7,2.8,0,6.2832);g.fill();});
-  c.done=true;}
+  c.done=true;c.hide=false;}
 // ---------- journey ----------
 let token=0,lang="en",cur=null,speed=1;
 const wait=(ms,tk)=>new Promise((res,rej)=>setTimeout(()=>tk===token?res():rej("x"),ms*speed));
