@@ -9,12 +9,18 @@ from __future__ import annotations
 
 import re
 import os
+import sys
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
 OUT = Path(os.environ.get("TM_OUT_DIR", Path(__file__).resolve().parents[1] / "harness" / "out"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "harness"))
+import offers as _eng  # noqa: E402  (CONFIG only)
+# v2: Ascarza et al. 2016 plan-fit backfire ON by default -> right-size expectations become "held" (do nothing with
+# reason plan_fit_held, right-size still computed as an eligible, negative-EV candidate). See test_persona_golden.
+BACKFIRE_ON = _eng.right_size_backfire_rel() > 0
 UPSELLS = {"step_up", "family_upgrade", "device_upgrade", "home_internet_bundle"}
 WAITS = {"wait_until_payoff", "wait_until_promo"}
 
@@ -57,8 +63,25 @@ def bill_shock_with_callback(o, lt, pid):
         "bill-shock relief without a callback for the open billing tickets"
 
 
+def held_for_backfire(o, pid):
+    r = _row(o, pid)
+    return BACKFIRE_ON and r["action_code"] == "do_nothing" and r.get("do_nothing_reason") == "plan_fit_held"
+
+
+def right_size_or_held(o, lt, pid):
+    if held_for_backfire(o, pid):
+        return
+    code_in("right_size")(o, lt, pid)
+
+
 def saver_or_review_saving(o, lt, pid):
     r = _row(o, pid)
+    if held_for_backfire(o, pid):
+        c = _cands_df()
+        if c is not None:
+            rs = c[(c.account_id == f"ACC-PERSONA-{pid:02d}") & (c.action_code == "right_size")].iloc[0]
+            assert bool(rs["eligible"]) and "SAVER" in str(rs["promo_skus"]).upper(), "Saver saving not computed"
+        return
     assert r["action_code"] in {"variant_switch", "right_size", "check_in"} and "SAVER" in _skus(r).upper(), \
         f"{r['action_code']} / {_skus(r)}: no Essentials Saver saving surfaced"
 
@@ -115,7 +138,8 @@ EXPECT = {
     4: ("fix-first (+ credit OK)", FIX_FIRST), 23: ("fix-first", FIX_FIRST), 27: ("fix-first", FIX_FIRST),
     21: ("check-in", code_in("check_in")),
     22: ("bill-shock relief + callback", bill_shock_with_callback),
-    5: ("right-size", code_in("right_size")), 37: ("right-size (Essentials 4-Line, -$100/mo)", code_in("right_size")),
+    5: ("right-size (v2: or held for backfire)", right_size_or_held),
+    37: ("right-size (Essentials 4-Line, -$100/mo; v2: or held for backfire)", right_size_or_held),
     8: ("Essentials Saver or plan-review saving", saver_or_review_saving),
     38: ("variant", variant), 39: ("variant", variant), 40: ("variant", variant),
     9: ("step-up to More", step_up_to_more), 19: ("step-up to More", step_up_to_more),
@@ -166,9 +190,23 @@ def test_r3_no_forced_bundles(out):
     assert bundled.empty, f"{len(bundled)} family upgrades require a plan move without a need"
 
 
+def _cands_df():
+    for n in ("offer_candidates.csv", "offer_candidates.csv.gz"):
+        if (OUT / n).exists():
+            return pd.read_csv(OUT / n)
+    return None
+
+
 def test_r4_savings_ladder_saver_surfaced(out):
     o, _, _ = out
-    assert o.promo_skus.fillna("").str.contains("ESSENTIALS-SAVER").any()
+    if o.promo_skus.fillna("").str.contains("ESSENTIALS-SAVER").any():
+        return
+    # v2: with the backfire penalty ON the Saver move is computed (eligible candidate) but held, not pushed
+    assert BACKFIRE_ON, "no Essentials Saver saving surfaced"
+    c = _cands_df()
+    assert c is not None
+    rs = c[(c.action_code == "right_size") & (c.eligible.astype(str) == "True")]
+    assert rs.promo_skus.fillna("").str.contains("ESSENTIALS-SAVER").any(), "Saver saving not even computed"
 
 
 def test_r5_r6_port_out_floor(out):

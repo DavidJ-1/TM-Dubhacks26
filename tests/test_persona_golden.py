@@ -11,10 +11,20 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import sys
+
 import pandas as pd
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "harness"))
+import offers as _eng  # noqa: E402  (CONFIG only)
+
+# v2: with the Ascarza et al. 2016 plan-fit backfire ON (default), an unprompted right-size never beats silence
+# (its net save rate is negative), so the right-size personas (05, 37) deliberately become do-nothing with the
+# "plan_fit_held" reason. With RIGHT_SIZE_BACKFIRE off they must still be right-size.
+BACKFIRE_ON = _eng.right_size_backfire_rel() > 0
+RS_OR_HELD = {"right_size", "do_nothing"} if BACKFIRE_ON else {"right_size"}
 OUT = Path(os.environ.get("TM_OUT_DIR", ROOT / "harness" / "out"))   # scratch runs: TM_OUT_DIR
 DEMO = ROOT / "demo_data"   # tracked copies; used when harness/out has not been generated (fresh clone)
 CREDITS = {"care_credit", "loyalty_credit", "keep_your_phone", "care_credit_fix_first", "bill_shock_price_lock"}
@@ -34,7 +44,7 @@ EXPECT = {
     2: ("household, 5 lines on unlimited: plan fit or leave alone, no credit", QUIET, None),
     3: ("timekeeper, paid-off 3+ yr phone: upgrade-now math, no push", {"do_nothing", "device_upgrade"}, ("line", {"upgrade_now"})),
     4: ("NBM bill jump + calls: fix + credit", {"care_credit_fix_first"}, None),
-    5: ("household on premium plan barely used: right-size", {"right_size"}, None),
+    5: ("household on premium plan barely used: right-size (v2: held, backfire)", RS_OR_HELD, None),
     6: ("household SMB, heavy line over cap: step-up", {"step_up"}, None),
     7: ("timekeeper, upgraded 3 months ago: keep (corrected wait math)", {"do_nothing"}, ("line", {"keep"})),
     8: ("household retired light users: cheaper fit or leave alone", QUIET, None),
@@ -69,7 +79,8 @@ EXPECT = {
          ("line", {"wait_until_promo"})),
     35: ("timekeeper, year-old budget phone paid off: keep", {"do_nothing"}, ("line", {"keep"})),
     36: ("timekeeper, 5-yr phone, light user: nothing to wait for", {"do_nothing", "device_upgrade"}, ("line", {"upgrade_now", "keep"})),
-    37: ("household family of 4 on unlimited, light use: cheaper fit", {"right_size", "variant_switch"}, None),
+    37: ("household family of 4 on unlimited, light use: cheaper fit (v2: held, backfire)",
+         RS_OR_HELD | {"variant_switch"}, None),
     38: ("household 55+ couple: variant to More 55+", {"variant_switch"}, ("sku", "TMO-STUB-PLAN-MORE-55")),
     39: ("household 5 lines on entry plan: many-line offer", {"variant_switch", "right_size"}, None),
     40: ("household partner-eligible: variant to Beyond Partner", {"variant_switch"}, ("sku", "TMO-STUB-PLAN-BEYOND-PARTNER")),
@@ -137,7 +148,8 @@ PINS = {
     28: ("do_nothing", ""), 10: ("do_nothing", ""),
     6: ("step_up", "TMO-STUB-PLAN-MORE"), 19: ("step_up", "TMO-STUB-PLAN-MORE"),
     21: ("check_in", None), 4: ("care_credit_fix_first", "PROMO-STUB-CARE-CREDIT"),
-    37: ("right_size", "TMO-STUB-PLAN-ESSENTIALS-4LINE"), 24: ("do_nothing", ""),
+    37: ("right_size", "TMO-STUB-PLAN-ESSENTIALS-4LINE"),   # v2: do_nothing when held for backfire (see below)
+    24: ("do_nothing", ""),
 }
 
 
@@ -145,6 +157,8 @@ PINS = {
 def test_persona_pin(pid, outputs):
     o = outputs[0].set_index("account_id").loc[f"ACC-PERSONA-{pid:02d}"]
     code, sku = PINS[pid]
+    if pid == 37 and BACKFIRE_ON and o.get("do_nothing_reason") == "plan_fit_held":
+        code, sku = "do_nothing", ""   # v2: right-size held (Ascarza 2016 backfire); frozen demo_data still pins right_size
     assert o["action_code"] == code, f"persona {pid:02d}: {o['action_code']} != {code}"
     if sku is not None:
         got = o["promo_skus"] if isinstance(o["promo_skus"], str) else ""
@@ -238,3 +252,20 @@ def test_api_persona_21_toggled_reason_low_risk(api):
     out = api.choose_offer(row, p_churn=0.017)
     assert out["why_this_offer"].startswith("Risk is low") and "nothing needs fixing" in out["why_this_offer"], \
         out["why_this_offer"]
+
+
+def test_v2_right_size_personas_held_for_backfire(outputs):
+    """v2: plan-fit personas 05 / 08 / 37 are held with the honest backfire reason, and the saving is still computed."""
+    if not BACKFIRE_ON:
+        pytest.skip("RIGHT_SIZE_BACKFIRE off")
+    o = outputs[0].set_index("account_id")
+    if "do_nothing_reason" not in o or not (o["do_nothing_reason"] == "plan_fit_held").any():
+        pytest.skip("outputs predate v2 (e.g. the frozen demo_data copy); regenerate with harness/offers.py")
+    c = _cands(_src())
+    for pid in (5, 8, 37):
+        r = o.loc[f"ACC-PERSONA-{pid:02d}"]
+        assert r["action_code"] == "do_nothing" and r["do_nothing_reason"] == "plan_fit_held", (pid, r["action_code"])
+        assert "6% to 10%" in r["why_this_offer"]
+        if c is not None:
+            rs = c[(c.account_id == f"ACC-PERSONA-{pid:02d}") & (c.action_code == "right_size")].iloc[0]
+            assert bool(rs["eligible"]) and rs["expected_value"] < 0

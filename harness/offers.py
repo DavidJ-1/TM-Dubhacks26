@@ -58,6 +58,11 @@ CONFIG = {
 
     # --- base save rates: P(customer stays | they would have churned, we take the action). Synthetic.
     #     Each action has a rate when it addresses the customer's churn driver and a lower "off-target" rate.
+    #     Benchmark (v2, not used to set these): best controlled retention figure we have is a 1.9-point churn
+    #     cut from targeted retention calls off a 17.2% baseline (17.2% -> ~15.3%), i.e. ~11% relative, in a
+    #     telecom (pay-TV) RCT. Ascarza et al., Marketing Science 2018, https://doi.org/10.1287/mksc.2018.1099
+    #     (tm-research, research-notes/notes_upsell.md). Our on-target rates (0.12-0.35) are 1-3x that
+    #     benchmark; off-target rates (0.03-0.10) are at or below it. ASSUMPTION / SYNTHETIC.
     "SAVE_RATE": {
         "care_credit":      {"on_target": 0.25, "off_target": 0.05},  # billing / service pain
         "loyalty_credit":   {"on_target": 0.12, "off_target": 0.05},  # price / competitor shopping
@@ -89,9 +94,43 @@ CONFIG = {
         "care_credit_min_contacts": 1,          # customers who did reach out can get it (tenure >= 6 still applies)
         "credit_save_boost": 0.05,              # credits directly offset the price rise: +5 pts save rate
     },
-    # --- probability the customer takes the offer (only matters for upsell gain / conditional costs)
-    "P_ACCEPT": {"right_size": 0.45, "variant_switch": 0.70, "step_up": 0.25, "device_upgrade": 0.15,
-                 "family_upgrade": 0.20, "home_internet_bundle": 0.04},
+    # --- probability the customer takes the offer (only matters for upsell gain / conditional costs).
+    #     ONE TABLE, every figure an ASSUMPTION / SYNTHETIC. No carrier publishes offer-acceptance rates.
+    #     v2 (honest acceptance): the closest real numbers are overall postpaid upgrade rates, which INCLUDE
+    #     organic upgrades, so ~4%/quarter is a CEILING on offer-driven acceptance, not its measured effect:
+    #       AT&T postpaid upgrade rate 3.0-4.7%/quarter (1Q26 3.5%; FY 14.0% 2024, 15.6% 2025), AT&T 1Q26
+    #       Trending Schedule https://investors.att.com/~/media/Files/A/ATT-IR-V2/financial-reports/quarterly-earnings/2026/1Q-2026/T_1Q26_Trending_Schedule.pdf
+    #       Verizon retail postpaid upgrade rate 2.6% (2Q26), https://www.verizon.com/about/sites/default/files/2026-07/vz_2q2026_foi_072426.pdf
+    #     (RESEARCH.md sections 5 and 9). The old 0.25 / 0.15 / 0.20 overstated upsell value ~2.5-6x.
+    "P_ACCEPT": {
+        "step_up":              0.04,  # cited ceiling (upgrade-rate proxy above); was 0.25
+        "device_upgrade":       0.04,  # cited ceiling (upgrade-rate proxy above); was 0.15
+        "family_upgrade":       0.04,  # cited ceiling (upgrade-rate proxy above); was 0.20
+        "home_internet_bundle": 0.04,  # UNCITED assumption (unchanged; no public bundle take-rate found)
+        "right_size":           0.45,  # UNCITED assumption (unchanged; RESEARCH.md: "not benchmarked")
+        "variant_switch":       0.70,  # UNCITED assumption (unchanged; RESEARCH.md: "likely optimistic")
+    },
+    # --- v2 upsell guardrail: no upsell (step-up, device / family upgrade, Home Internet bundle) for the
+    #     riskiest customers or those who keep contacting support. They need care, not a sales pitch.
+    "UPSELL_RISK_GUARDRAIL": True,      # named switch, default ON. Env TM_UPSELL_RISK_GUARDRAIL=0 to turn off.
+    "UPSELL_GUARD_TOP_RISK_SHARE": 0.10,  # top churn decile by p_churn_90d (same cut as the Top-10% baseline)
+    "UPSELL_GUARD_MIN_SUPPORT_90D": 3,    # 3+ support contacts in the engine's 90-day lookback (support_90d)
+    # --- v2 plan-fit backfire (right_size only). Ascarza, Iyengar & Schleicher, JMR 53(1):46-60, 2016,
+    #     https://doi.org/10.1509/jmr.13.0483 : in a 65,000-customer wireless field experiment, proactive
+    #     "cheaper plan" outreach raised 3-month churn from 6% (control) to 10% (treated). We model it as a
+    #     relative churn increase of 10/6 - 1 = +66.7% on p_churn_90d, charged in EV as
+    #     p_churn x rel x scale x customer_value and netted into right_size's save rate. EXPLICIT ASSUMPTION:
+    #     the field effect is applied on top of our own (optimistic) gross save rate, so it is conservative.
+    #     Customers with volatile or declining usage (where the paper's effect was concentrated) are excluded.
+    "RIGHT_SIZE_BACKFIRE": {
+        "enabled": True,
+        "control_churn": 0.06, "treated_churn": 0.10,   # Ascarza et al. 2016 field test
+        "scale": 1.0,                                   # sensitivity knob (1.0 = full field effect)
+        "exclude_volatile_or_declining": True,
+        "volatile_cv": 0.25,       # SYNTHETIC threshold: CV of monthly account data use (12 months) above this
+        "declining_ratio": 0.80,   # SYNTHETIC threshold: last-3-month avg < 0.80 x first-3-month avg
+        "min_usage_months": 6,
+    },
     # --- annoyance: dollar-equivalent cost of contacting (agent time, message fatigue, sleeping-dog risk)
     "ANNOYANCE": {
         "care_credit": 3.0, "loyalty_credit": 3.0, "keep_your_phone": 3.0, "right_size": 2.0,
@@ -144,6 +183,8 @@ if os.environ.get("TM_BILL_SHOCK_RELIEF_OVERRIDE") is not None:
     CONFIG["BILL_SHOCK_RELIEF_OVERRIDE"] = os.environ["TM_BILL_SHOCK_RELIEF_OVERRIDE"] not in ("0", "false", "False", "")
 if os.environ.get("TM_UPGRADE_GATE") is not None:
     CONFIG["UPGRADE_GATE"] = os.environ["TM_UPGRADE_GATE"] not in ("0", "false", "False", "")
+if os.environ.get("TM_UPSELL_RISK_GUARDRAIL") is not None:
+    CONFIG["UPSELL_RISK_GUARDRAIL"] = os.environ["TM_UPSELL_RISK_GUARDRAIL"] not in ("0", "false", "False", "")
 if os.environ.get("TM_ENABLE_RIGHT_SIZE") is not None:
     CONFIG["ENABLE_RIGHT_SIZE"] = os.environ["TM_ENABLE_RIGHT_SIZE"] not in ("0", "false", "False", "")
 
@@ -482,6 +523,58 @@ def lock_value(p90: float, lock_months: float, existing_months: float, monthly_m
     return p_accept * gap * monthly_margin
 
 
+def right_size_backfire_rel() -> float:
+    """Relative churn increase from proactive cheaper-plan outreach (Ascarza et al. 2016: 6% -> 10%), x scale.
+    ASSUMPTION: applied to p_churn_90d in EV via right_size's (net) save rate."""
+    bf = CONFIG["RIGHT_SIZE_BACKFIRE"]
+    if not bf["enabled"]:
+        return 0.0
+    return (bf["treated_churn"] / bf["control_churn"] - 1.0) * bf["scale"]
+
+
+def upsell_risk_guard_reason(row: pd.Series) -> str:
+    """v2 guardrail (UPSELL_RISK_GUARDRAIL): plain-language reason no upsell is allowed, or ''."""
+    C = CONFIG
+    if not C["UPSELL_RISK_GUARDRAIL"]:
+        return ""
+    why = []
+    if bool(row.get("top_churn_decile", False)):
+        why.append(f"they are in our highest-risk {C['UPSELL_GUARD_TOP_RISK_SHARE']:.0%} of customers, "
+                   "so they get care, not a sales pitch")
+    n_sup = int(row.get("support_90d", 0) or 0)
+    if n_sup >= C["UPSELL_GUARD_MIN_SUPPORT_90D"]:
+        why.append(f"they contacted support {n_sup} times in 90 days, so we fix the experience before selling")
+    return ("upsell guardrail: " + " and ".join(why)) if why else ""
+
+
+def usage_unstable_reason(row: pd.Series) -> str:
+    """'' unless the account's monthly data use is volatile or declining (sandbox usage_monthly, read-only)."""
+    bf = CONFIG["RIGHT_SIZE_BACKFIRE"]
+    cv, ratio = row.get("usage_cv"), row.get("usage_trend_ratio")
+    if cv is not None and pd.notna(cv) and cv > bf["volatile_cv"]:
+        return f"their data use swings a lot month to month (variation {cv:.0%})"
+    if ratio is not None and pd.notna(ratio) and ratio < bf["declining_ratio"]:
+        return f"their data use is falling (last 3 months at {ratio:.0%} of the first 3)"
+    return ""
+
+
+def usage_stability(conn) -> pd.DataFrame:
+    """Account-level monthly data use (sum over lines) -> usage_cv, usage_trend_ratio. Needs
+    RIGHT_SIZE_BACKFIRE.min_usage_months months with data; else NaN (not excluded). Sandbox read-only."""
+    u = pd.read_sql("SELECT l.account_id, u.month, u.data_gb FROM usage_monthly u "
+                    "JOIN lines l ON l.line_id = u.line_id", conn)
+    a = u.groupby(["account_id", "month"])["data_gb"].sum().reset_index().sort_values(["account_id", "month"])
+    g = a.groupby("account_id")["data_gb"]
+    n = g.size()
+    mean = g.mean()
+    cv = g.std() / mean.replace(0, np.nan)
+    first3 = g.apply(lambda s: s.head(3).mean())
+    last3 = g.apply(lambda s: s.tail(3).mean())
+    ratio = last3 / first3.replace(0, np.nan)
+    ok = n >= CONFIG["RIGHT_SIZE_BACKFIRE"]["min_usage_months"]
+    return pd.DataFrame({"usage_cv": cv.where(ok), "usage_trend_ratio": ratio.where(ok)}).reset_index()
+
+
 def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) -> dict:
     C = CONFIG
     d = drivers(row)
@@ -520,6 +613,8 @@ def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) 
             r = rates["off_target"]
         if action in ("care_credit", "loyalty_credit", "keep_your_phone") and shock_relief:
             r += relief["credit_save_boost"]
+        if action == "right_size":
+            r -= right_size_backfire_rel()   # v2: Ascarza 2016 backfire, netted (can go negative)
         return r
 
     def add(action, eligible, cost, gain=0.0, detail="", why_not="", benefit=0.0, lock=0.0, lock_gross=0.0,
@@ -592,7 +687,12 @@ def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) 
         add("variant_switch", False, 0, why_not="disabled by ENABLE_RIGHT_SIZE" if not C["ENABLE_RIGHT_SIZE"]
             else "no cheaper discount variant / 4-line offer they qualify for")
     rs = right_size_option(row, plans) if C["ENABLE_RIGHT_SIZE"] else None
-    if rs is not None and (d["unresolved"] or d["network_pain"]):
+    bf = C["RIGHT_SIZE_BACKFIRE"]
+    usage_unstable = usage_unstable_reason(row) if (bf["enabled"] and bf["exclude_volatile_or_declining"]) else ""
+    if rs is not None and usage_unstable:
+        add("right_size", False, 0, why_not=(f"backfire guardrail: {usage_unstable}; a cheaper-plan nudge is most "
+                                             "likely to backfire here (Ascarza et al. 2016)"))
+    elif rs is not None and (d["unresolved"] or d["network_pain"]):
         # batch 7: a plan move is marketing; while a ticket / network issue is open we fix first
         add("right_size", False, 0, why_not="open support or network issue: fix first, plan savings after it closes")
     elif rs is not None:
@@ -608,6 +708,9 @@ def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) 
 
     # ---- upsell guardrails
     blocks = []
+    guard = upsell_risk_guard_reason(row)
+    if guard:
+        blocks.append(guard)
     if d["bill_shock_recent"]:
         blocks.append(f"bill-shock guardrail (bill rose {int(row['days_since_bill_shock'])} days ago, "
                       f"window {C['UPSELL_BLOCK_DAYS_AFTER_BILL_SHOCK']} days)")
@@ -666,7 +769,9 @@ def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) 
         add("step_up", False, 0, why_not="family plan with a child/teen line: the same move is the family upgrade")
 
     # ---- device upgrade (paid-off, trade-in eligible, 12+ months); lock-in = promo payout months
-    if row["n_upgrade_ready_lines"] > 0 and not gate_ok:
+    if row["n_upgrade_ready_lines"] > 0 and guard:
+        add("device_upgrade", False, 0, why_not=upsell_block)
+    elif row["n_upgrade_ready_lines"] > 0 and not gate_ok:
         add("device_upgrade", False, 0, why_not=gate_why)
     elif row["n_upgrade_ready_lines"] > 0 and upsell_block:
         add("device_upgrade", False, 0, why_not=upsell_block)
@@ -796,6 +901,13 @@ def do_nothing_reason(row: pd.Series, ev: dict) -> tuple[str, str]:
     pct = _pct(row)
     if row["unresolved_90d"] > 0 or (row.get("network_unresolved_90d", 0) or 0) > 0:
         return "open_ticket", "Open ticket with support; no marketing until it's closed."
+    rsv = r.get("right_size", {})
+    if rsv.get("eligible") and (rsv.get("ev") or 0) <= 0 and right_size_backfire_rel() > 0:
+        bf = CONFIG["RIGHT_SIZE_BACKFIRE"]
+        return "plan_fit_held", (f"They could save ${rsv.get('save', 0):.0f}/month on a smaller plan, but unprompted "
+                                 f"cheaper-plan offers tend to backfire (a carrier field test saw churn rise from "
+                                 f"{bf['control_churn']:.0%} to {bf['treated_churn']:.0%}), so we don't push it; "
+                                 "we'll show it if they ask.")
     happy_caller = bool(row["avg_sentiment_90d"] > 0.2 and (row.get("support_90d", 0) or 0) > 0
                         and not d["shopping"] and not d["bill_shock_recent"])
 
@@ -1058,6 +1170,13 @@ def prepare(write_line_tradein: bool = True):
         df["p_churn_90d"] = df["p_churn_90d"].fillna(df["p_churn_90d"].median())
     print(f"churn scores: {source}")
     _CACHE["source"] = source
+
+    # v2: top churn decile (upsell guardrail) and usage stability (right-size backfire exclusion)
+    k = int(round(CONFIG["UPSELL_GUARD_TOP_RISK_SHARE"] * len(df)))
+    df["top_churn_decile"] = df["account_id"].isin(
+        df.sort_values(["p_churn_90d", "account_id"], ascending=[False, True])["account_id"].head(k))
+    df = df.drop(columns=[c for c in ("usage_cv", "usage_trend_ratio") if c in df.columns]) \
+        .merge(usage_stability(conn), on="account_id", how="left")
 
     plans = cat["plans"]
     df["all_low_use_premium_any"] = df["um_plan_overpay"]  # sandbox misfit rule (all lines < 5 GB on premium)

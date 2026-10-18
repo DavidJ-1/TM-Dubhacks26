@@ -174,3 +174,20 @@ Persona golden tests: `tests/test_persona_golden.py` (42 personas).
 - Tests: golden pins (exact action + SKU) for personas 04, 06, 10, 19, 21, 24, 28, 37, 38; persona 38's -$40/mo;
   persona 24's reason; wait personas 29/31/33; open-ticket wording; offer_api toggles for persona 21. Golden tests read
   `demo_data/` when `harness/out/` is missing.
+
+## v2 #3: honest acceptance + upsell guardrails (Sat 10/17 ~10:45 PM PDT; branch tm-offers-v2; all numbers synthetic)
+- **Honest upsell acceptance.** `P_ACCEPT` step_up / device_upgrade / family_upgrade 0.25 / 0.15 / 0.20 -> **0.04**.
+  No carrier publishes offer-acceptance rates; the closest real figures are overall postpaid upgrade rates (AT&T
+  3.0-4.7%/quarter, Verizon 2.6% 2Q26), which include organic upgrades, so 4% is a **ceiling**, not a measured
+  effect. right_size 0.45, variant_switch 0.70, home_internet_bundle 0.04 stay as **uncited assumptions**.
+  Effect: chosen-upsell gain $24.9k -> $4.5k; the action mix does not change (upsells cost nothing but annoyance).
+- **Upsell risk guardrail** (`UPSELL_RISK_GUARDRAIL`, default ON; env `TM_UPSELL_RISK_GUARDRAIL=0`): no step-up,
+  device / family upgrade or Home Internet bundle for the top churn decile (by p_churn_90d) or 3+ support contacts in
+  90 days. why_not: "upsell guardrail: they are in our highest-risk 10% ..." / "... contacted support N times ...".
+- **Right-size backfire** (`RIGHT_SIZE_BACKFIRE`): Ascarza, Iyengar & Schleicher 2016 (JMR 53(1):46-60; churn 6% ->
+  10% after proactive cheaper-plan outreach) as a relative +66.7% churn penalty netted into right_size's save rate
+  (net -0.37 on target). Accounts with volatile (CV > 0.25) or declining (last 3 mo < 0.8x first 3) monthly data use
+  are excluded outright (14 accounts in the sandbox). Result: right-size never beats silence at scale >= ~0.45;
+  held accounts get do_nothing_reason `plan_fit_held` ("They could save $X/month ... we'll show it if they ask").
+  `scale` is the sensitivity knob (0.25 keeps 120 right-sizes). SAME_COVERAGE_RULE, PORT_OUT_ALWAYS_CONTACT,
+  fix-first and BILL_SHOCK_RELIEF_OVERRIDE are unchanged.
