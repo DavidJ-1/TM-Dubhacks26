@@ -111,6 +111,8 @@ def _from_seg():
 
 def _from_pick():
     v = st.session_state.get("customer_pick")
+    if v not in _ids:   # #02363's label changes each live tick; a stale label comes back as a raw string, not an id
+        v = st.session_state["acc"]
     if v:
         D.apply_shared_selection(st.session_state, v)
         _forget_dot()
