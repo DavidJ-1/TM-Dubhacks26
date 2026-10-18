@@ -1,0 +1,82 @@
+{
+ "data": "SYNTHETIC",
+ "source": "harness/out/line_tradein.csv",
+ "columns_used": {
+  "tradein_now": "tradein_value_now_cents",
+  "balance_now": "balance_now_cents",
+  "net_now": "net_now_cents",
+  "promo_now": "promo_now_cents",
+  "tradein_6m": "tradein_value_6m_cents",
+  "balance_6m": "balance_6m_cents",
+  "net_6m": "net_6m_cents",
+  "promo_6m": "promo_6m_cents",
+  "tradein_12m": "tradein_value_12m_cents",
+  "balance_12m": "balance_12m_cents",
+  "net_12m": "net_12m_cents",
+  "promo_12m": "promo_12m_cents",
+  "line_id": "line_id",
+  "device_name": "device_name",
+  "decision": "decision",
+  "wait_verdict": "wait_verdict",
+  "wait_until": "wait_until",
+  "months_left": "financing_months_remaining",
+  "installment": "monthly_installment_cents",
+  "value_at_payoff": "tradein_value_at_payoff_cents",
+  "data_note": "data_note"
+ },
+ "featured_line": {
+  "line_id": "LN-PERSONA-29-1",
+  "device": "iPhone 16",
+  "months_left": 4,
+  "wait_until": "2027-02-01",
+  "decision": "wait_until_payoff",
+  "wait_verdict": "wait",
+  "tradein_value_at_payoff_usd": 330.61,
+  "points_usd": [
+   {
+    "horizon": "now",
+    "label": "Now",
+    "tradein": 369.8,
+    "balance": 138.32,
+    "net": 231.48,
+    "promo": 0.0,
+    "credit": 369.8
+   },
+   {
+    "horizon": "6m",
+    "label": "In 6 months",
+    "tradein": 312.61,
+    "balance": 0.0,
+    "net": 312.61,
+    "promo": 200.0,
+    "credit": 512.61
+   },
+   {
+    "horizon": "12m",
+    "label": "In 12 months",
+    "tradein": 264.26,
+    "balance": 0.0,
+    "net": 264.26,
+    "promo": 200.0,
+    "credit": 464.26
+   }
+  ],
+  "verdict": "Wait until Feb 1, 2027. After the last 4 payments, trade-in credit is $512.61 in 6 months (incl. $200 promo) vs $369.80 today.",
+  "note": "The $138.32 left on the phone is owed whether you upgrade now or later, so it is not counted as savings."
+ },
+ "decision_counts": {
+  "wait_until_payoff": 6950,
+  "upgrade_now": 1927,
+  "keep": 1196
+ },
+ "wait_verdict_counts": {
+  "wait": 6218,
+  "upgrade_now": 3855
+ },
+ "lines": 10073,
+ "not_shown": [
+  "delta_cents",
+  "cost_now_cents",
+  "cost_wait_cents"
+ ]
+}

@@ -3,14 +3,21 @@ from __future__ import annotations
 
 ACTION_LABELS = {
     "do_nothing": ("Do nothing", "No hacer nada"),
-    "care_credit_25": ("$25/mo care credit", "Crédito de cortesía de $25/mes"),
+    "care_credit_25": ("$25 one-time care credit", "Crédito único de cortesía de $25"),
     "loyalty_credit": ("Loyalty credit", "Crédito de lealtad"),
     "keep_phone_credit": ("Keep-your-phone credit", "Crédito por conservar tu teléfono"),
     "right_size_plan": ("Right-size plan", "Ajustar plan"),
     "step_up_plan": ("Step-up plan", "Mejorar plan"),
     "device_upgrade": ("Device upgrade", "Cambio de teléfono"),
     "fix_first_callback": ("Fix-first callback", "Llamada para resolver primero"),
-    "care_credit_fix_first": ("$25 care credit + fix-first callback", "Crédito de $25 + llamada para resolver"),
+    "care_credit_fix_first": ("$25 one-time care credit + fix-first callback", "Crédito único de $25 + llamada para resolver"),
+    "check_in": ("Check-in / plan review", "Revisión de plan"),
+    "variant_switch": ("Same plan, cheaper variant", "Mismo plan, variante más barata"),
+    "family_upgrade": ("Family upgrade", "Mejora familiar"),
+    "fix_first": ("Fix-first callback", "Llamada para resolver primero"),
+    "bill_shock_price_lock": ("Bill-shock relief", "Alivio por aumento de factura"),
+    "perk_reminder": ("Perk reminder", "Recordatorio de beneficios"),
+    "home_internet_bundle": ("Home Internet bundle", "Paquete de Internet en casa"),
 }
 
 # Accept human-readable action strings from tm-offers too.
@@ -25,6 +32,7 @@ _ALIASES = {
     "fix first callback": "fix_first_callback", "fix_first": "fix_first_callback",
     # tm-offers action_code values
     "keep_your_phone": "keep_phone_credit", "right_size": "right_size_plan", "step_up": "step_up_plan",
+    "care_credit": "care_credit_25", "check-in / plan review": "check_in",
 }
 
 
@@ -43,8 +51,8 @@ def action_label(a, lang: str = "en") -> str:
 
 TEMPLATES = {
     "care_credit_25": (
-        "T-Mobile: Hi! We noticed your bill went up after a promo ended. We've added a $25/mo credit for the next 6 months. No action needed. Questions? Reply HELP.",
-        "T-Mobile: ¡Hola! Notamos que tu factura subió al terminar una promoción. Agregamos un crédito de $25/mes por los próximos 6 meses. No necesitas hacer nada. ¿Preguntas? Responde AYUDA.",
+        "T-Mobile: Hi! We noticed your bill went up after a promo ended. We've added a one-time $25 credit to your next bill. No action needed. Questions? Reply HELP.",
+        "T-Mobile: ¡Hola! Notamos que tu factura subió al terminar una promoción. Agregamos un crédito único de $25 en tu próxima factura. No necesitas hacer nada. ¿Preguntas? Responde AYUDA.",
     ),
     "loyalty_credit": (
         "T-Mobile: Thanks for {years} with us! As a thank-you, we've added a $5/mo loyalty credit to your account for the next year.",
@@ -67,8 +75,8 @@ TEMPLATES = {
         "T-Mobile: Tu teléfono tiene más de 3 años. Podrías calificar para un crédito de cambio con intercambio. Mira tu oferta en T-Life o responde INFO.",
     ),
     "care_credit_fix_first": (
-        "T-Mobile: We're sorry for the trouble lately. We've added a $25/mo credit for the next 6 months, and a specialist will call you within 24 hours to fix the open issue. Reply TIME to pick a time.",
-        "T-Mobile: Lamentamos los problemas recientes. Agregamos un crédito de $25/mes por los próximos 6 meses y un especialista te llamará en 24 horas para resolver el problema. Responde HORA para elegir un horario.",
+        "T-Mobile: We're sorry for the trouble lately. We've added a one-time $25 credit to your next bill, and a specialist will call you within 24 hours to fix the open issue. Reply TIME to pick a time.",
+        "T-Mobile: Lamentamos los problemas recientes. Agregamos un crédito único de $25 en tu próxima factura y un especialista te llamará en 24 horas para resolver el problema. Responde HORA para elegir un horario.",
     ),
     "fix_first_callback": (
         "T-Mobile: Sorry about the coverage trouble. A network specialist will call you within 24 hours to fix it. Reply TIME to pick a time.",
