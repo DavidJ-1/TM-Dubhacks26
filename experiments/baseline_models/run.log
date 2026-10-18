@@ -1,0 +1,16 @@
+[SYNTHETIC] n=5000 pos=137 prepared features=58 core=22
+baseline_modelA_LR (core, sign-drop, C by CV): {'auc': 0.8530554717507891, 'pr_auc': 0.2552459763482203, 'top10': 0.6204379562043796, 'brier': 0.023041625026713888, 'ece': 0.004026007435364558}  (29s)
+COMPLIANCE ablation: baseline minus port_out_inquiry: {'auc': 0.8523875352542887, 'pr_auc': 0.2530846237038681, 'top10': 0.6131386861313869, 'brier': 0.02309059908369414, 'ece': 0.0032934142819016324}  (27s)
+COMPLIANCE ablation: baseline minus port_out + competitor_research: {'auc': 0.850581855242401, 'pr_auc': 0.24859014146808095, 'top10': 0.5912408759124088, 'brier': 0.02324804592180491, 'ece': 0.004252887415899251}  (22s)
+COMPLIANCE ablation: LR all feats minus port/competitor/segment(age proxy): {'auc': 0.8510351514714867, 'pr_auc': 0.2453490871247705, 'top10': 0.5693430656934306, 'brier': 0.023299822643749184, 'ece': 0.005587376636825732}  (19s)
+LR core, nested C sweep (no sign-drop): {'auc': 0.8517361095475894, 'pr_auc': 0.2526210498103466, 'top10': 0.6277372262773723, 'brier': 0.02316028691626107, 'ece': 0.0035408903965569124}  (10s)
+LR all prepared feats, nested C: {'auc': 0.8546014820685317, 'pr_auc': 0.2527232290321603, 'top10': 0.5693430656934306, 'brier': 0.02323566021188218, 'ece': 0.004255736791690323}  (24s)
+LR core, class_weight=balanced: {'auc': 0.8546570183614992, 'pr_auc': 0.2392500548174325, 'top10': 0.583941605839416, 'brier': 0.12829301136321547, 'ece': 0.26402053501896844}  (17s)
+LR core + log/interactions, nested C: {'auc': 0.8520348047449008, 'pr_auc': 0.24724715828693297, 'top10': 0.6131386861313869, 'brier': 0.023367892602771445, 'ece': 0.003904715859103321}  (57s)
+LR core + log/interactions, balanced: {'auc': 0.8421883700998603, 'pr_auc': 0.20867092450988073, 'top10': 0.6058394160583942, 'brier': 0.12611646206737037, 'ece': 0.256701848073968}  (100s)
+/workspace/tmobile/TM-Dubhacks26/.venv/lib/python3.13/site-packages/joblib/externals/loky/backend/resource_tracker.py:444: UserWarning: resource_tracker: There appear to be 6 leaked semlock objects to clean up at shutdown: {'/loky-291652-tqwhbh0g': 1, '/loky-291652-rvjsq5mg': 1, '/loky-291652-hw3vaa6z': 1, '/loky-291652-nh45sazv': 1, '/loky-291652-jqvpixaw': 1, '/loky-291652-cw5jh1hb': 1}
+  warnings.warn(
+/workspace/tmobile/TM-Dubhacks26/.venv/lib/python3.13/site-packages/joblib/externals/loky/backend/resource_tracker.py:444: UserWarning: resource_tracker: There appear to be 1 leaked folder objects to clean up at shutdown: {'/dev/shm/joblib_memmapping_folder_291652_59d9b52c164b4c499d4153e77f67fac0_d58e232ef524419b96daea080ca23b0b': 1}
+  warnings.warn(
+rning: resource_tracker: There appear to be 2 leaked folder objects to clean up at shutdown: {'/dev/shm/joblib_memmapping_folder_282512_0a9dda7b7b1f4dbea2339bedb67bdb99_f6b56dfaf5814074846df7c8a2cb32bf': 1, '/dev/shm/joblib_memmapping_folder_282512_f285af4e196c4217852db5de7b2646a5_76d2de925fa94116981191f274c5a170': 1}
+  warnings.warn(
