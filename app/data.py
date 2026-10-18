@@ -1,7 +1,8 @@
 """Data loading for the tm-ui lane.
 
-Search order per file: TM_OUT_DIR (if set) -> harness/out/ (fresh pipeline run) -> demo_data/ (tracked copy of
-the real 5k sandbox run, so a fresh clone shows real output) -> app/mock/*.csv (48-account mock, flagged loudly).
+Search order per file: TM_OUT_DIR (if set) -> demo_data/ (tracked, tested copy of the real 5k sandbox run; the demo
+default) -> harness/out/ (only if demo_data/ is missing; may hold a work-in-progress run) -> app/mock/*.csv
+(48-account mock, flagged loudly).
 A real file is only used if it has every contract column; .csv.gz is read too. Force mocks with TM_USE_MOCK=1.
 ALL DATA IS SYNTHETIC.
 """
@@ -38,7 +39,10 @@ def out_dirs() -> list[Path]:
     dirs = []
     if os.environ.get("TM_OUT_DIR"):
         dirs.append(Path(os.environ["TM_OUT_DIR"]))
-    dirs += [REPO / "harness" / "out", REPO / "demo_data"]
+    if (REPO / "demo_data").is_dir():
+        dirs.append(REPO / "demo_data")
+    else:
+        dirs.append(REPO / "harness" / "out")
     return dirs
 
 

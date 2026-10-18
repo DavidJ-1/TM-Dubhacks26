@@ -239,6 +239,9 @@ def engine():
 @st.cache_resource(show_spinner="Loading the offer engine (one time, ~7 s)…")
 def offer_api():
     """tm-offers' per-account chooser (harness/offer_api.py: prepared_row + choose_offer). Read-only, synthetic."""
+    import os
+    if data["offers"].source == "real":  # engine reads the same run the cards show (offers.OUT_DIR honours TM_OUT_DIR)
+        os.environ.setdefault("TM_OUT_DIR", str(Path(data["offers"].path).parent))
     if str(REPO) not in sys.path:
         sys.path.insert(0, str(REPO))
     from harness import offer_api as api
@@ -501,8 +504,22 @@ with tab1:
             st.plotly_chart(fig, use_container_width=True)
     with st.container(border=True):
         st.markdown("**Same assumptions, different strategies (simulated)**")
-        cp = next((d / "comparison.csv" for d in (REPO / "demo_data", REPO / "harness" / "out") if (d / "comparison.csv").exists()), None)
+        src_dir = Path(data["offers"].path).parent if data["offers"].path else REPO / "demo_data"
+        cp = src_dir / "comparison.csv" if (src_dir / "comparison.csv").exists() else None
+        same_run, n_ours, n_ours_cmp = True, int(D.contact.sum()), None
         if cp is not None:
+            try:
+                _c = pd.read_csv(cp)
+                _o = _c[_c.strategy.str.contains("Ours")]
+                n_ours_cmp = int(_o.contacted.iloc[0]) if len(_o) else None
+                same_run = n_ours_cmp is None or n_ours_cmp == n_ours
+            except Exception:  # noqa: BLE001
+                same_run = False
+        if cp is not None and not same_run:
+            st.warning(f"comparison pending: comparison.csv was built from a different engine run "
+                       f"({n_ours_cmp:,} contacts for 'Ours') than the offers.csv shown here ({n_ours:,}). "
+                       "Not mixing runs.", icon="⏳")
+        elif cp is not None:
             try:
                 cmp_ = pd.read_csv(cp)
                 cmp_["Strategy"] = cmp_.strategy.str.replace(r"^\d+\.\s*", "", regex=True)
@@ -520,7 +537,7 @@ with tab1:
                     st.plotly_chart(fig, use_container_width=True)
                 with cb:
                     st.dataframe(pd.DataFrame({
-                        "Contacts to low-risk customers": cmp_.unneeded_contacts.astype(int),
+                        "Contacts to low-risk customers": cmp_[next(c for c in ("contacts_to_low_risk", "unneeded_contacts") if c in cmp_)].astype(int),
                         "Credits $": cmp_.credit_spend_usd.map(lambda v: f"${v:,.0f}"),
                         "Strategy": cmp_.Strategy, "Churners reached": cmp_.churners_reached.astype(int),
                         "Net value (simulated)": cmp_.net_value_usd.map(lambda v: f"${v:,.0f}")}),
@@ -528,8 +545,6 @@ with tab1:
                     st.caption("All synthetic. Contacts to low-risk customers = people contacted who weren't going to churn.")
             except Exception as e:  # noqa: BLE001
                 st.caption(f"comparison pending ({type(e).__name__})")
-        elif (REPO / "demo_data" / "comparison_chart.png").exists():
-            st.image(str(REPO / "demo_data" / "comparison_chart.png"), use_container_width=True)
         else:
             st.caption("comparison pending")
         st.caption("Scored with our assumed acceptance rates; we don't claim lift until a holdout test.")
@@ -644,3 +659,7 @@ with tab3:
     else:
         st.warning("app/viz/pipeline_flow.html not found. Build it with app/viz/make_pipeline_viz.py.")
 
+st.divider()
+_dirs = sorted({str(Path(l.path).parent.relative_to(REPO)) if l.path and Path(l.path).is_relative_to(REPO) else (l.path or "missing")
+                for k, l in data.items() if k in ("churn_scores", "offers", "features", "labels", "offer_candidates")})
+st.caption("Data source: " + ", ".join(f"`{d}/`" for d in _dirs) + (" (MOCK)" if MOCK else "") + ". All customers and numbers are synthetic.")
