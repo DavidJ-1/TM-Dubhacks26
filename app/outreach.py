@@ -1,6 +1,6 @@
 """Per-account outreach line loader (tm-ui). Data comes from the strategy/efficacy lanes, joined on account_id.
 
-Expected columns: account_id, outreach_reason, message_en, message_es (synthetic). Looked up in this order:
+Expected columns: account_id, outreach_reason, message_en, message_es. Looked up in this order:
 TM_OUTREACH_CSV, demo_data/outreach.csv(.gz), experiments/*/out/outreach*.csv(.gz). If nothing is found the app
 shows a quiet "coming soon" placeholder; it never invents a reason.
 """

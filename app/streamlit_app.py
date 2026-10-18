@@ -46,7 +46,7 @@ def _card_container(*a, **k):  # tag bordered containers so the dark card CSS ca
 
 
 st.container = _card_container
-st.set_page_config(page_title="T-Mobile Next Best Moment (synthetic)", page_icon="📱", layout="wide")
+st.set_page_config(page_title="T-Mobile Next Best Moment", page_icon="📱", layout="wide")
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Inter+Tight:wght@500;600&display=swap');
@@ -192,9 +192,7 @@ table.opts td:nth-child(5) {{width:7%; white-space:nowrap}}
 </style>
 """, unsafe_allow_html=True)
 st.markdown("<div class='tm-head'><div class='tm-brand'><span class='tm-logo'>T</span>Next Best Moment"
-            "<span class='tm-sub'>churn risk model + offer engine</span></div>"
-            "<div class='tm-syn'>⚠️ All customers are synthetic <small>· T-Mobile judge sandbox data with simulated "
-            "scores. Not real customers.</small></div></div>", unsafe_allow_html=True)
+            "<span class='tm-sub'>churn risk model + offer engine</span></div></div>", unsafe_allow_html=True)
 
 data = load_all()
 MOCK = is_mock(data)
@@ -248,8 +246,8 @@ else:
 # Customer journey tab hidden: its embedded HTML (app/viz/customer_journey.html) carries stale counts
 # (504 flagged / 1,123 contacted vs 505 / 1,314 on the main page). Re-add only after regenerating it.
 
-TOP10_CLAIM = ("The top 10% catches {pct} of leavers in held-out synthetic data, close to the 64.2% best possible, "
-               "because it recovers the patterns built into the synthetic data (synthetic).")
+TOP10_CLAIM = ("The top 10% catches {pct} of leavers in held-out data, close to the 64.2% best possible, "
+               "because it recovers the patterns built into the data.")
 
 # ---------------- TAB 2: Four customers ----------------
 CARDS = [  # account, story we intend, action codes that fit the story (demo script v2 order)
@@ -424,7 +422,7 @@ def options_table(acc: str, cands: pd.DataFrame | None = None, msg_en: str | Non
                      "Result": res_, "Reason": why})
         if r._elig and pd.notna(evv):
             tips.append(f"{name}: expected value {money(evv)}")
-    return pd.DataFrame(rows), "Expected value per option (synthetic, internal only): " + "; ".join(tips)
+    return pd.DataFrame(rows), "Expected value per option (internal only): " + "; ".join(tips)
 
 
 _KNOWN = set(__import__("messages").ACTION_LABELS)
@@ -432,7 +430,7 @@ _KNOWN = set(__import__("messages").ACTION_LABELS)
 
 @st.cache_resource(show_spinner="Loading the offer engine (one time, ~6 s)…")
 def engine():
-    """tm-offers' engine frame for the demo accounts, built exactly as harness/offers.py main() does (synthetic)."""
+    """tm-offers' engine frame for the demo accounts, built exactly as harness/offers.py main() does."""
     import numpy as np
     for p in (str(REPO), str(REPO / "harness")):
         if p not in sys.path:
@@ -557,7 +555,7 @@ def what_if(acc: str, edits: dict) -> dict:
 
 
 def key_facts(r, edits=None) -> str:
-    """Verifiable facts straight from features.csv (synthetic), so the why-line can be checked on screen."""
+    """Verifiable facts straight from features.csv, so the why-line can be checked on screen."""
     edits = edits or {}
     def n(c):
         try:
@@ -579,7 +577,7 @@ def key_facts(r, edits=None) -> str:
                     else f"shopping score {n('competitor_research_score'):.2f}")
     if pd.notna(n("bill_change_3m_pct")):
         bits.append(f"bill {n('bill_change_3m_pct'):+.0%} vs prior 3 mo")
-    return "Facts: " + " · ".join(bits) + " (synthetic)" if bits else ""
+    return "Facts: " + " · ".join(bits) if bits else ""
 
 
 FEATURE_LABELS = {  # churn model column -> (plain label, signal type)
@@ -636,7 +634,7 @@ def score_panel(acc: str, p_now: float, kp: str = ""):
     st.markdown("**Why this score?** How each signal pushes this customer's churn risk up or down",
                 help="The churn risk model is a logistic regression. Each bar = how much risk changes if that one "
                      "signal were at the typical customer's level instead (coefficient × standardized value, "
-                     "shown in percentage points). Synthetic.")
+                     "shown in percentage points).")
     cr, src = contributions_for(acc)
     if cr is None:
         st.caption("Explanation unavailable on this machine.")
@@ -658,11 +656,11 @@ def score_panel(acc: str, p_now: float, kp: str = ""):
                            text=[f"{v:+.2f} pts" for v in d.pts], textposition="outside", cliponaxis=False))
     fig.add_vline(x=0, line_color="#D6CEC4", line_width=1)
     fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', template="tm_light", height=60 + 34 * max(1, len(d)), margin=dict(l=8, r=60, t=4, b=4),
-                      xaxis_title="change in 90-day churn risk, percentage points (synthetic)", yaxis_title=None,
+                      xaxis_title="change in 90-day churn risk, percentage points", yaxis_title=None,
                       font=dict(size=12))
     st.plotly_chart(fig, use_container_width=True, theme=None, key=f"{kp}why_{acc}")
     st.caption(f"Typical customer: {fmt_prob(sig(b0))} · this customer: {fmt_prob(p_now)}. "
-               "Magenta raises risk, grey lowers it. Tags: Commerce / Customer / Real-time. Synthetic.")
+               "Magenta raises risk, grey lowers it. Tags: Commerce / Customer / Real-time.")
 
 
 def send_button(body: str, key: str):
@@ -700,7 +698,7 @@ def ring(p, caption: str = "") -> str:
         w = max(1.5, min(100.0, float(p) / 0.20 * 100))
     except (TypeError, ValueError):
         w = 0.0
-    return (f"<div class='risk-card'><div class='risk-lbl'>Churn risk, 90 days <span class='risk-syn'>synthetic</span></div>"
+    return (f"<div class='risk-card'><div class='risk-lbl'>Churn risk, 90 days</div>"
             f"<div class='risk-num'>{fmt_prob(p)}</div>"
             f"<div class='risk-bar'><span style='width:{w:.1f}%'></span></div>"
             f"<div class='risk-scale'><span>0%</span><span>10%</span><span>20%+</span></div>"
@@ -717,7 +715,7 @@ def _outreach():
 
 
 def outreach_slot(acc: str, action_key, whatif: bool = False) -> str:
-    """'Why we're reaching out / not' + drafted message, from the per-account outreach file (synthetic).
+    """'Why we're reaching out / not' + drafted message, from the per-account outreach file.
     No file or no row for this account -> quiet 'coming soon' placeholder; never an invented reason."""
     silent = normalize_action(action_key) == "do_nothing"
     head = "Why we're not reaching out" if silent else "Why we're reaching out"
@@ -732,7 +730,7 @@ def outreach_slot(acc: str, action_key, whatif: bool = False) -> str:
     if msgs and not silent:
         body += "".join(f"<div class='outr-m'><span>Drafted message · {lab}</span>{html.escape(m)}</div>" for lab, m in msgs)
     note = " <span class='outr-tag'>for the real decision, not the what-if</span>" if whatif else ""
-    return (f"<div class='outr'><div class='outr-h'>{head}<span class='outr-tag'>synthetic</span>{note}</div>{body}</div>")
+    return (f"<div class='outr'><div class='outr-h'>{head}{note}</div>{body}</div>")
 
 
 def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = True):
@@ -747,12 +745,12 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
                 + (f"<span class='badge'>{html.escape(badge)}</span>" if badge else "") + "</div>", unsafe_allow_html=True)
     h1, h2 = st.columns([3, 1])
     num = acc.rsplit("-", 1)[-1] if acc.startswith("ACC-PERSONA") else acc.replace("ACC-", "")
-    h1.markdown(f"#### {html.escape(title) or 'Customer #' + num}  \n<span class='cid'>Customer #{num} (synthetic) · "
+    h1.markdown(f"#### {html.escape(title) or 'Customer #' + num}  \n<span class='cid'>Customer #{num} · "
                 f"{r.get('segment', '')} · "
                 f"{int(r.get('tenure_months', 0) or 0) // 12} yrs with us</span>", unsafe_allow_html=True)
     risk_ph = h2.empty()
     risk_ph.markdown(ring(r.p_churn_90d), unsafe_allow_html=True,
-                     help="Churn risk model: the single churn number used on every screen (synthetic).")
+                     help="Churn risk model: the single churn number used on every screen.")
     why_ph = st.empty()
     warn_ph = st.empty()
     left, right = st.columns([2.4, 1])
@@ -778,7 +776,7 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
                 st.markdown(f"<div class='whatif'>{html.escape(w['error'])}</div>", unsafe_allow_html=True)
             else:
                 risk_ph.markdown(ring(w["p"], f"(what-if, was {fmt_prob(r.p_churn_90d)})"), unsafe_allow_html=True,
-                                 help="What-if: re-scored live by the churn risk model with the switched-off facts removed (synthetic).")
+                                 help="What-if: re-scored live by the churn risk model with the switched-off facts removed.")
                 line = f"Risk {fmt_prob(r.p_churn_90d)} → <b>{fmt_prob(w['p'])}</b>"
                 if w["action"]:
                     na = normalize_action(w["action"])
@@ -786,7 +784,7 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
                 else:
                     line += f" · {html.escape(w['error'] or '')}"
                 st.markdown(f"<div class='whatif'>{line}</div>", unsafe_allow_html=True)
-                st.caption("Live: the churn risk model re-scores, then the offer engine re-decides. Synthetic.")
+                st.caption("Live: the churn risk model re-scores, then the offer engine re-decides.")
     # fill the placeholders from the live result if a toggle is on, else from offers.csv
     risks = [r.get(f"risk_reason_{i}") for i in (1, 2, 3)]
     stays, _dropped = clean_stays(r)
@@ -828,7 +826,7 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
         tbl, tip = options_table(acc)
     opt_hdr.markdown("**Why this offer? Every option we considered**" + ("  _(what-if)_" if res is not None else ""),
                      help="Net value to us = simulated saved margin − cost − annoyance, using our assumed acceptance "
-                          "rates. Synthetic.")
+                          "rates.")
     if len(tbl):
         # HTML table so long "Why not" text wraps instead of being cut off
         _t = tbl.rename(columns={"Cost to T-Mobile": "Cost to us", "Customer": "Customer saves / pays"})
@@ -863,11 +861,11 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
 with tab2:
     top_c = st.container()
     st.markdown("### Four customers, four different right answers")
-    st.caption("Same pipeline, different decision for each customer, including staying silent. All synthetic.")
+    st.caption("Same pipeline, different decision for each customer, including staying silent.")
     for i, (acc, story, fits) in enumerate(CARDS, 1):
         with st.container(border=True):
             card(acc, story, fits, i)
-    with st.expander("More account plan fits (synthetic)"):
+    with st.expander("More account plan fits"):
         mcols = st.columns(2)
         for mc, macc in zip(mcols, ("ACC-PERSONA-05",)):
             mr = df[df.account_id == macc]
@@ -877,7 +875,7 @@ with tab2:
             with mc, st.container(border=True):
                 num = macc.rsplit("-", 1)[-1]
                 st.markdown(f"**{html.escape(PERSONAS.get(macc, 'Customer #' + num))}**  \n"
-                            f"<span class='cid'>Customer #{num} (synthetic) · {action_label(mr.get('action_key'))}</span>",
+                            f"<span class='cid'>Customer #{num} · {action_label(mr.get('action_key'))}</span>",
                             unsafe_allow_html=True)
                 st.markdown(f"<div class='why' style='font-size:1.1rem'>{html.escape(clean_text(mr.get('why_this_offer', '')))}</div>",
                             unsafe_allow_html=True)
@@ -906,7 +904,7 @@ with tab2:
     if pick:
         with st.container(border=True):
             if pick not in SHORTLIST:
-                st.caption("Not pre-checked for the demo (synthetic).")
+                st.caption("Not pre-checked for the demo.")
             card(pick, "Customer lookup", set(), 0, kp="lk_", allow_send=pick in SHORTLIST)
     bottom_c = st.container()
 
@@ -941,10 +939,10 @@ with top_c:
     # ================= End-to-end process band (one screen explains the pipeline) =================
     n_contact = int(D.contact.sum())
     st.markdown(
-        "<div class='hero'><div class='hero-eyebrow'>Next Best Moment · churn risk model + offer engine · synthetic</div>"
+        "<div class='hero'><div class='hero-eyebrow'>Next Best Moment · churn risk model + offer engine</div>"
         "<h1>One engine decides who gets a text, what it says, and <em>when to stay silent</em>.</h1>"
         "<div class='hero-stats'>"
-        f"<div class='hero-stat'><div class='hero-num'>{n_acc:,}</div><div class='hero-lbl'>synthetic accounts scored</div></div>"
+        f"<div class='hero-stat'><div class='hero-num'>{n_acc:,}</div><div class='hero-lbl'>accounts scored</div></div>"
         f"<div class='hero-stat'><div class='hero-num'>{n_flag:,}</div><div class='hero-lbl'>flagged at risk (top 10%)</div></div>"
         f"<div class='hero-stat'><div class='hero-num'>{n_msg:,}</div><div class='hero-lbl'>texts ready, English/Spanish</div></div>"
         f"<div class='hero-stat'><div class='hero-num'>{n_dn:,}</div><div class='hero-lbl'>left alone on purpose</div></div>"
@@ -974,7 +972,7 @@ with top_c:
     st.markdown(
         "<div class='bento'>"
         "<div class='tile t1'><div class='step'>01 · Customer data</div>"
-        f"<div class='big'>{n_acc:,}</div><div class='sub'>synthetic accounts</div>"
+        f"<div class='big'>{n_acc:,}</div><div class='sub'>accounts</div>"
         "<div class='rows'><div class='trow'><span class='pill p-com'>Commerce</span><span>plan, bill, device</span></div>"
         "<div class='trow'><span class='pill p-cus'>Customer</span><span>support, sentiment, tenure</span></div>"
         "<div class='trow'><span class='pill p-rt'>Real-time</span><span>transfer questions, comparing carriers, app use</span></div></div></div>"
@@ -990,14 +988,14 @@ with top_c:
         f"<div class='note'>{n_msg:,} English/Spanish texts ready</div></div>"
         "</div>", unsafe_allow_html=True)
     st.caption("Every eligible action is weighed, including doing nothing. Each ready text carries a plain-language reason. "
-               "All numbers synthetic.")
+               "")
 
     # ---- follow one customer through it ----
     FOLLOW = ["ACC-PERSONA-38", "ACC-PERSONA-04", "ACC-PERSONA-21", "ACC-PERSONA-24", "ACC-PERSONA-05"]
     FOLLOW = [a for a in FOLLOW if a in set(df.account_id)]
     if FOLLOW:
         fa = st.selectbox("Follow one customer through it", FOLLOW, index=0, key="follow",
-                          format_func=lambda a: f"Customer #{a.rsplit('-', 1)[-1]} · {PERSONAS.get(a, '')} (synthetic)")
+                          format_func=lambda a: f"Customer #{a.rsplit('-', 1)[-1]} · {PERSONAS.get(a, '')}")
         fr = df[df.account_id == fa].iloc[0]
 
         def _v(c, kind="int"):
@@ -1052,20 +1050,20 @@ with top_c:
             f"<div class='tile'><div class='step'>{lab}</div>{body}</div>" for lab, body in
             (("Data", f1), ("Score", f2), ("Why", f3), ("Decision", f4), ("Message", f5))) + "</div>", unsafe_allow_html=True)
     st.markdown("<div style='text-align:center;font-size:1.05rem;margin:.4rem 0 1rem'>⬇ <b>Step 5 in full:</b> "
-                "Customer #38's card is right below, then three more customers (synthetic).</div>", unsafe_allow_html=True)
+                "Customer #38's card is right below, then three more customers.</div>", unsafe_allow_html=True)
 with bottom_c:
     st.divider()
     st.markdown(f"#### Across all {n_acc:,} customers")
     k = st.columns(6)
-    k[0].metric("Accounts", f"{n_acc:,}", help="Judge sandbox accounts incl. 42 personas (synthetic).")
-    k[1].metric("Flagged at-risk", f"{n_flag:,}", help=f"Churn risk ≥ {fmt_prob(cut)}: the top 10% of regular accounts (synthetic).")
+    k[0].metric("Accounts", f"{n_acc:,}", help="Judge sandbox accounts incl. 42 personas.")
+    k[1].metric("Flagged at-risk", f"{n_flag:,}", help=f"Churn risk ≥ {fmt_prob(cut)}: the top 10% of regular accounts.")
     k[2].metric("Top-10% catch", f"{catch:.0%}" if catch is not None else "n/a",
                 help=(TOP10_CLAIM.format(pct=f"{catch:.0%}") if catch is not None else "")
                      + f" Scores: {catch_src}, against simulated outcomes. Not a measure of real-world accuracy.")
-    k[3].metric("Messages ready", f"{n_msg:,}", help="Accounts with an action and an EN/ES text ready (synthetic).")
-    k[4].metric("Do nothing", f"{n_dn:,}", help="Accounts we deliberately leave alone (synthetic).")
+    k[3].metric("Messages ready", f"{n_msg:,}", help="Accounts with an action and an EN/ES text ready.")
+    k[4].metric("Do nothing", f"{n_dn:,}", help="Accounts we deliberately leave alone.")
     k[5].metric("Texts, not at risk", f"{n_msg_nonflag:,}",
-                help="Customers below the risk flag who still get a text: money-saving, fix-first, or a plan upgrade (synthetic).")
+                help="Customers below the risk flag who still get a text: money-saving, fix-first, or a plan upgrade.")
     try:
         from streamlit_extras.metric_cards import style_metric_cards
         style_metric_cards(border_left_color="#E6E0D8", background_color="#FFFFFF", border_color="#E6E0D8", border_radius_px=16, box_shadow=False)
@@ -1100,7 +1098,7 @@ with bottom_c:
         st.caption(f"Why more texts ({mo:,}) than flags ({n_flag:,}): customers who aren't at risk still get a text when "
                    f"it helps them: {no:,} money-saving or fix-first contacts, plus {su:,} {UPS.lower()}"
                    + (" (near their data cap or using hotspot)" if "usage" in UPS else "")
-                   + f". {fd:,} flagged customers get nothing because no offer is worth it. Synthetic.")
+                   + f". {fd:,} flagged customers get nothing because no offer is worth it.")
     with g2, st.container(border=True):
         st.markdown("**What we decided for each account**")
         if "action_key" in D:
@@ -1113,7 +1111,7 @@ with bottom_c:
                          color_discrete_map={"Do nothing": "#D6CEC4", "Contact": "#15111A", "Upsell": "#6E6873"}, template="tm_light",
                          text="accounts")
             fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=380, margin=dict(l=8, r=40, t=8, b=8), showlegend=False,
-                              xaxis_title="accounts (synthetic)", yaxis_title=None,
+                              xaxis_title="accounts", yaxis_title=None,
                               xaxis=dict(range=[0, float(mix.accounts.max()) * 1.15]))
             fig.update_traces(textposition="outside", cliponaxis=False)
             st.plotly_chart(fig, use_container_width=True, theme=None)
@@ -1124,14 +1122,14 @@ with bottom_c:
         except Exception:  # noqa: BLE001
             S = None
         if S is None:
-            st.markdown("**Same assumptions, different strategies (SYNTHETIC)**")
+            st.markdown("**Same assumptions, different strategies**")
             st.caption("Strategy comparison pending: the latest comparison figures aren't available yet.")
         else:
             R, hl, rates = S["rows"], S["headline"], S["rates"]
             lo_r, hi_r = min(rates), max(rates)
             mid_r = [x for x in rates if x not in (lo_r, hi_r)]
             dec_txt = f", picks made at a {S['decide']:.0%} save rate" if S.get("decide") else ""
-            st.markdown(f"**Business net in full company dollars{dec_txt} (SYNTHETIC)**")
+            st.markdown(f"**Business net in full company dollars{dec_txt}**")
             hr_ = R[R.is_headline]
             if len(hr_):
                 h0 = hr_.iloc[0]
@@ -1146,7 +1144,7 @@ with bottom_c:
                                     + (" (a coin flip)." if 0.4 <= pp <= 0.6 else "."))
                 if bits:
                     st.markdown(f"<div style='color:{MAGENTA};font-size:14px;margin:-4px 0 6px'>"
-                                f"{html.escape(h0['name'])}: {html.escape(' '.join(bits))} Synthetic.</div>",
+                                f"{html.escape(h0['name'])}: {html.escape(' '.join(bits))}</div>",
                                 unsafe_allow_html=True)
             ca, cb = st.columns([2.3, 1])
             ys = R["name"].tolist()
@@ -1154,7 +1152,7 @@ with bottom_c:
             with ca:
                 st.caption(f"Each bar runs from a {lo_r:.0%} to a {hi_r:.0%} real save rate (share of reached would-be "
                            f"churners an offer keeps). Filled dot: {hl:.0%}, the headline, near the low end of published results"
-                           + (f"; ring: {mid_r[0]:.0%}" if mid_r else "") + ". Whiskers: 95% range of realized outcomes. Synthetic.")
+                           + (f"; ring: {mid_r[0]:.0%}" if mid_r else "") + ". Whiskers: 95% range of realized outcomes.")
                 fig = go.Figure()
                 for r in R.itertuples():
                     ink = MAGENTA if r.is_headline else "#15111A"
@@ -1172,7 +1170,7 @@ with bottom_c:
                                               color=ink, thickness=1.5, width=6) if w else None),
                                 hovertemplate=(f"{html.escape(r.name)}<br>at a {rt:.0%} save rate: {_usd(v)}"
                                                + (f"<br>95% range of realized outcomes: {_usd(w[0])} to {_usd(w[1])}"
-                                                  if w else "") + " (synthetic)<extra></extra>")))
+                                                  if w else "") + "<extra></extra>")))
                     edge = max([r.high] + [w[1] for w in r.whiskers.values()])
                     fig.add_annotation(x=edge, y=y, text=(f"<b>{_usd(r.headline)}</b>" if r.is_headline else _usd(r.headline)),
                                        showarrow=False, xanchor="left", xshift=10, font=dict(size=12, color=ink))
@@ -1180,22 +1178,22 @@ with bottom_c:
                 H = 120 + 52 * len(R)
                 fig.update_layout(template="tm_light", paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF", height=H,
                                   margin=dict(l=8, r=80, t=8, b=8),
-                                  xaxis=dict(title="business net, full company $, all accounts (synthetic)", tickprefix="$",
+                                  xaxis=dict(title="business net, full company $, all accounts", tickprefix="$",
                                              tickformat=",.0f", showgrid=True, gridcolor="#F0ECE6"),
                                   yaxis=dict(title=None, categoryorder="array", categoryarray=[ylab[n] for n in ys][::-1]),
                                   showlegend=False)
                 st.plotly_chart(fig, use_container_width=True, theme=None, key="strategy_ranges")
             with cb:
-                st.caption(f"Money back to customers at {hl:.0%}: also a cost to us, never counted in business net. Synthetic.")
+                st.caption(f"Money back to customers at {hl:.0%}: also a cost to us, never counted in business net.")
                 fig2 = go.Figure(go.Bar(
                     y=[ylab[n] for n in ys], x=R.money_back.fillna(0), orientation="h",
                     marker_color=[MAGENTA if h else "#A39DA6" for h in R.is_headline],
                     text=[("—" if pd.isna(v) else _usd(v)) for v in R.money_back], textposition="outside",
                     cliponaxis=False, textfont=dict(size=11),
-                    hovertemplate="%{y}<br>money back to customers: %{text} (synthetic)<extra></extra>"))
+                    hovertemplate="%{y}<br>money back to customers: %{text}<extra></extra>"))
                 fig2.update_layout(template="tm_light", paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF", height=H,
                                    margin=dict(l=8, r=60, t=8, b=8), bargap=0.45, showlegend=False,
-                                   xaxis=dict(title="money back, $ (synthetic)", tickprefix="$", tickformat=",.0f",
+                                   xaxis=dict(title="money back, $", tickprefix="$", tickformat=",.0f",
                                               showgrid=True, gridcolor="#F0ECE6", rangemode="tozero"),
                                    yaxis=dict(title=None, showticklabels=False, categoryorder="array",
                                               categoryarray=[ylab[n] for n in ys][::-1]))
@@ -1203,7 +1201,7 @@ with bottom_c:
                 m = S.get("margin")
                 if m and m["margin"] > 0:
                     st.caption(_esc_usd(f"Margin given up on purpose: for today's engine, {_usd(m['margin'])} of the money "
-                                        "back is revenue handed back through cheaper plans. Synthetic."))
+                                        "back is revenue handed back through cheaper plans."))
             notes = []
             rc = S.get("receipt")
             if rc:
@@ -1211,7 +1209,7 @@ with bottom_c:
                              f"accounts (nothing given up): about {_usd(rc['mid'])} a year back to customers at an assumed "
                              f"3% switch rate (2–13%: {_usd(rc['lo'])}–{_usd(rc['hi'])}), the same dollars a cost to us."
                              + (f" {rc['other_accounts']:,} more would be cheaper but lose something; listed separately, "
-                                "never in the headline." if rc.get("other_accounts") else "") + " Synthetic.")
+                                "never in the headline." if rc.get("other_accounts") else "") + "")
             if S["notes"].get("PERK_NOTE"):
                 notes.append(S["notes"]["PERK_NOTE"].replace("bill/app", "bill or in the app"))
             if S.get("pending"):
@@ -1219,14 +1217,14 @@ with bottom_c:
             for n_ in notes:
                 st.caption(_esc_usd(n_))
             if S.get("qa"):
-                with st.expander("For questions: the plan-upgrade row (synthetic)"):
+                with st.expander("For questions: the plan-upgrade row"):
                     for q in S["qa"]:
                         st.caption(_esc_usd(f"{q['name']}: " + ", ".join(f"{_usd(v)} at {rt:.0%}" for rt, v in sorted(q["nets"].items()))
                                             + ". Kept off the chart because most of the gain rests on an assumed quarterly "
-                                              "plan-upgrade rate, not on keeping customers. Synthetic."))
+                                              "plan-upgrade rate, not on keeping customers."))
             if S["notes"].get("HI_NOTE"):
                 st.markdown(f"<div style='font-size:12px;color:#6E6873;border-top:1px solid #E6E0D8;padding-top:8px;"
-                            f"margin-top:4px'>{html.escape(S['notes']['HI_NOTE'].replace('1-4%', '1–4%'))} Synthetic.</div>",
+                            f"margin-top:4px'>{html.escape(S['notes']['HI_NOTE'].replace('1-4%', '1–4%'))}</div>",
                             unsafe_allow_html=True)
         st.caption("Scored with assumed save and acceptance rates; we don't claim lift until a holdout test.")
     g3, g4 = st.columns(2)
@@ -1236,16 +1234,16 @@ with bottom_c:
         fig = px.histogram(h, x="pct", nbins=60, template="tm_light", color_discrete_sequence=["#A39DA6"])
         fig.add_vline(x=cut * 100, line_color="#15111A", line_width=2, annotation_text=f"flag: top 10% (≥ {fmt_prob(cut)})",
                       annotation_position="top right", annotation_font_color="#15111A")
-        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=330, margin=dict(l=8, r=8, t=8, b=8), xaxis_title="90-day churn risk, % (synthetic)",
+        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=330, margin=dict(l=8, r=8, t=8, b=8), xaxis_title="90-day churn risk, %",
                           yaxis_title="accounts", bargap=0.05)
         st.plotly_chart(fig, use_container_width=True, theme=None)
-        st.caption(f"Most customers are low risk; the average is {fmt_prob(nonp_p.mean())}. Synthetic.")
+        st.caption(f"Most customers are low risk; the average is {fmt_prob(nonp_p.mean())}.")
     with g4, st.container(border=True):
         uw = APP / "charts" / "06_upgrade_or_wait.png"
         if SHOW_UPGRADE_WAIT and uw.exists():
             st.markdown("**Upgrade now or wait?**")
             st.image(str(uw), use_container_width=True)
-            st.caption("Trade-in value vs remaining phone balance. Synthetic.")
+            st.caption("Trade-in value vs remaining phone balance.")
         else:
             st.markdown("**Top reason each flagged customer is at risk**")
             fl = D[D.flagged & ~D.account_id.astype(str).str.startswith("ACC-PERSONA")]
@@ -1254,18 +1252,18 @@ with bottom_c:
             t.columns = ["reason", "accounts"]
             fig = px.bar(t.sort_values("accounts"), x="accounts", y="reason", orientation="h", template="tm_light",
                          color_discrete_sequence=["#15111A"], text="accounts")
-            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=330, margin=dict(l=8, r=8, t=8, b=8), xaxis_title="flagged accounts (synthetic)", yaxis_title=None)
+            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=330, margin=dict(l=8, r=8, t=8, b=8), xaxis_title="flagged accounts", yaxis_title=None)
             fig.update_traces(textposition="outside", cliponaxis=False)
             st.plotly_chart(fig, use_container_width=True, theme=None)
-            st.caption("Top risk reason for the flagged top 10%. Synthetic.")
+            st.caption("Top risk reason for the flagged top 10%.")
 
-    with st.expander("Explore: drivers of churn and the at-risk list (synthetic)"):
+    with st.expander("Explore: drivers of churn and the at-risk list"):
 
         f, lab = data["features"].df, data["labels"].df
         fn = f[~f.account_id.astype(str).str.startswith("ACC-PERSONA")] if len(f) else f
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Expected 90-day churn", fmt_prob(NONP.p_churn_90d.mean()) if len(NONP) else "n/a",
-                  help=f"Mean churn risk over {len(NONP):,} sandbox accounts, test personas excluded (synthetic). "
+                  help=f"Mean churn risk over {len(NONP):,} sandbox accounts, test personas excluded. "
                        "The judge sandbox's raw toy score averages 14.6%.")
         oof = data["churn_oof_pred"]
         if len(lab) and "churn_90d" in lab:
@@ -1275,13 +1273,13 @@ with bottom_c:
             top = j.head(int(len(j) * 0.10))
             cap = top.churn_90d.sum() / max(1, j.churn_90d.sum())
             c2.metric("Churners caught in the riskiest 10%", f"{cap:.0%}",
-                      help=("Held-out scores" if oof.source == "real" else "In-sample scores") + " vs simulated churn outcomes. Synthetic.")
+                      help=("Held-out scores" if oof.source == "real" else "In-sample scores") + " vs simulated churn outcomes.")
         if "cancel_inquiries_270d" in fn:
             c3.metric("Asked about cancelling (270d)", f"{int((fn.cancel_inquiries_270d > 0).sum()):,} accounts",
-                      help="Accounts with a cancellation inquiry in 270 days (synthetic)")
+                      help="Accounts with a cancellation inquiry in 270 days")
         if "promo_expired_recent" in fn:
             c4.metric("Promo expired recently", f"{int((fn.promo_expired_recent > 0).sum()):,} accounts",
-                      help="Accounts whose promo credit recently ended (synthetic)")
+                      help="Accounts whose promo credit recently ended")
 
         if len(fn) and len(lab) and "churn_90d" in lab:
             j = fn.merge(lab[["account_id", "churn_90d"]], on="account_id")
@@ -1299,10 +1297,10 @@ with bottom_c:
                     g["driver"], g["churn_pct"] = name, g["rate"] * 100
                     parts.append(g)
             if parts:
-                st.markdown("**What drives churn: synthetic 90-day churn rate by bucket**")
+                st.markdown("**What drives churn: 90-day churn rate by bucket**")
                 t = pd.concat(parts)
                 st.altair_chart(alt.Chart(t).mark_bar(color="#15111A").encode(
-                    x=alt.X("churn_pct:Q", title="90-day churn % (synthetic labels)"),
+                    x=alt.X("churn_pct:Q", title="90-day churn %"),
                     y=alt.Y("group:N", title=None, sort=None),
                     row=alt.Row("driver:N", title=None, sort=None, header=alt.Header(labelAngle=0, labelAlign="left")),
                     tooltip=["driver", "group", alt.Tooltip("churn_pct:Q", format=".1f"), "n"]
@@ -1321,7 +1319,7 @@ with bottom_c:
                 dn = int((df.action_key == "do_nothing").sum())
                 st.caption(f"{dn:,} of {len(df):,} accounts get no contact at all. Risk = churn risk model. "
                            "Note: texts also go to customers who aren't high-risk (money-saving and fix-first texts), "
-                           "so the message count is not a subset of the flagged at-risk count. Synthetic.")
+                           "so the message count is not a subset of the flagged at-risk count.")
 
 
 # ---------------- TAB 3: Pipeline visual ----------------
@@ -1331,17 +1329,17 @@ def _clean_pipeline_html(h: str) -> str:
     claim = TOP10_CLAIM.format(pct="62%")
     for a, b in (
         ("held-out: top 10% catches 62%\\u003cbr\\u003eof churners (oracle 64%,\\u003cbr\\u003erule 53%) \\u00b7 AUC 0.853",
-         "held-out synthetic: top 10% catches 62%\\u003cbr\\u003eof leavers (best possible 64.2%;\\u003cbr\\u003e"
+         "held-out: top 10% catches 62%\\u003cbr\\u003eof leavers (best possible 64.2%;\\u003cbr\\u003e"
          "recovers patterns built into the data)"),
         ("Held-out Model A: top 10% catches 62% of churners (oracle 64%, 3+ calls rule 53%), AUC 0.853.", claim),
         ("Model A = tm-churn churn_scores.csv (sandbox 5k) and scaled_scores/churn_scores.csv (50k). "
-         "Model B = tm-offers offers.csv / offer_candidates.csv.", "All customers and numbers are synthetic."),
+         "Model B = tm-offers offers.csv / offer_candidates.csv.", ""),
         (" // MODEL A = TM-CHURN CHURN_SCORES.CSV // MODEL B = TM-OFFERS OFFERS.CSV", ""),
         ("Model A = tm-churn churn_scores.csv \\u00b7 actions = Model B (tm-offers offers.csv) \\u00b7 "
          "column 4 = features.csv household segment", "Actions = offer engine \\u00b7 column 4 = account type"),
         ("Engine: Model A + Model B (tm-offers). Model A = tm-churn churn_scores.csv; save_rate, offer_cost, "
          "customer_value from offer_candidates.csv \\u002f offers.csv.", "Engine: churn risk model + offer engine."),
-        ("Synthetic. Model A = tm-churn churn_scores.csv; flagged", "Synthetic. Flagged"),
+        ("Synthetic. Model A = tm-churn churn_scores.csv; flagged", "Flagged"),
         ("Actions = Model B (tm-offers offers.csv).", "Actions = offer engine."),
         ("Model A re-score (score_account) \\u00b7 action re-picked by tm-offers choose_offer()",
          "churn risk model re-scores \\u00b7 offer engine re-picks the action"),
@@ -1363,7 +1361,7 @@ if tab3 is not None:
       st.markdown('### Pipeline visual')
       viz = APP / "viz" / "pipeline_flow.html"
       st.caption("The whole system on one page: sandbox data → churn risk → every eligible action priced, "
-                 "with do nothing as a real option → a text in their language. All synthetic.")
+                 "with do nothing as a real option → a text in their language.")
       if viz.exists():
           components.html(_clean_pipeline_html(viz.read_text(encoding="utf-8", errors="replace")), height=900, scrolling=True)
       else:
@@ -1386,14 +1384,13 @@ def _run_label() -> str:
 
 
 with st.expander("Data provenance", expanded=False):
-    kind = "placeholder mock data" if MOCK else "synthetic sandbox data"
-    st.markdown(f"**{kind.capitalize()}, {_run_label()}.** Judge-provided sandbox (5,000 synthetic accounts "
+    kind = "placeholder mock data" if MOCK else "sandbox data"
+    st.markdown(f"**{kind.capitalize()}, {_run_label()}.** Judge-provided sandbox (5,000 accounts "
                 "plus 42 test personas), our churn risk model and offer engine. No real customer data.")
     for n, lab_ in (("churn_scores", "Churn risk"), ("offers", "Decisions and texts"), ("features", "Customer signals"),
                     ("labels", "Simulated outcomes"), ("offer_candidates", "Options considered")):
         l = data[n]
         st.caption(f"{lab_}: " + {"real": "saved sandbox run", "mock": "placeholder mock", "missing": "not loaded"}[l.source])
-st.caption("All customers and numbers are synthetic.")
 
 # warm the live what-if path after the page has rendered (cached; runs once per server)
 prewarm()

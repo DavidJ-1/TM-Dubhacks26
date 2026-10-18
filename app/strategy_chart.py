@@ -1,4 +1,4 @@
-"""Strategy comparison chart data (tm-ui). ALL NUMBERS SYNTHETIC / SIMULATED.
+"""Strategy comparison chart data (tm-ui). Simulated numbers.
 
 Reads the efficacy lane's chart files at runtime (nothing hardcoded; follow experiments/efficacy/README.md):
   out/chart_bars.csv       business net in full company $ per policy, picked at one save rate, scored at several;
