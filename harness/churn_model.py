@@ -44,7 +44,7 @@ except Exception:  # file not there yet / broken: local fallback
 OUT = HERE / "out"
 PERSONA_PREFIX = "ACC-PERSONA-"
 PERSONAS_HIGH, PERSONAS_LOW = ["04", "21", "22", "27"], ["10", "24"]
-PERSONA_HIGH_PCT = 85.0  # high personas must land in the top 15% (David via tm-data, 2026-10-17); low = below median
+PERSONA_HIGH_PCT = 90.0  # high personas must land in the top 10% (David, 2026-10-17); 21 and 22 are borderline by label design (true p at 91.7th / 90.2th pct)
 LABEL_CANDIDATES = ["churn_90d", "churned_90d", "churn_label_90d", "churn_label", "churn", "churned", "label", "y"]
 CONTRACT = ["account_id", "p_churn_90d", "risk_rank", "risk_reason_1", "risk_reason_2", "risk_reason_3",
             "stay_reason_1", "stay_reason_2", "stay_reason_3"]
