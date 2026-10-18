@@ -1,6 +1,6 @@
 {
  "note": "All customers and numbers are synthetic. Counts computed from harness/out CSVs at build time.",
- "built_at": "2026-10-17 19:42:39 America/Los_Angeles",
+ "built_at": "2026-10-17 19:44:12 America/Los_Angeles",
  "inputs": {
   "churn_scores": {
    "path": "/workspace/tmobile/TM-Dubhacks26/harness/out/churn_scores.csv",
@@ -687,6 +687,7 @@
   "default": 0.25,
   "definition": "averted(a) = a x sum over offered accounts of p_churn_90d (Model A) x save_rate of the chosen action (Model B); value(a) = a x sum p x save_rate x customer_value_usd; cost(a) = a x sum offer_cost. Linear in a by assumption."
  },
+ "household_in_decisions": false,
  "traced_customer": {
   "account_id": "ACC-PERSONA-04",
   "rank": 132,
@@ -773,6 +774,7 @@
   "language": "en",
   "contact_pref": "app",
   "customer_value": 2179.8,
+  "household_in_decisions": false,
   "signals_shown": [
    "Couple household, 3 lines, 40 months with us",
    "Plan More, last bill $207.90 (+14% vs prior avg), promo just ended",

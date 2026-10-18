@@ -569,7 +569,10 @@ def customer_frame(story, step):
                              + "<br><i>tm-offers ENRICHMENT_IN_DECISIONS is off by default</i>",
                         showarrow=False, align="left", font=dict(color="#8A7A8E", size=13, family=FONT)))
         ann.append(dict(xref="paper", yref="paper", x=0.035, y=0.40, xanchor="left", yanchor="top",
-                        text="<b>Real sandbox signals feed the decision. Nothing here is written into the message.</b>",
+                        text=("<b>Household data from the sandbox feeds the decision (family_upgrade / kid-line drivers in offers.csv). "
+                              "Nothing here is written into the message.</b>") if s.get("household_in_decisions") else
+                             ("<b>Household data shown from sandbox; used in decisions once family_upgrade lands. "
+                              "Nothing here is written into the message.</b>"),
                         showarrow=False, font=dict(color=MAGENTA, size=13, family=FONT)))
     elif step == 2:
         head("Model A: churn score + reasons", "tm-churn churn_scores.csv, synthetic labels")
@@ -784,6 +787,17 @@ REAL_HOUSEHOLD = ["n_lines", "is_family_plan", "likely_kid_flag", "n_kid_lines",
                   "contract_or_financing_months_remaining"]
 
 
+def household_in_decisions(offers: pd.DataFrame) -> bool:
+    """True only if offers.csv shows household signals reaching a pick: a family_upgrade action, or a
+    'drivers' entry tagged customer:kid_line."""
+    acts = pd.concat([offers.get("action_code", pd.Series(dtype=str)), offers.get("action", pd.Series(dtype=str))]).astype(str)
+    if acts.str.contains("family_upgrade", case=False, na=False).any():
+        return True
+    if "drivers" in offers.columns:
+        return bool(offers["drivers"].astype(str).str.contains(r"customer:kid_line", case=False, na=False).any())
+    return False
+
+
 def enrich_card_text(e):
     have = [n for k, n in SIM_ENRICH.items() if k in e.columns]
     if not have:
@@ -953,6 +967,8 @@ def main():
     wi = whatif_data(d, m)
     stats["whatif"] = wi
     story = customer_story(d, m, cut)
+    story["household_in_decisions"] = household_in_decisions(d["offers"])
+    stats["household_in_decisions"] = story["household_in_decisions"]
     stats["traced_customer"] = {k: v for k, v in story.items() if k not in ("signals", "enrich")}
     stats["traced_customer"]["signals_shown"] = story["signals"]
     stats["traced_customer"]["enrichment_shown"] = story["enrich"]
