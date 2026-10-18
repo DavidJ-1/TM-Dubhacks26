@@ -162,6 +162,15 @@ div[class*="st-key-tmcard_"]:hover {{border-color:#D6CEC4 !important}}
   box-shadow:none !important; border-left:1px solid var(--line) !important}}
 [data-testid="stMetricLabel"] p {{color:var(--muted) !important; font-size:11px !important; letter-spacing:.04em; text-transform:uppercase; font-weight:500}}
 [data-testid="stMetricValue"] {{font-family:'Inter Tight',sans-serif; font-size:40px !important; font-weight:600; letter-spacing:-0.035em; color:var(--ink)}}
+/* outreach slot */
+.outr {{background:var(--card); border:1px solid var(--line); border-left:3px solid var(--mag); border-radius:10px; padding:12px 16px; margin:10px 0 6px}}
+.outr-soon {{border-left-color:var(--line); background:var(--paper)}}
+.outr-h {{font-size:12px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--ink)}}
+.outr-tag {{font-size:10px; font-weight:500; letter-spacing:.04em; color:var(--faint); margin-left:8px; text-transform:none}}
+.outr-b {{font-size:14px; color:var(--muted); margin-top:4px}}
+.outr-soon .outr-b {{color:var(--faint); font-size:13px}}
+.outr-m {{font-size:13px; color:var(--ink); margin-top:8px; padding-top:8px; border-top:1px solid var(--line)}}
+.outr-m span {{display:block; font-size:11px; color:var(--faint); margin-bottom:2px}}
 /* options table */
 table.opts {{width:100%; border-collapse:collapse; font-size:14px; margin:8px 0 16px; color:var(--ink); border:none}}
 table.opts th, table.opts td {{border:none !important; border-bottom:1px solid var(--line) !important}}
@@ -211,6 +220,16 @@ def fmt_prob(p) -> str:
     if p >= 0.01:
         return f"{p:.1%}"
     return f"{p * 100:.2f}%" if p >= 0.0001 else "<0.01%"
+
+
+def _usd(v) -> str:
+    """Signed dollars for chart labels: -$69,434 not $-69,434."""
+    return ("−" if v < 0 else "") + f"${abs(v):,.0f}"
+
+
+def _esc_usd(t: str) -> str:
+    """Escape $ so Streamlit markdown doesn't read pairs of dollar amounts as LaTeX."""
+    return str(t).replace("$", "\\$")
 
 
 def money(v) -> str:
@@ -688,6 +707,34 @@ def ring(p, caption: str = "") -> str:
             + (f"<div class='risk-was'>{html.escape(caption)}</div>" if caption else "") + "</div>")
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _outreach():
+    try:
+        from outreach import load_outreach
+        return load_outreach()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def outreach_slot(acc: str, action_key, whatif: bool = False) -> str:
+    """'Why we're reaching out / not' + drafted message, from the per-account outreach file (synthetic).
+    No file or no row for this account -> quiet 'coming soon' placeholder; never an invented reason."""
+    silent = normalize_action(action_key) == "do_nothing"
+    head = "Why we're not reaching out" if silent else "Why we're reaching out"
+    o = _outreach()
+    row = o.loc[acc] if (o is not None and acc in o.index) else None
+    if row is None or not str(row.get("outreach_reason", "")).strip():
+        return (f"<div class='outr outr-soon'><div class='outr-h'>{head}<span class='outr-tag'>coming soon</span></div>"
+                "<div class='outr-b'>A plain-language reason and the drafted message will appear here.</div></div>")
+    body = f"<div class='outr-b'>{html.escape(clean_text(row['outreach_reason']))}</div>"
+    msgs = [(lab, str(row.get(c, "")).strip()) for lab, c in (("English", "message_en"), ("Español", "message_es"))]
+    msgs = [(lab, m) for lab, m in msgs if m]
+    if msgs and not silent:
+        body += "".join(f"<div class='outr-m'><span>Drafted message · {lab}</span>{html.escape(m)}</div>" for lab, m in msgs)
+    note = " <span class='outr-tag'>for the real decision, not the what-if</span>" if whatif else ""
+    return (f"<div class='outr'><div class='outr-h'>{head}<span class='outr-tag'>synthetic</span>{note}</div>{body}</div>")
+
+
 def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = True):
     if acc not in set(df.account_id):
         st.warning(f"{acc} is not in the loaded data.")
@@ -711,6 +758,7 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
     left, right = st.columns([2.4, 1])
     with left:
         dec_ph = st.empty()
+        out_ph = st.empty()
         chips_ph = st.empty()
         facts_ph = st.empty()
         opt_hdr, tbl_ph = st.empty(), st.empty()
@@ -771,6 +819,7 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
         warn_ph.error(f"Engine picked **{action_label(k)}**, which doesn't match this card's story ({story}).")
     dec_ph.markdown(f"<span class='decision'>Decision: {html.escape(action_label(k_now))}"
                     + (" <i>(what-if)</i>" if edits and w and w.get("action") else "") + "</span>", unsafe_allow_html=True)
+    out_ph.markdown(outreach_slot(acc, k_now, bool(edits and w and w.get("action"))), unsafe_allow_html=True)
     if res is not None:
         cand = res["candidates"].copy()
         cand["account_id"] = acc
@@ -1069,52 +1118,117 @@ with bottom_c:
             fig.update_traces(textposition="outside", cliponaxis=False)
             st.plotly_chart(fig, use_container_width=True, theme=None)
     with st.container(border=True):
-        st.markdown("**Same assumptions, different strategies (simulated)**")
-        src_dir = Path(data["offers"].path).parent if data["offers"].path else REPO / "demo_data"
-        cp = src_dir / "comparison.csv" if (src_dir / "comparison.csv").exists() else None
-        same_run, n_ours, n_ours_cmp = True, int(D.contact.sum()), None
-        if cp is not None:
-            try:
-                _c = pd.read_csv(cp)
-                _o = _c[_c.strategy.str.contains("Ours") & ~_c.strategy.astype(str).str.match(r"^\s*\d+[a-z]\.")]
-                n_ours_cmp = int(_o.contacted.iloc[0]) if len(_o) else None
-                same_run = n_ours_cmp is None or n_ours_cmp == n_ours
-            except Exception:  # noqa: BLE001
-                same_run = False
-        if cp is not None and not same_run:
-            st.warning(f"comparison pending: it was built from a different engine run "
-                       f"({n_ours_cmp:,} contacts for 'Ours') than the decisions shown here ({n_ours:,}). "
-                       "Not mixing runs.", icon="⏳")
-        elif cp is not None:
-            try:
-                cmp_ = pd.read_csv(cp)
-                cmp_ = cmp_[~cmp_.strategy.astype(str).str.match(r"^\s*\d+[a-z]\.")]  # drop variant rows like 5b
-                cmp_["Strategy"] = cmp_.strategy.str.replace(r"^\d+\.\s*", "", regex=True).map(clean_text)
-                cmp_["ours"] = cmp_.Strategy.str.startswith("Ours")
-                ca, cb = st.columns([1.1, 1])
-                with ca:
-                    fig = px.bar(cmp_, x="net_value_usd", y="Strategy", orientation="h", template="tm_light",
-                                 color="ours", color_discrete_map={True: MAGENTA, False: "#D6CEC4"},
-                                 text=cmp_.net_value_usd.map(lambda v: f"${v:,.0f}"))
-                    fig.add_vline(x=0, line_color="#D6CEC4", line_width=1)
-                    fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(l=8, r=8, t=8, b=8), showlegend=False,
-                                      xaxis_title="simulated net value, $ (synthetic)", yaxis_title=None,
-                                      yaxis=dict(autorange="reversed"))
-                    fig.update_traces(textposition="inside", insidetextanchor="middle", textfont_color="white")
-                    st.plotly_chart(fig, use_container_width=True, theme=None)
-                with cb:
-                    st.dataframe(pd.DataFrame({
-                        "Contacts to low-risk customers": cmp_[next(c for c in ("contacts_to_low_risk", "unneeded_contacts") if c in cmp_)].astype(int),
-                        "Credits $": cmp_.credit_spend_usd.map(lambda v: f"${v:,.0f}"),
-                        "Strategy": cmp_.Strategy, "Churners reached": cmp_.churners_reached.astype(int),
-                        "Net value (simulated)": cmp_.net_value_usd.map(lambda v: f"${v:,.0f}")}),
-                        hide_index=True, width="stretch")
-                    st.caption("All synthetic. Contacts to low-risk customers = people contacted who weren't going to churn.")
-            except Exception as e:  # noqa: BLE001
-                st.caption(f"comparison pending ({type(e).__name__})")
+        try:
+            from strategy_chart import load_strategy
+            S = load_strategy()
+        except Exception:  # noqa: BLE001
+            S = None
+        if S is None:
+            st.markdown("**Same assumptions, different strategies (SYNTHETIC)**")
+            st.caption("Strategy comparison pending: the latest comparison figures aren't available yet.")
         else:
-            st.caption("comparison pending")
-        st.caption("Scored with our assumed acceptance rates; we don't claim lift until a holdout test.")
+            R, hl, rates = S["rows"], S["headline"], S["rates"]
+            lo_r, hi_r = min(rates), max(rates)
+            mid_r = [x for x in rates if x not in (lo_r, hi_r)]
+            dec_txt = f", picks made at a {S['decide']:.0%} save rate" if S.get("decide") else ""
+            st.markdown(f"**Business net in full company dollars{dec_txt} (SYNTHETIC)**")
+            hr_ = R[R.is_headline]
+            if len(hr_):
+                h0 = hr_.iloc[0]
+                bits = []
+                if S.get("breakeven"):
+                    bits.append(f"Profitable if real save rates are at least about {S['breakeven']:.1%}.")
+                wk = h0.whiskers
+                for rt in sorted(wk, reverse=True):
+                    pp = wk[rt][2]
+                    if pd.notna(pp):
+                        bits.append(f"At {rt:.0%} it comes out ahead in {pp:.0%} of realized outcomes"
+                                    + (" (a coin flip)." if 0.4 <= pp <= 0.6 else "."))
+                if bits:
+                    st.markdown(f"<div style='color:{MAGENTA};font-size:14px;margin:-4px 0 6px'>"
+                                f"{html.escape(h0['name'])}: {html.escape(' '.join(bits))} Synthetic.</div>",
+                                unsafe_allow_html=True)
+            ca, cb = st.columns([2.3, 1])
+            ys = R["name"].tolist()
+            ylab = {n: (f"<b>{html.escape(n)}</b>" if h else html.escape(n)) for n, h in zip(R["name"], R.is_headline)}
+            with ca:
+                st.caption(f"Each bar runs from a {lo_r:.0%} to a {hi_r:.0%} real save rate (share of reached would-be "
+                           f"churners an offer keeps). Filled dot: {hl:.0%}, the headline, near the low end of published results"
+                           + (f"; ring: {mid_r[0]:.0%}" if mid_r else "") + ". Whiskers: 95% range of realized outcomes. Synthetic.")
+                fig = go.Figure()
+                for r in R.itertuples():
+                    ink = MAGENTA if r.is_headline else "#15111A"
+                    y = ylab[r.name]
+                    fig.add_trace(go.Scatter(x=[r.low, r.high], y=[y, y], mode="lines", showlegend=False, hoverinfo="skip",
+                                             line=dict(color="#F3B3D3" if r.is_headline else "#E6E0D8", width=12)))
+                    for rt, v in sorted(r.nets.items()):
+                        if rt == hl or (mid_r and rt == mid_r[0]):
+                            w = r.whiskers.get(rt)
+                            fig.add_trace(go.Scatter(
+                                x=[v], y=[y], mode="markers", showlegend=False,
+                                marker=dict(color=ink if rt == hl else "#FFFFFF", size=12 if rt == hl else 10,
+                                            line=dict(color=ink if rt != hl else "#FFFFFF", width=2 if rt != hl else 1.5)),
+                                error_x=(dict(type="data", symmetric=False, array=[w[1] - v], arrayminus=[v - w[0]],
+                                              color=ink, thickness=1.5, width=6) if w else None),
+                                hovertemplate=(f"{html.escape(r.name)}<br>at a {rt:.0%} save rate: {_usd(v)}"
+                                               + (f"<br>95% range of realized outcomes: {_usd(w[0])} to {_usd(w[1])}"
+                                                  if w else "") + " (synthetic)<extra></extra>")))
+                    edge = max([r.high] + [w[1] for w in r.whiskers.values()])
+                    fig.add_annotation(x=edge, y=y, text=(f"<b>{_usd(r.headline)}</b>" if r.is_headline else _usd(r.headline)),
+                                       showarrow=False, xanchor="left", xshift=10, font=dict(size=12, color=ink))
+                fig.add_vline(x=0, line_color="#A39DA6", line_width=1)
+                H = 120 + 52 * len(R)
+                fig.update_layout(template="tm_light", paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF", height=H,
+                                  margin=dict(l=8, r=80, t=8, b=8),
+                                  xaxis=dict(title="business net, full company $, all accounts (synthetic)", tickprefix="$",
+                                             tickformat=",.0f", showgrid=True, gridcolor="#F0ECE6"),
+                                  yaxis=dict(title=None, categoryorder="array", categoryarray=[ylab[n] for n in ys][::-1]),
+                                  showlegend=False)
+                st.plotly_chart(fig, use_container_width=True, theme=None, key="strategy_ranges")
+            with cb:
+                st.caption(f"Money back to customers at {hl:.0%}: also a cost to us, never counted in business net. Synthetic.")
+                fig2 = go.Figure(go.Bar(
+                    y=[ylab[n] for n in ys], x=R.money_back.fillna(0), orientation="h",
+                    marker_color=[MAGENTA if h else "#A39DA6" for h in R.is_headline],
+                    text=[("—" if pd.isna(v) else _usd(v)) for v in R.money_back], textposition="outside",
+                    cliponaxis=False, textfont=dict(size=11),
+                    hovertemplate="%{y}<br>money back to customers: %{text} (synthetic)<extra></extra>"))
+                fig2.update_layout(template="tm_light", paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF", height=H,
+                                   margin=dict(l=8, r=60, t=8, b=8), bargap=0.45, showlegend=False,
+                                   xaxis=dict(title="money back, $ (synthetic)", tickprefix="$", tickformat=",.0f",
+                                              showgrid=True, gridcolor="#F0ECE6", rangemode="tozero"),
+                                   yaxis=dict(title=None, showticklabels=False, categoryorder="array",
+                                              categoryarray=[ylab[n] for n in ys][::-1]))
+                st.plotly_chart(fig2, use_container_width=True, theme=None, key="strategy_moneyback")
+                m = S.get("margin")
+                if m and m["margin"] > 0:
+                    st.caption(_esc_usd(f"Margin given up on purpose: for today's engine, {_usd(m['margin'])} of the money "
+                                        "back is revenue handed back through cheaper plans. Synthetic."))
+            notes = []
+            rc = S.get("receipt")
+            if rc:
+                notes.append(f"Cheaper plans are never texted; they go on the bill receipt. {rc['accounts']:,} like-for-like "
+                             f"accounts (nothing given up): about {_usd(rc['mid'])} a year back to customers at an assumed "
+                             f"3% switch rate (2–13%: {_usd(rc['lo'])}–{_usd(rc['hi'])}), the same dollars a cost to us."
+                             + (f" {rc['other_accounts']:,} more would be cheaper but lose something; listed separately, "
+                                "never in the headline." if rc.get("other_accounts") else "") + " Synthetic.")
+            if S["notes"].get("PERK_NOTE"):
+                notes.append(S["notes"]["PERK_NOTE"].replace("bill/app", "bill or in the app"))
+            if S.get("pending"):
+                notes.append("Not computed yet: " + ", ".join(S["pending"]).lower() + ".")
+            for n_ in notes:
+                st.caption(_esc_usd(n_))
+            if S.get("qa"):
+                with st.expander("For questions: the plan-upgrade row (synthetic)"):
+                    for q in S["qa"]:
+                        st.caption(_esc_usd(f"{q['name']}: " + ", ".join(f"{_usd(v)} at {rt:.0%}" for rt, v in sorted(q["nets"].items()))
+                                            + ". Kept off the chart because most of the gain rests on an assumed quarterly "
+                                              "plan-upgrade rate, not on keeping customers. Synthetic."))
+            if S["notes"].get("HI_NOTE"):
+                st.markdown(f"<div style='font-size:12px;color:#6E6873;border-top:1px solid #E6E0D8;padding-top:8px;"
+                            f"margin-top:4px'>{html.escape(S['notes']['HI_NOTE'].replace('1-4%', '1–4%'))} Synthetic.</div>",
+                            unsafe_allow_html=True)
+        st.caption("Scored with assumed save and acceptance rates; we don't claim lift until a holdout test.")
     g3, g4 = st.columns(2)
     with g3, st.container(border=True):
         st.markdown("**Churn risk across accounts**")
