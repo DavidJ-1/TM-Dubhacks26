@@ -58,7 +58,8 @@
    "channel": "none",
    "decision_reason": "No message, since nothing we could offer is likely to pay off.",
    "offer_label": "",
-   "message_en": ""
+   "message_en": "",
+   "message_es": ""
   },
   "policy_ev_usd": 0.0,
   "options": [
@@ -227,7 +228,8 @@
    "channel": "none",
    "decision_reason": "No message, since nothing we could offer is likely to pay off.",
    "offer_label": "",
-   "message_en": ""
+   "message_en": "",
+   "message_es": ""
   },
   "policy_ev_usd": 0.0,
   "options": [
@@ -470,7 +472,8 @@
    "channel": "none",
    "decision_reason": "No message, since nothing we could offer is likely to pay off.",
    "offer_label": "",
-   "message_en": ""
+   "message_en": "",
+   "message_es": ""
   },
   "policy_ev_usd": 0.0,
   "options": [
@@ -649,7 +652,8 @@
    "channel": "none",
    "decision_reason": "No message, since nothing we could offer is likely to pay off.",
    "offer_label": "",
-   "message_en": ""
+   "message_en": "",
+   "message_es": ""
   },
   "policy_ev_usd": 0.0,
   "options": [
@@ -829,7 +833,8 @@
    "channel": "in_app",
    "decision_reason": "We'll help fix their open issue, which is likely worth it.",
    "offer_label": "fix-first message",
-   "message_en": "We're sorry the issue with your coverage is still open. Our team is working on your open request. Tap to see updates. No sales pitch, no plan change. Turn off these notes anytime in Settings."
+   "message_en": "We're sorry the issue with your coverage is still open. Our team is working on your open request. Tap to see updates. No sales pitch, no plan change. Turn off these notes anytime in Settings.",
+   "message_es": "Lamentamos que el problema con su cobertura siga abierto. Nuestro equipo est\u00e1 trabajando en su solicitud abierta. Toque para ver novedades. Sin ventas ni cambios de plan. Desactive estas notas cuando quiera en Ajustes."
   },
   "policy_ev_usd": 5.28,
   "options": [

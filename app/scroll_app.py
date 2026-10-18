@@ -150,7 +150,7 @@ def _tick_rail(t: dict):
                 k = "now" if j == i else ("past" if j < i else "fut")
                 lab = f"{j:02d} · {O.esc(labs[j])}" if j <= i else f"{j:02d}"
                 parts.append(f"<span class='dot {k} {t.get('anim', '') if j == i else ''}'></span><span class='lab {k}'>{lab}</span>")
-            a.markdown(f"<div class='o-tick'><span class='lab'>EVENTS</span>{'<span class=seg></span>'.join(parts)}</div>",
+            a.markdown(f"<div class='o-tick'><span class='lab'>WHAT IF THIS HAPPENS NEXT</span>{'<span class=seg></span>'.join(parts)}</div>",
                        unsafe_allow_html=True)
             b.button("Next event →", key=f"{TICK_KEY}_next", disabled=i >= n, on_click=_tick_go, args=(i + 1,),
                      type="primary", width="stretch")

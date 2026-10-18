@@ -92,7 +92,26 @@ def merged() -> pd.DataFrame:
     ps[msg.ne("")] = True
     ps[reason.str.contains("pays off", case=False) & msg.eq("")] = False
     m["policy_selected"] = ps
+    pn = plan_names()
+    if pn is not None:   # the plan catalog's own name for the current plan (the bill note uses the same name)
+        m = m.merge(pn, on="account_id", how="left")
     return m
+
+
+@st.cache_data(show_spinner=False)
+def plan_names() -> pd.DataFrame | None:
+    """account_id, plan_name: the catalog name of each account's current plan, from household_plan.csv (current_plan),
+    the same source the bill notes name it from. None if the file is missing."""
+    if not HOUSEHOLD.exists():
+        return None
+    try:
+        h = pd.read_csv(HOUSEHOLD, usecols=["account_id", "current_plan"])
+    except Exception as e:  # noqa: BLE001
+        print(f"[scroll] plan names unavailable: {type(e).__name__}: {e}")
+        return None
+    h = h.drop_duplicates("account_id").rename(columns={"current_plan": "plan_name"})
+    h["plan_name"] = h.plan_name.map(clean).replace("", pd.NA)
+    return h
 
 
 @st.cache_data(show_spinner=False)
@@ -618,7 +637,7 @@ def offer_decisions(df: pd.DataFrame) -> pd.DataFrame | None:
     d = d.drop_duplicates("account_id").copy()
     d["decision_reason"] = d.decision_reason.fillna("").astype(str).map(_strip_reason).map(lambda t: t[:1].upper() + t[1:])
     for c in ("offer_label", "guardrail_note", "why_low", "why_mid", "why_high", "already_leaving_note", "timing", "wait_until",
-              "receipt_line", "receipt_tradeoff_line", "message_en"):
+              "receipt_line", "receipt_tradeoff_line", "message_en", "message_es"):
         if c in d:
             d[c] = d[c].fillna("").astype(str).map(clean)
     sent = d.account_id.isin(set(df.loc[df.messaged, "account_id"]))
@@ -724,6 +743,8 @@ def live_row(df: pd.DataFrame, acc: str, i: int) -> pd.DataFrame:
         out.loc[m, "messaged"] = sent
         out.loc[m, "channel"] = dd.get("channel") if sent else None
         out.loc[m, "message_en"] = clean(dd.get("message_en") or "") if sent else ""
+        if "message_es" in out.columns or dd.get("message_es"):
+            out.loc[m, "message_es"] = clean(dd.get("message_es") or "") if sent else ""
         out.loc[m, "reason_line"] = clean(dd.get("decision_reason") or "")
     return out
 
@@ -742,7 +763,8 @@ def live_decisions(dec: pd.DataFrame | None, acc: str, i: int, show_money: bool 
     row = {c: None for c in dec.columns}
     row.update({"account_id": acc, "decision": d["decision"], "channel": d["channel"],
                 "decision_reason": clean(d["decision_reason"]), "offer_label": clean(d["offer_label"]),
-                "message_en": clean(d["message_en"]), "receipt_line": "", "already_leaving": False})
+                "message_en": clean(d["message_en"]), "message_es": clean(d.get("message_es") or ""),
+                "receipt_line": "", "already_leaving": False})
     return pd.concat([dec[dec.account_id != acc], pd.DataFrame([row])[dec.columns]], ignore_index=True)
 
 
@@ -822,9 +844,12 @@ def live_tick(df: pd.DataFrame, acc: str, i: int, inputs: pd.DataFrame | None) -
             t["hl"] = f
             p1 = O.breakdown(float(s1["intercept"]), c1, float(s1["risk"]), None, k=len(c1))[1]
             p0 = O.breakdown(float(s0["intercept"]), c0, float(s0["risk"]), None, k=len(c0))[1]
-            new = float(p1.set_index("feat").pts.get(f, 0.0))
             old = float(p0.set_index("feat").pts.get(f, 0.0))
-            t["hl_old_pts"], t["hl_delta"] = old, new - old
+            # the signal's own change this event: its contribution now minus before (logit, sidecar), in points at
+            # this event's risk; the header chip carries the total risk change
+            L1 = float(s1["intercept"]) + float(c1.sum())
+            own = (O._sig(L1) - O._sig(L1 - (float(c1.get(f, 0.0)) - float(c0.get(f, 0.0))))) * 100
+            t["hl_old_pts"], t["hl_delta"], t["hl_new"] = old, own, abs(old) < 0.005
         g1, g0 = pd.Series(s1["groups"]), pd.Series(s0["groups"])
         dg = g1.sub(g0, fill_value=0).abs()
         try:
@@ -858,7 +883,8 @@ def live_tick_more(t: dict | None, df: pd.DataFrame, acc: str, show_money: bool 
             r = v[v.account_id == acc].iloc[0]
             s = _live_step(acc, j) or {}
             ch = (s.get("decision") or {}).get("channel")
-            return {rule: st_ for rule, st_, _ in O.outreach_rules(r, ch if ch and ch != "none" else None)}
+            dr = pd.Series({k: clean(v) if isinstance(v, str) else v for k, v in (s.get("decision") or {}).items()})
+            return {rule: st_ for rule, st_, _ in O.outreach_rules(r, ch if ch and ch != "none" else None, dr if len(dr) else None)}
         a, b = rules(i - 1), rules(i)
         # the first rule whose verdict changed (later rules only follow from it: 'not reached' <-> 'passes')
         t["rules_changed"] = [k for k in b if a.get(k) != b[k]][:1]

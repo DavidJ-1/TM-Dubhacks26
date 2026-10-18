@@ -267,19 +267,22 @@ def options_for(aid: str, d: dict, g: pd.Series, c1: pd.DataFrame) -> list[dict]
     return out
 
 
-def message_for(d: dict, aid: str, sup: pd.DataFrame, as_of) -> str:
+def message_for(d: dict, aid: str, sup: pd.DataFrame, as_of) -> tuple[str, str]:
     """decisions_out.build's text for a message that has no outreach-card text: the fix-first template for the channel
     and the latest open support topic in the last 90 days (same rule as decisions_out.sandbox_facts, on this step's
     support rows); digital channels never promise a call."""
     if d["pick"] != "message":
-        return ""
+        return "", ""
     chan = d["channel"]
     s_ = sup[sup.account_id == aid].copy()
     s_["interaction_date"] = pd.to_datetime(s_.interaction_date)
     op = s_[(s_.resolved.astype(int) == 0) & (s_.interaction_date >= pd.Timestamp(as_of) - pd.Timedelta(days=90))]
     tp = str(op.sort_values("interaction_date").topic.iloc[-1]) if len(op) else "billing"
     m = dout.FIX_EN[chan].format(t=dout.TOPIC_EN.get(tp, "your account")) if chan in dout.FIX_EN else ""
-    return dout.clean(dout.no_call(m) if chan != "call" else m)
+    es = dout.FIX_ES[chan].format(t=dout.TOPIC_ES.get(tp, "su cuenta")) if chan in dout.FIX_ES else ""
+    if chan != "call":
+        m, es = dout.no_call(m), dout.no_call(es)
+    return dout.clean(m), dout.clean(es)
 
 
 def run_path(W: World, aid: str, keys: list[str], check_book: bool = True, steps_out: list | None = None) -> pd.DataFrame:
@@ -374,7 +377,7 @@ def run_path(W: World, aid: str, keys: list[str], check_book: bool = True, steps
                           "contact_ok": _plain(gr.contact_ok), "open_issue_topic": _plain(gr.open_issue_topic)},
                 "decision": {"decision": d["pick"], "channel": d["channel"], "decision_reason": d["why"],
                              "offer_label": d["pick_label"] if d["pick"] == "message" else "",
-                             "message_en": message_for(d, aid, sup, AS_OF)},
+                             **dict(zip(("message_en", "message_es"), message_for(d, aid, sup, AS_OF)))},
                 "policy_ev_usd": _plain(gr.policy_ev_usd), "options": opts})
         if step == 0 and DECISIONS.exists():   # step 0 must reproduce today's decision file exactly
             dr = pd.read_csv(DECISIONS).set_index("account_id").loc[aid]
