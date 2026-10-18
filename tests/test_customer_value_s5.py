@@ -58,13 +58,22 @@ def code_in(*codes):
     return chk
 
 
+PO_OFF = not _eng.port_out_allowed()                              # v2: PORT_OUT_CONTACT=off (pending David)
+FF_FORCED = bool(_eng.CONFIG.get("FIX_FIRST_FORCED_OPEN_TICKET"))  # v2: open ticket forces fix-first
+
+
 def field_held(o, pid):
     return FIELD_LOW and pid in (22, 27) and _row(o, pid)["action_code"] == "do_nothing"
 
 
+def ff_forced(o, pid):
+    r = _row(o, pid)
+    return FF_FORCED and r.get("pick_override") == "open_ticket" and r["action_code"] in ("fix_first", "care_credit_fix_first")
+
+
 def bill_shock_with_callback(o, lt, pid):
     r = _row(o, pid)
-    if field_held(o, pid):
+    if field_held(o, pid) or ff_forced(o, pid):
         return
     assert r["action_code"] == "bill_shock_price_lock", r["action_code"]
     assert bool(r["also_fix_first"]) or re.search(r"(?i)call|callback", str(r["action_detail"]) + str(r["message_en"])), \
@@ -154,7 +163,8 @@ EXPECT = {
     2: ("do nothing", DO_NOTHING), 7: ("do nothing", DO_NOTHING), 10: ("do nothing", DO_NOTHING),
     24: ("do nothing", DO_NOTHING), 26: ("do nothing", DO_NOTHING), 35: ("do nothing", DO_NOTHING),
     4: ("fix-first (+ credit OK)", FIX_FIRST), 23: ("fix-first", FIX_FIRST), 27: ("fix-first", FIX_FIRST),
-    21: ("check-in", code_in("check_in")),
+    21: ("check-in (v2: silent while PORT_OUT_CONTACT=off)", code_in("check_in", "do_nothing") if PO_OFF
+         else code_in("check_in")),
     22: ("bill-shock relief + callback", bill_shock_with_callback),
     5: ("right-size (v2: or held for backfire)", right_size_or_held),
     37: ("right-size (Essentials 4-Line, -$100/mo; v2: or held for backfire)", right_size_or_held),
@@ -232,6 +242,11 @@ def test_r5_r6_port_out_floor(out):
     if f is None:
         pytest.skip("no features.csv")
     po = f.index[f["port_out_inquiry"] == 1].intersection(o.index)
+    if PO_OFF:   # v2: no outreach on a port-out inquiry until David decides; the reason must say so
+        assert (o.loc[po, "action_code"] == "do_nothing").all()
+        assert (o.loc[po, "do_nothing_reason"] == "port_out_off").all()
+        assert not o.loc[po, "in_headline"].astype(bool).any()
+        return
     shrug = o.loc[po][o.loc[po, "action_code"] == "do_nothing"].index.tolist()
     assert not shrug, f"{len(shrug)} port-out inquirers get do nothing, e.g. {shrug[:5]}"
 

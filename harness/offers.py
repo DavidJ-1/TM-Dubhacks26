@@ -53,7 +53,11 @@ CONFIG = {
                                      # version using the same $20/mo value (see KYP_* below).
 
     # --- customer value (synthetic)
-    "VALUE_HORIZON_MONTHS": 24,      # how many months of service margin a save is worth
+    "VALUE_HORIZON_MONTHS": 24,      # how many months of service margin a save is worth (upsell / lock horizon)
+    "KEPT_VALUE_MONTHS": 19.338,     # v2: value of a KEPT account = monthly margin x this. Survival-discounted 24
+                                     # months (tm-research RESEARCH.md s13; tm-models' guardrail uses value x
+                                     # 19.338/24 -> ~$1,478 mean on demo_data). Env TM_KEPT_VALUE_MONTHS; 24 = the old
+                                     # undiscounted ~$1.8-1.9K. ASSUMPTION.
     "SERVICE_MARGIN": 0.50,          # share of monthly service revenue (bill minus device installments) kept.
                                      # v2: anchored, UPPER BOUND: TMUS Q2'26 Core Adj. EBITDA / service revenue
                                      # $9.537B / $19.0B ~ 50% (pre-capex), SEC Ex 99.1
@@ -201,7 +205,20 @@ CONFIG = {
     "SAVER_MAX_LINE_PEAK_GB": 10.0,      # Essentials -> Essentials Saver only for light users (every line's peak
                                          # <= 10 GB): Saver is the basic tier (max 2 lines, no watch/tablet lines)
     "PORT_OUT_ALWAYS_CONTACT": True,     # batch 7: a port-out inquiry never gets "do nothing": check-in (or the
-                                         # fix-first callback when an issue is open)
+                                         # fix-first callback when an issue is open). v2: only when PORT_OUT_CONTACT
+                                         # allows it (see below).
+    # v2 PORT_OUT_CONTACT in {"off", "self_initiated_only", "all"}. OPEN DECISION (David); default "off".
+    #   The FCC's 2008 Verizon ruling (47 U.S.C. 222(b)) bars using ANOTHER CARRIER's port request to retain a
+    #   customer. Sandbox signal: account_signals.port_out_inquiry, "1 if the account asked about porting its number
+    #   away" (vendor/dubhacks/docs/data-dictionary.md: a customer-initiated inquiry proxy, NOT a carrier port
+    #   request; the sandbox has no carrier port-request field). So PORT_OUT_SIGNAL_ORIGIN = "self_initiated".
+    #   off: port-out accounts get no outreach at all. self_initiated_only / all: one save attempt, reported in
+    #   already_leaving_save_attempt, NEVER in the headline count or net (in_headline=False).
+    "PORT_OUT_CONTACT": "off",
+    "PORT_OUT_SIGNAL_ORIGIN": "self_initiated",
+    # v2 (Grok Bot's call): an open unresolved support ticket (unresolved_90d >= 1) FORCES the fix-first callback
+    #   (or care credit + fix-first if that is worth more). Forced, so not removed by the profit gate.
+    "FIX_FIRST_FORCED_OPEN_TICKET": True,
     "STEP_UP_MARGIN": 0.80,              # share of incremental plan revenue that is margin
     "DEVICE_UPGRADE_MARGIN": 80.0,       # $ margin on a device sale + new 24-month financing (synthetic)
     # --- batch 4/5 (tm-strategy proposals + prompt-fit audit). All synthetic.
@@ -237,6 +254,12 @@ if os.environ.get("TM_UPGRADE_GATE") is not None:
     CONFIG["UPGRADE_GATE"] = os.environ["TM_UPGRADE_GATE"] not in ("0", "false", "False", "")
 if os.environ.get("TM_FIELD_SAVE_RATE") is not None:
     CONFIG["FIELD_SAVE_RATE"] = float(os.environ["TM_FIELD_SAVE_RATE"])
+if os.environ.get("TM_KEPT_VALUE_MONTHS") is not None:
+    CONFIG["KEPT_VALUE_MONTHS"] = float(os.environ["TM_KEPT_VALUE_MONTHS"])
+if os.environ.get("TM_PORT_OUT_CONTACT") is not None:
+    CONFIG["PORT_OUT_CONTACT"] = os.environ["TM_PORT_OUT_CONTACT"]
+if os.environ.get("TM_FIX_FIRST_FORCED_OPEN_TICKET") is not None:
+    CONFIG["FIX_FIRST_FORCED_OPEN_TICKET"] = os.environ["TM_FIX_FIRST_FORCED_OPEN_TICKET"] not in ("0", "false", "False", "")
 if os.environ.get("TM_PROFIT_GATE") is not None:
     CONFIG["PROFIT_GATE"] = os.environ["TM_PROFIT_GATE"] not in ("0", "false", "False", "")
 
@@ -289,6 +312,16 @@ UPSELLS = ("step_up", "family_upgrade", "device_upgrade", "home_internet_bundle"
 PLAN_MOVES = ("variant_switch", "right_size")   # receipt-only in v2 (PLAN_MOVES_RECEIPT_ONLY)
 
 
+PLAN_STATUS: dict = {}   # plan sku -> sandbox plans.status (filled by choose())
+
+
+def port_out_allowed() -> bool:
+    """v2: may a port-out inquiry be contacted at all (one save attempt, outside the headline)?"""
+    m = CONFIG["PORT_OUT_CONTACT"]
+    assert m in ("off", "self_initiated_only", "all"), m
+    return m == "all" or (m == "self_initiated_only" and CONFIG["PORT_OUT_SIGNAL_ORIGIN"] == "self_initiated")
+
+
 def receipt_item(res: dict) -> dict:
     """v2: the plan move shown on the receipt (no SMS). Same-features variant first (SAME_COVERAGE_RULE), else an
     eligible right-size. Expected revenue given up = saving x P_ACCEPT (company side, customer benefit weight 0)."""
@@ -298,11 +331,18 @@ def receipt_item(res: dict) -> dict:
             save = float(v.get("save", 0) or 0)
             why = ("same plan features for less (same-coverage rule: always shown)" if a == "variant_switch"
                    else "a smaller plan that fits their usage (shown, not texted: cheaper-plan outreach can backfire)")
+            # v2: limited-time target plans (sandbox plans.status). Neither plans nor promotions has an end-date
+            # field, so the engine cannot check the end date: the receipt says so.
+            lim = [k for k in str(v.get("skus", "")).split(";") if PLAN_STATUS.get(k.strip()) == "limited_time"]
+            tag = (" Limited-time plan: the end date isn't in our data, so check it's still offered before switching."
+                   if lim else "")
             return {"receipt_action": a, "receipt_skus": v.get("skus", ""), "receipt_monthly_saving": round(save, 2),
                     "receipt_expected_revenue_given_up_mo": round(save * CONFIG["P_ACCEPT"].get(a, 0.0), 2),
-                    "receipt_reason": f"Receipt only: {why}; saves ${save:.0f}/mo (synthetic)."}
+                    "receipt_limited_time": bool(lim), "receipt_plan_end_date": "",
+                    "receipt_reason": f"Receipt only: {why}; saves ${save:.0f}/mo (synthetic).{tag}"}
     return {"receipt_action": "", "receipt_skus": "", "receipt_monthly_saving": 0.0,
-            "receipt_expected_revenue_given_up_mo": 0.0, "receipt_reason": ""}
+            "receipt_expected_revenue_given_up_mo": 0.0, "receipt_limited_time": False, "receipt_plan_end_date": "",
+            "receipt_reason": ""}
 CREDIT_ACTIONS = ("care_credit", "loyalty_credit", "keep_your_phone", "care_credit_fix_first",
                   "bill_shock_price_lock")
 PROBLEM_ACTIONS = ("fix_first", "care_credit_fix_first", "care_credit", "bill_shock_price_lock")
@@ -668,7 +708,7 @@ def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) 
     d = drivers(row)
     p = float(row["p_churn_90d"])
     margin_mo = row["service_revenue_cents"] / 100 * C["SERVICE_MARGIN"]
-    value = margin_mo * C["VALUE_HORIZON_MONTHS"]
+    value = margin_mo * C["KEPT_VALUE_MONTHS"]
     W = C["CUSTOMER_BENEFIT_WEIGHT"]
     plan_idx = plans.set_index("sku")
     cur_plan = plan_idx.loc[row["plan_sku"]]
@@ -1150,7 +1190,7 @@ DETAILS: dict[str, dict] = {}  # account_id -> evaluate_account() output from th
 PICK_OVERRIDE = [""]  # override applied by the last pick(): "", "same_coverage" or "port_out"
 
 
-def pick(res: dict, key: str = "ev", exclude: tuple = (), port_out: bool = False
+def pick(res: dict, key: str = "ev", exclude: tuple = (), port_out: bool = False, open_ticket: bool = False
          ) -> tuple[str, float, tuple | None, tuple | None]:
     """Chooser: best eligible EV > 0 else do nothing; then the same-coverage rule. Returns
     (action, ev, runner_up, best_other)."""
@@ -1168,11 +1208,19 @@ def pick(res: dict, key: str = "ev", exclude: tuple = (), port_out: bool = False
             and action not in PROBLEM_ACTIONS and action not in ("variant_switch", "right_size")):
         action, evv, override = "variant_switch", vs[key], "same_coverage"
     # batch 7: a port-out inquiry never gets silence: check-in, or fix-first when a ticket is open
-    if port_out and CONFIG["PORT_OUT_ALWAYS_CONTACT"] and action == "do_nothing":
+    if port_out and CONFIG["PORT_OUT_ALWAYS_CONTACT"] and port_out_allowed() and action == "do_nothing":
         for alt in ("check_in", "fix_first"):
             if res.get(alt, {}).get("eligible") and alt not in exclude:
                 action, evv, override = alt, res[alt][key], "port_out"
                 break
+    # v2: open unresolved ticket -> fix-first is forced (FIX_FIRST_FORCED_OPEN_TICKET)
+    if (open_ticket and CONFIG["FIX_FIRST_FORCED_OPEN_TICKET"]
+            and action not in ("fix_first", "care_credit_fix_first")):
+        ff = [(a, res[a][key]) for a in ("care_credit_fix_first", "fix_first")
+              if res.get(a, {}).get("eligible") and a not in exclude]
+        if ff:
+            action, evv = max(ff, key=lambda t: t[1])
+            override = "open_ticket"
     rest = [s for s in scored if s[0] != action]
     runner = ("do_nothing", 0.0) if action != "do_nothing" and (not rest or rest[0][1] < 0) else \
         (rest[0] if rest else None)
@@ -1183,17 +1231,25 @@ def pick(res: dict, key: str = "ev", exclude: tuple = (), port_out: bool = False
 def choose(df: pd.DataFrame, promos: pd.DataFrame, plans: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     rows, cands = [], []
     DETAILS.clear()
+    PLAN_STATUS.clear()
+    PLAN_STATUS.update(dict(zip(plans["sku"], plans["status"])) if "status" in plans.columns else {})
     for _, row in df.iterrows():
         ev = evaluate_account(row, promos, plans)
         DETAILS[row["account_id"]] = ev
         res = ev["res"]
         po = bool(row["port_out_inquiry"] == 1)
+        ot = bool((row.get("unresolved_90d", 0) or 0) >= 1)
         # balance-netting check: winner if lock-in were NOT netted against existing financing
         gross_res = {a: ({**v, "ev": v.get("ev_gross_lock", v["ev"])} if v["eligible"] else v) for a, v in res.items()}
         pm = PLAN_MOVES if CONFIG["PLAN_MOVES_RECEIPT_ONLY"] else ()
-        gross_action = pick(gross_res, port_out=po, exclude=pm)[0]
-        action, evv, runner, best_other = pick(res, port_out=po, exclude=pm)
+        gross_action = pick(gross_res, port_out=po, exclude=pm, open_ticket=ot)[0]
+        action, evv, runner, best_other = pick(res, port_out=po, exclude=pm, open_ticket=ot)
         override = PICK_OVERRIDE[0]
+        save_attempt = ""
+        if po and not port_out_allowed():     # v2 PORT_OUT_CONTACT=off: no outreach on a port-out inquiry
+            runner, action, evv, override = (action, evv), "do_nothing", 0.0, "port_out_off"
+        elif po and action != "do_nothing":   # one save attempt, never in the headline
+            save_attempt = ACTION_LABEL[action]
         gated = bool(CONFIG["PROFIT_GATE"] and action != "do_nothing" and not override and evv <= 0)
         if gated:   # defensive: pick() already returns do nothing when no EV > 0, so this should never fire
             runner, action, evv = (action, evv), "do_nothing", 0.0
@@ -1204,13 +1260,15 @@ def choose(df: pd.DataFrame, promos: pd.DataFrame, plans: pd.DataFrame) -> tuple
             "expected_value": round(evv, 2), "reason": reason_text(action, row, ev, best_other),
             "offer_segment": SEGMENT[action],
             "why_this_offer": ("Stay silent: expected to cost more than it saves." if gated
-                               else why_this_offer(action, row, ev)),
+                               else ("Stay silent: they asked about porting their number out; we don't contact on "
+                                     "that signal until the port-out policy is decided (PORT_OUT_CONTACT=off).")
+                               if override == "port_out_off" else why_this_offer(action, row, ev)),
             "lock_in_months": int(res[action].get("lock_in_months", 0) or 0) if res[action]["eligible"] else 0,
             "drivers": driver_list(row, ev["drivers"]),
             "promo_skus": res[action].get("skus", "") if action != "do_nothing" else "",
             "action_detail": res[action]["detail"],
-            "do_nothing_reason": ("profit_gate" if gated else do_nothing_reason(row, ev)[0])
-                                 if action == "do_nothing" else "",
+            "do_nothing_reason": ("profit_gate" if gated else "port_out_off" if override == "port_out_off"
+                                  else do_nothing_reason(row, ev)[0]) if action == "do_nothing" else "",
             "pick_override": override,
             "customer_monthly_delta": customer_monthly_delta(action, res[action]),
             "runner_up_action": ACTION_LABEL[runner[0]] if runner else "",
@@ -1223,10 +1281,16 @@ def choose(df: pd.DataFrame, promos: pd.DataFrame, plans: pd.DataFrame) -> tuple
             "days_since_bill_shock": row["days_since_bill_shock"],
             "eligible_actions": ";".join(a for a in ACTIONS if res[a]["eligible"]),
             "action_if_lock_not_netted": gross_action,
-            "channel": "sms" if action != "do_nothing" else "none",
+            "channel": ("save_attempt" if save_attempt else "sms") if action != "do_nothing" else "none",
+            "already_leaving_save_attempt": (f"already leaving, one save attempt: {save_attempt}"
+                                             if save_attempt else ""),
+            # headline contacts: texted, not a port-out save attempt (forced EV<=0 rows are counted separately)
+            "in_headline": bool(action != "do_nothing" and not po),
         }
         out.update(receipt_item(res) if pm else {"receipt_action": "", "receipt_skus": "", "receipt_monthly_saving": 0.0,
-                                                 "receipt_expected_revenue_given_up_mo": 0.0, "receipt_reason": ""})
+                                                 "receipt_expected_revenue_given_up_mo": 0.0,
+                                                 "receipt_limited_time": False, "receipt_plan_end_date": "",
+                                                 "receipt_reason": ""})
         for a in ACTIONS[1:]:
             out[f"ev_{a}"] = res[a]["ev"]
         rows.append(out)

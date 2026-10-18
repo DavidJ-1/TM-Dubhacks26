@@ -34,6 +34,16 @@ PLAN_MOVES = {"variant_switch", "right_size"}
 # Deliberate, flagged for David. With the base table (FIELD_SAVE_RATE == anchor) they must act.
 FIELD_LOW = _eng.CONFIG["FIELD_SAVE_RATE"] < _eng.CONFIG["SAVE_RATE_ANCHOR"]
 FIELD_SENSITIVE = {22, 27}
+# v2 (merge round): three more deliberate switches, each with its own allowance below.
+#   PORT_OUT_CONTACT=off (default, pending David): persona 21 (port-out inquiry) gets no outreach -> do_nothing.
+#   FIX_FIRST_FORCED_OPEN_TICKET (Grok Bot's call): an open ticket forces fix-first -> persona 22 gets fix_first.
+#   KEPT_VALUE_MONTHS 19.338 (~$1,478 survival-discounted): persona 04's $25 credit no longer adds enough on top of
+#   the fix-first callback, so fix_first alone may win.
+PO_OFF = not _eng.port_out_allowed()
+FF_FORCED = bool(_eng.CONFIG.get("FIX_FIRST_FORCED_OPEN_TICKET"))
+VALUE_DISC = _eng.CONFIG.get("KEPT_VALUE_MONTHS", 24) < _eng.CONFIG["VALUE_HORIZON_MONTHS"]
+V2_EXTRA = {21: {"do_nothing"} if PO_OFF else set(), 22: {"fix_first"} if FF_FORCED else set(),
+            4: {"fix_first"} if VALUE_DISC else set()}
 OUT = Path(os.environ.get("TM_OUT_DIR", ROOT / "harness" / "out"))   # scratch runs: TM_OUT_DIR
 DEMO = ROOT / "demo_data"   # tracked copies; used when harness/out has not been generated (fresh clone)
 CREDITS = {"care_credit", "loyalty_credit", "keep_your_phone", "care_credit_fix_first", "bill_shock_price_lock"}
@@ -102,6 +112,7 @@ def check(pid: int, offers: pd.DataFrame, lt: pd.DataFrame | None) -> tuple[bool
     """Pure check, usable on any offers.csv (before/after comparisons)."""
     acc = f"ACC-PERSONA-{pid:02d}"
     direction, allowed, extra = EXPECT[pid]
+    allowed = set(allowed) | V2_EXTRA.get(pid, set())
     r = offers.set_index("account_id").loc[acc]
     code = r["action_code"]
     via_receipt = bool(RECEIPT and code not in PLAN_MOVES and str(r.get("receipt_action", "")) in allowed
@@ -171,6 +182,8 @@ PINS = {
 def test_persona_pin(pid, outputs):
     o = outputs[0].set_index("account_id").loc[f"ACC-PERSONA-{pid:02d}"]
     code, sku = PINS[pid]
+    if o["action_code"] in V2_EXTRA.get(pid, set()):
+        code, sku = o["action_code"], None   # deliberate v2 switch (see V2_EXTRA)
     if pid == 37 and BACKFIRE_ON and o.get("do_nothing_reason") == "plan_fit_held":
         code, sku = "do_nothing", ""   # v2: right-size held (Ascarza 2016 backfire); frozen demo_data still pins right_size
     if RECEIPT and code in PLAN_MOVES and "receipt_action" in o and o["action_code"] not in PLAN_MOVES:
@@ -232,6 +245,10 @@ def test_open_ticket_wording(outputs):
     if "do_nothing_reason" not in o:
         pytest.skip("older offers.csv")
     t = o[o.do_nothing_reason == "open_ticket"]
+    if FF_FORCED:   # v2: an open ticket forces fix-first, so silence with an open ticket only if fix-first is ineligible
+        assert (o.loc[o.pick_override.fillna("") == "open_ticket", "action_code"]
+                .isin(["fix_first", "care_credit_fix_first"])).all()
+        return
     assert len(t) and (t.why_this_offer == "Open ticket with support; no marketing until it's closed.").all()
 
 

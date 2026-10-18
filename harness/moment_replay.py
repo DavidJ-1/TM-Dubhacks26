@@ -7,7 +7,10 @@ Dated fields (sandbox, read-only):
   lines.financing_months_remaining    -> month the phone is paid off
   lines.device_purchase_date          -> month a phone reaches a promo's min_device_age_months (12 / 36)
   accounts.tenure_months              -> month tenure reaches a promo's min_tenure_months (6 / 36)
-Every other field (usage, bills, support, Model A risk) is HELD CONSTANT at the as-of date (assumption).
+Every other field (usage, bills, support, Model A risk) is HELD CONSTANT at the as-of date (assumption), with ONE
+exception (v2): for a care credit that is blocked today ONLY by promotions.min_tenure_months, the 90-day support
+window is re-counted at the future date from the dated support_interactions rows (contacts roll out; no new contacts
+are invented) and days_since_bill_shock is aged. That is the only "genuine wait" allowed for a windowed action.
 
 Cost of waiting: our synthetic labels carry NO churn timing, so the chance of losing the customer before the moment
 is a constant monthly hazard h = 1 - (1 - p_churn_90d)^(1/3) (ASSUMPTION, scaled by WAIT["hazard_scale"]).
@@ -81,6 +84,7 @@ class Context:
     promos: pd.DataFrame
     plans: pd.DataFrame
     as_of: object
+    support: pd.DataFrame | None = None   # sandbox support_interactions (dated), for the tenure-gated credit wait
 
 
 def load_context() -> Context:
@@ -90,7 +94,33 @@ def load_context() -> Context:
                         "monthly_installment_cents, tradein_eligible FROM lines", conn)
     pdate = pd.to_datetime(lines["device_purchase_date"])
     lines["device_age_m"] = [det.months_between(d.date(), today) if pd.notna(d) else np.nan for d in pdate]
-    return Context(df.set_index("account_id", drop=False), lines, cat["promotions"], cat["plans"], today)
+    sup = pd.read_sql("SELECT account_id, interaction_date, topic, sentiment, resolved FROM support_interactions", conn)
+    sup["interaction_date"] = pd.to_datetime(sup["interaction_date"])
+    return Context(df.set_index("account_id", drop=False), lines, cat["promotions"], cat["plans"], today, sup)
+
+
+TENURE_GATED_CREDITS = ("care_credit", "care_credit_fix_first")
+
+
+def support_window_at(sup: pd.DataFrame, as_of, m: int) -> dict:
+    """90-day support counts at as_of + m months, from EXISTING dated contacts only (none invented)."""
+    end = pd.Timestamp(as_of) + pd.DateOffset(months=m)
+    s = sup[(sup["interaction_date"] >= end - pd.Timedelta(days=90)) & (sup["interaction_date"] <= end)] \
+        if sup is not None and len(sup) else pd.DataFrame(columns=["topic", "sentiment", "resolved"])
+    net = s[s.topic == "network"]
+    return {"support_90d": len(s), "unresolved_90d": int((s.resolved == 0).sum()),
+            "neg_contacts_90d": int((s.sentiment < 0).sum()), "network_90d": len(net),
+            "network_unresolved_90d": int((net.resolved == 0).sum())}
+
+
+def tenure_gated_row(row: pd.Series, lines, sup, as_of, m: int) -> pd.Series:
+    """Account at month m for the tenure-gated care-credit check: dated fields + rolled support window + aged shock."""
+    r = row_as_of(row, lines, m)
+    r.update(pd.Series(support_window_at(sup, as_of, m)))
+    if pd.notna(row.get("days_since_bill_shock")):
+        r["days_since_bill_shock"] = row["days_since_bill_shock"] + (
+            (pd.Timestamp(as_of) + pd.DateOffset(months=m)) - pd.Timestamp(as_of)).days
+    return r
 
 
 def tenure_thresholds(promos) -> list[int]:
@@ -156,12 +186,16 @@ def row_as_of(row: pd.Series, lines: pd.DataFrame, m: int, paid_off_lines: set |
 # --------------------------------------------------------------------------------------------- decision
 def _pick(res: dict, row: pd.Series):
     pm = eng.PLAN_MOVES if eng.CONFIG.get("PLAN_MOVES_RECEIPT_ONLY") else ()
-    a, evv, _, _ = eng.pick(res, port_out=bool(row["port_out_inquiry"] == 1), exclude=pm)
+    po = bool(row["port_out_inquiry"] == 1)
+    if po and not eng.port_out_allowed():     # PORT_OUT_CONTACT=off: no outreach on a port-out inquiry
+        return "do_nothing", 0.0
+    a, evv, _, _ = eng.pick(res, port_out=po, exclude=pm,
+                            open_ticket=bool((row.get("unresolved_90d", 0) or 0) >= 1))
     return a, float(evv)
 
 
 def decide(row: pd.Series, lines: pd.DataFrame, promos, plans, as_of, H: int | None = None,
-           paid_off_lines: set | None = None) -> dict:
+           paid_off_lines: set | None = None, sup: pd.DataFrame | None = None) -> dict:
     H = WAIT["horizon_months"] if H is None else H
     base = row_as_of(row, lines, 0, paid_off_lines)
     now = eng.evaluate_account(base, promos, plans)["res"]
@@ -170,7 +204,13 @@ def decide(row: pd.Series, lines: pd.DataFrame, promos, plans, as_of, H: int | N
            "now_ev": round(ev0, 2), "decision": "", "when": "now", "action": a0, "ev": round(ev0, 2),
            "wait_months": 0, "wait_action": "", "wait_ev": np.nan, "wait_ev_discounted": np.nan,
            "survival_to_moment": 1.0, "dated_field": "", "reason_type": "", "reason": "", "data_note": "synthetic"}
-    forced = a0 in NEVER_WAIT or (row["port_out_inquiry"] == 1 and eng.CONFIG["PORT_OUT_ALWAYS_CONTACT"])
+    po = bool(row["port_out_inquiry"] == 1)
+    forced = a0 in NEVER_WAIT or (po and eng.CONFIG["PORT_OUT_ALWAYS_CONTACT"] and eng.port_out_allowed())
+    if po and not eng.port_out_allowed():   # no outreach now or later on a port-out inquiry (PORT_OUT_CONTACT=off)
+        out.update(decision="stay_silent", when="", reason_type="port_out_off", next_moment="", next_moment_action="",
+                   next_moment_field="", reason="Stay silent: they asked about porting out; no outreach on that signal "
+                                                "until the port-out policy is decided (synthetic).")
+        return out
     best, follow = None, None
     mom = moments(base, lines, promos, H)
     for m in sorted(mom):
@@ -180,6 +220,14 @@ def decide(row: pd.Series, lines: pd.DataFrame, promos, plans, as_of, H: int | N
         new = [(a, v["ev"]) for a, v in fut.items() if a != "do_nothing" and a not in WINDOWED_ACTIONS
                and not (eng.CONFIG.get("PLAN_MOVES_RECEIPT_ONLY") and a in eng.PLAN_MOVES)
                and v["eligible"] and not now.get(a, {}).get("eligible") and v["ev"] > 0]
+        # v2 genuine wait: care credit blocked today ONLY by min_tenure_months, eligible at a tenure moment with the
+        # support window re-counted from dated contacts
+        if sup is not None and any(e["kind"] == "tenure" for e in mom[m]):
+            gated = [a for a in TENURE_GATED_CREDITS if not now.get(a, {}).get("eligible")
+                     and "tenure" in str(now.get(a, {}).get("detail", ""))]
+            if gated:
+                tg = eng.evaluate_account(tenure_gated_row(row, lines, sup, as_of, m), promos, plans)["res"]
+                new += [(a, tg[a]["ev"]) for a in gated if tg[a]["eligible"] and tg[a]["ev"] > 0]
         if not new:
             continue
         af, evf = max(new, key=lambda t: t[1])
@@ -219,11 +267,14 @@ def decide(row: pd.Series, lines: pd.DataFrame, promos, plans, as_of, H: int | N
 def replay(ctx: Context, accounts=None) -> pd.DataFrame:
     rows = []
     g = ctx.lines.groupby("account_id")
+    sup_g = ctx.support.groupby("account_id") if ctx.support is not None else None
     empty = ctx.lines.iloc[0:0]
     for aid in (accounts if accounts is not None else ctx.df.index):
         row = ctx.df.loc[aid]
         ln = g.get_group(aid) if aid in g.groups else empty
-        rows.append(decide(row, ln, ctx.promos, ctx.plans, ctx.as_of))
+        sg = sup_g.get_group(aid) if sup_g is not None and aid in sup_g.groups else \
+            (ctx.support.iloc[0:0] if ctx.support is not None else None)
+        rows.append(decide(row, ln, ctx.promos, ctx.plans, ctx.as_of, sup=sg))
     return pd.DataFrame(rows)
 
 
@@ -280,11 +331,17 @@ def options_table(ctx: Context, decisions: pd.DataFrame, max_alt: int = 3) -> pd
         aid = d["account_id"]
         row = ctx.df.loc[aid]
         res = eng.evaluate_account(row, ctx.promos, ctx.plans)["res"]
-        # forced CONTACT = port-out rule only (must be scheduled, now); NEVER_WAIT actions may still be swapped
-        forced = bool(row["port_out_inquiry"] == 1 and eng.CONFIG["PORT_OUT_ALWAYS_CONTACT"]
-                      and d["now_action"] != "do_nothing")
+        po = bool(row["port_out_inquiry"] == 1)
+        if po and not eng.port_out_allowed():
+            continue                      # PORT_OUT_CONTACT=off: never scheduled
+        # forced CONTACT (must be scheduled, now): port-out save attempt (when allowed) or open-ticket fix-first
+        open_t = bool(eng.CONFIG["FIX_FIRST_FORCED_OPEN_TICKET"] and (row.get("unresolved_90d", 0) or 0) >= 1
+                      and d["now_action"] in ("fix_first", "care_credit_fix_first"))
+        forced = bool(((po and eng.CONFIG["PORT_OUT_ALWAYS_CONTACT"]) or open_t) and d["now_action"] != "do_nothing")
         pm = eng.PLAN_MOVES if eng.CONFIG.get("PLAN_MOVES_RECEIPT_ONLY") else ()
-        if forced:   # only the forced action, scheduled now
+        if forced and open_t and not po:   # either fix-first variant may be scheduled; one is mandatory
+            cands = [(a, res[a]) for a in ("care_credit_fix_first", "fix_first") if res[a]["eligible"]]
+        elif forced:   # only the forced action, scheduled now
             cands = [(d["now_action"], res[d["now_action"]])]
         else:
             cands = sorted(((a, v) for a, v in res.items() if a != "do_nothing" and a not in pm
@@ -307,6 +364,13 @@ def _opt(aid, week, a, ev, cost, forced):
             "forced": bool(forced)}
 
 
+def _budget_exempt(opts: pd.DataFrame) -> np.ndarray:
+    """Forced rows that are their account's ONLY option (port-out save attempt) spend outside the credit budget;
+    forced accounts with a choice (open ticket: fix-first $0 vs care credit + fix-first) count against it."""
+    n_opt = opts.groupby("account_id")["account_id"].transform("size").values
+    return opts["forced"].values.astype(bool) & (n_opt == 1)
+
+
 def solve_milp(opts: pd.DataFrame, max_contacts: int | None = None, weekly_credit_budget: float | None = None):
     """tm-models' formulation: max sum EV x, x binary, <= 1 option per account (the per-account contact cap),
     optional total contact cap, optional per-week credit budget. Returns a boolean mask over opts."""
@@ -316,16 +380,20 @@ def solve_milp(opts: pd.DataFrame, max_contacts: int | None = None, weekly_credi
     if n == 0:
         return np.zeros(0, bool)
     ai = pd.factorize(opts["account_id"])[0]
-    cons = [LinearConstraint(csr_matrix((np.ones(n), (ai, np.arange(n))), shape=(ai.max() + 1, n)), 0, 1)]
     forced = opts["forced"].values.astype(bool)
+    # forced account: exactly one of its options (open-ticket accounts may pick fix-first or care credit + fix-first)
+    lo = np.zeros(ai.max() + 1)
+    lo[np.unique(ai[forced])] = 1
+    cons = [LinearConstraint(csr_matrix((np.ones(n), (ai, np.arange(n))), shape=(ai.max() + 1, n)), lo, 1)]
+    exempt = _budget_exempt(opts)
     if max_contacts is not None:   # the contact cap counts non-forced contacts (forced port-out contacts always go)
         cons.append(LinearConstraint(csr_matrix((~forced).astype(float)[None, :]), 0, max_contacts))
     if weekly_credit_budget is not None:
         wk = pd.factorize(opts["week"])[0]
         # forced port-out contacts spend outside the budget (they go regardless); budget = discretionary credits
-        A = csr_matrix((opts["credit_usd"].values * (~forced), (wk, np.arange(n))), shape=(wk.max() + 1, n))
+        A = csr_matrix((opts["credit_usd"].values * (~exempt), (wk, np.arange(n))), shape=(wk.max() + 1, n))
         cons.append(LinearConstraint(A, 0, weekly_credit_budget))
-    r = milp(-opts["ev"].values, constraints=cons, integrality=np.ones(n), bounds=Bounds(forced.astype(float), 1),
+    r = milp(-opts["ev"].values, constraints=cons, integrality=np.ones(n), bounds=Bounds(0, 1),
              options={"mip_rel_gap": 1e-9, "time_limit": 120})
     assert r.status == 0, r.message
     return np.round(r.x).astype(bool)
@@ -336,14 +404,21 @@ def greedy(opts: pd.DataFrame, max_contacts: int | None = None, weekly_credit_bu
     x = np.zeros(len(opts), bool)
     if len(opts) == 0:
         return x
-    best = opts.reset_index(drop=True).sort_values(["account_id", "ev"], ascending=[True, False]) \
-        .groupby("account_id").head(1)
+    o2 = opts.reset_index(drop=True).assign(_ex=_budget_exempt(opts))
+    srt = o2.sort_values(["account_id", "ev"], ascending=[True, False])
+    best = srt.groupby("account_id").head(1)
     best = best.assign(_f=best["forced"].astype(bool)).sort_values(["_f", "ev"], ascending=[False, False], kind="stable")
     spent: dict = {}
     k = 0
     for i, o in best.iterrows():
-        if o["_f"]:   # forced port-out contacts always go first and count against neither cap nor budget
-            x[i] = True
+        if o["_f"]:   # forced contacts go first, outside the contact cap; best forced option that fits the budget
+            for j, f in srt[srt.account_id == o["account_id"]].iterrows():
+                if (f["_ex"] or weekly_credit_budget is None
+                        or spent.get(f["week"], 0.0) + f["credit_usd"] <= weekly_credit_budget + 1e-9):
+                    x[j] = True
+                    if not f["_ex"]:
+                        spent[f["week"]] = spent.get(f["week"], 0.0) + f["credit_usd"]
+                    break
             continue
         if max_contacts is not None and k >= max_contacts:
             continue
