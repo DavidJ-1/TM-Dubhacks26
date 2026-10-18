@@ -10,12 +10,9 @@ Inputs
   02 cumulative gain       : churn_scores.csv + labels.csv (churn_90d, p_true_90d = oracle) + features.csv (support_90d)
   03 calibration           : same as 02. If a holdout file exists (harness/out/*holdout*.csv or *oof*.csv with
                              account_id, p_churn_90d) it is used instead of the all-accounts scores.
-  04 Model C uplift/Qini   : harness/model_c_artifacts/ (preferred), else harness/out[/charts]/: *qini*.csv or *uplift*curve*.csv
-                             expected columns: share_targeted (0..1) | n_targeted, incremental_saves | qini | uplift,
-                             optional model/policy column (one line per value)
-  05 Model C policy value  : harness/model_c_artifacts/ (preferred), else harness/out[/charts]/: *policy*value*.csv | policy_eval.csv
-                             expected columns: policy, churners_saved, retained_revenue_net (net of cost), cost_per_save
-                             policies: EV policy, offer-to-everyone, 3+ calls rule, random, do nothing
+  04 Model C uplift/Qini   : harness/model_c_artifacts/uplift_curve.csv (+ uplift_auuc.csv), IPW cum_incremental_saves
+  05 Model C policy value  : harness/model_c_artifacts/policy_eval.csv, doubly-robust *_dr columns
+                             Both are final by default; TM_MODELC_PLACEHOLDER=1 forces placeholders.
   06 learning curve        : harness/bench/*.csv or /workspace/tmobile/bench-scratch/*learning*.csv
                              expected columns: model, n_train, metric, value
 """
@@ -62,9 +59,10 @@ def fig(sub=1, **kw):
 
 
 def save(f, name, note=""):
-    f.text(0.01, 0.012, FOOT + (f"\n{note}" if note else ""), fontsize=7.5, color=GREY, ha="left", va="bottom",
-           linespacing=1.4)
-    f.subplots_adjust(bottom=0.19)
+    import textwrap
+    lines = [FOOT] + (textwrap.wrap(note, 140) if note else [])
+    f.text(0.01, 0.012, "\n".join(lines), fontsize=7.5, color=GREY, ha="left", va="bottom", linespacing=1.4)
+    f.subplots_adjust(bottom=max(0.19, 0.14 + 0.032 * len(lines)))
     p = HERE / name
     f.savefig(p, dpi=DPI)  # fixed canvas: exactly 1600x900
     plt.close(f)
@@ -291,11 +289,15 @@ def chart_calibration(df):
 
 
 # ------------------------------------------------------------------ 04/05 Model C
-# Model C is being reworked by tm-offers: draw placeholders even if draft CSVs exist,
-# until TM_MODELC_FINAL=1 is set (then the CSVs are read and restyled).
+# Model C is final (tm-offers 6705fb9). Charts are drawn from harness/model_c_artifacts/ whenever the CSVs exist.
+# Set TM_MODELC_PLACEHOLDER=1 to force placeholders (e.g. while tm-offers reruns). TM_MODELC_FINAL is no longer needed.
 import os  # noqa: E402
-MODEL_C_FINAL = os.environ.get("TM_MODELC_FINAL") == "1"
-POLICY_ORDER = ["EV policy", "offer-to-everyone", "3+ calls rule", "random", "do nothing"]
+MODEL_C_FORCE_PLACEHOLDER = os.environ.get("TM_MODELC_PLACEHOLDER") == "1"
+MODELB_PINK, MODELC_COL, MODELA_COL, RULE_COL = MAGENTA, "#1F5FAD", "#9A9A9A", "#3A3A3A"
+CIRC_NOTE = ("Simulated randomized trial on the test split: effects are grounded in our own save-rate assumptions "
+             "(partly circular), not measured lift.")
+POLICY_ORDER = ["Model B EV chooser", "Model C T-learner", "Offer to everyone", "3+ calls rule", "Random", "Do nothing",
+                "Oracle (reference)"]
 
 
 def _col(df, *names):
@@ -310,96 +312,150 @@ def _col(df, *names):
     return None
 
 
+def short_policy(v) -> str:
+    s = str(v).lower()
+    for keys, name in [(["oracle"], "Oracle (reference)"), (["model b", "ev chooser", "expected value"], "Model B EV chooser"),
+                       (["model c", "uplift policy", "t-learner"], "Model C T-learner"), (["model a", "churn risk"], "Model A risk ranking"),
+                       (["every", "blanket"], "Offer to everyone"), (["3+", "rule"], "3+ calls rule"), (["random"], "Random"),
+                       (["nothing", "no outreach"], "Do nothing")]:
+        if any(k in s for k in keys):
+            return name
+    return str(v)
+
+
+def _money(v, plus=True):
+    if abs(v) < 500:
+        return "~$0"
+    sgn = "-" if v < 0 else ("+" if plus else "")
+    return f"{sgn}${abs(v) / 1000:,.1f}k"
+
+
 def chart_qini():
-    p = find_csv(["*qini*.csv", "*uplift*curve*.csv", "*uplift_curve*.csv"], prefer=MODEL_C_DIRS)
-    expects0 = ("Expected: harness/out/[charts/]*qini*.csv with columns\nshare_targeted (0..1) or n_targeted, "
-               "incremental_saves | qini | uplift, optional model/policy column")
-    expects = expects0
-    if p is not None and not MODEL_C_FINAL:
-        return placeholder("04_modelC_qini.png", "Model C: uplift (Qini) curve", "Waiting on final Model C",
-                           f"Draft input found ({p.name}), not published until TM_MODELC_FINAL=1.\n" + expects0)
+    title = "Uplift (Qini) curves"
+    p = find_csv(["*uplift*curve*.csv", "*uplift_curve*.csv", "*qini*.csv"], prefer=MODEL_C_DIRS)
+    expects = ("Expected: harness/model_c_artifacts/uplift_curve.csv with policy_or_model, frac_targeted, "
+               "cum_incremental_saves")
+    if p is not None and MODEL_C_FORCE_PLACEHOLDER:
+        return placeholder("04_modelC_qini.png", title, "Placeholder forced", f"TM_MODELC_PLACEHOLDER=1 (input: {p.name}).")
     if p is None:
-        return placeholder("04_modelC_qini.png", "Model C: uplift (Qini) curve", "Waiting on Model C", expects)
+        return placeholder("04_modelC_qini.png", title, "Waiting on Model C", expects)
     q = pd.read_csv(p)
-    xc = _col(q, "share_targeted", "frac_targeted", "fraction_targeted", "pct_targeted", "share", "frac", "n_targeted", "targeted")
-    yc = _col(q, "incremental_saves", "qini", "uplift", "incremental", "cum_uplift", "gain")
-    gc = _col(q, "model", "policy", "curve", "series")
-    if xc is None or yc is None:
-        return placeholder("04_modelC_qini.png", "Model C: uplift (Qini) curve", "Model C CSV found, columns not recognized",
-                           f"{p.name}: {list(q.columns)}\n" + expects)
+    xc = _col(q, "frac_targeted", "share_targeted", "fraction_targeted", "share", "frac", "n_targeted", "targeted")
+    yc = _col(q, "cum_incremental_saves", "incremental_saves", "qini", "uplift")
+    gc = _col(q, "policy_or_model", "model", "policy", "curve", "series")
+    if xc is None or yc is None or gc is None:
+        return placeholder("04_modelC_qini.png", title, "Model C CSV found, columns not recognized", f"{p.name}: {list(q.columns)}")
+    auuc = {}
+    ap = p.parent / "uplift_auuc.csv"
+    if ap.exists():
+        a = pd.read_csv(ap)
+        ac, av = _col(a, "policy_or_model", "model", "policy"), _col(a, "qini_area_ipw", "qini_area", "auuc")
+        if ac and av:
+            auuc = {short_policy(k): float(v) for k, v in zip(a[ac], a[av])}
+    style = {  # name: (color, lw, ls, zorder)
+        "Model B EV chooser": (MODELB_PINK, 3.0, "-", 6), "Model C T-learner": (MODELC_COL, 2.6, "-", 5),
+        "Model A risk ranking": (MODELA_COL, 1.8, "-", 3), "3+ calls rule": (RULE_COL, 1.8, "-", 4),
+        "Oracle (reference)": (DARK, 1.6, ":", 2), "Random": ("#BDBDBD", 1.6, "--", 1),
+    }
+    order = ["Model B EV chooser", "Model C T-learner", "Model A risk ranking", "3+ calls rule", "Oracle (reference)", "Random"]
+    q["series_name"] = q[gc].map(short_policy)
     f, ax = fig()
-    groups = q.groupby(gc) if gc else [("Model C", q)]
-    pal = [MAGENTA, DARK, GREY, "#F27BB5", "#1F77B4", "#FF9F1C"]
-    for i, (name, s) in enumerate(groups):
-        s = s.sort_values(xc)
+    curves = {}
+    for name in order + sorted(set(q.series_name) - set(order)):
+        s = q[q.series_name == name].sort_values(xc)
+        if not len(s):
+            continue
         xs = s[xc] / (s[xc].max() if s[xc].max() > 1 else 1)
-        is_rand = "random" in str(name).lower()
-        ax.plot(xs, s[yc], lw=3 if i == 0 and not is_rand else 1.8, ls="--" if is_rand else "-",
-                color=LIGHT if is_rand else pal[i % len(pal)], label=str(name))
+        col, lw, ls, z = style.get(name, (GREY, 1.5, "-", 2))
+        lab = name.replace("3+ calls rule", "3+ support calls rule").replace("Model C T-learner", "Model C uplift (T-learner)")
+        if name in auuc:
+            lab += f"  (Qini area {auuc[name]:.1f})"
+        ax.plot(xs, s[yc], color=col, lw=lw, ls=ls, zorder=z, label=lab)
+        curves[name] = dict(at10=float(np.interp(0.1, xs, s[yc])), at20=float(np.interp(0.2, xs, s[yc])), max=float(s[yc].max()))
+    ax.axhline(0, color=GREY, lw=0.6, alpha=0.6)
+    ax.set_xlim(0, 1)
     ax.xaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1.0))
-    ax.set_xlabel("Share of accounts targeted (ranked by predicted uplift)")
-    ax.set_ylabel(yc.replace("_", " "))
-    ax.set_title("Model C: who is actually persuadable")
-    ax.axhline(0, color=GREY, lw=0.8)
-    ax.legend(frameon=False, loc="best")
-    f.subplots_adjust(left=0.1, top=0.88)
-    save(f, "04_modelC_qini.png", f"Source: {p.name} (tm-offers).")
-    return {"file": str(p)}
+    ax.set_xlabel("Share of test accounts targeted (each policy's own ranking)")
+    ax.set_ylabel("Cumulative incremental saves\n(IPW estimate, simulated trial)")
+    ax.set_title("Who is persuadable? Incremental saves by share targeted")
+    ax.legend(frameon=False, loc="lower right", fontsize=9)
+    f.subplots_adjust(left=0.11, right=0.97, top=0.88)
+    save(f, "04_modelC_qini.png", esc(f"{CIRC_NOTE} Qini area = IPW, from uplift_auuc.csv. Source: {p.parent.name}/{p.name} (tm-offers)."))
+    return {"file": str(p), "y": yc, "auuc_ipw": auuc, "curves": curves}
 
 
 def chart_policy():
-    p = find_csv(["*policy*value*.csv", "*policy_value*.csv", "*policy_eval*.csv", "*policies*.csv"], prefer=MODEL_C_DIRS)
-    expects = ("Expected: harness/out/[charts/]*policy*value*.csv with columns\npolicy, churners_saved, "
-               "retained_revenue_net, cost_per_save\npolicies: " + ", ".join(POLICY_ORDER))
-    if p is not None and not MODEL_C_FINAL:
-        return placeholder("05_modelC_policy_value.png", "Model C: policy value", "Waiting on final Model C",
-                           f"Draft input found ({p.name}), not published until TM_MODELC_FINAL=1.\n" + expects)
+    title = "Policy value"
+    p = find_csv(["policy_eval.csv", "*policy*value*.csv", "*policy_eval*.csv", "*policies*.csv"], prefer=MODEL_C_DIRS)
+    expects = "Expected: harness/model_c_artifacts/policy_eval.csv with policy + *_dr_usd columns"
+    if p is not None and MODEL_C_FORCE_PLACEHOLDER:
+        return placeholder("05_modelC_policy_value.png", title, "Placeholder forced", f"TM_MODELC_PLACEHOLDER=1 (input: {p.name}).")
     if p is None:
-        return placeholder("05_modelC_policy_value.png", "Model C: policy value", "Waiting on Model C", expects)
+        return placeholder("05_modelC_policy_value.png", title, "Waiting on Model C", expects)
     t = pd.read_csv(p)
-    pc = _col(t, "policy")
-    sc = _col(t, "churners_saved", "saved", "saves")
-    rc = _col(t, "retained_revenue_net", "net_revenue", "retained_revenue", "revenue_net", "net_value", "revenue")
-    cc = _col(t, "cost_per_save")
-    if pc is None or (rc is None and sc is None):
-        return placeholder("05_modelC_policy_value.png", "Model C: policy value", "Model C CSV found, columns not recognized",
-                           f"{p.name}: {list(t.columns)}\n" + expects)
-
-    def rank(v):
-        v = str(v).lower()
-        for i, keys in [(4, ["nothing", "no outreach", "none"]), (3, ["random"]), (2, ["3+", "rule", "calls"]),
-                        (1, ["every", "blanket", "all"]), (0, ["ev", "model", "target", "uplift"])]:
-            if any(k in v for k in keys):
-                return i
-        return 9
-    t = t.assign(_o=t[pc].map(rank)).sort_values("_o")
-    metric = rc or sc
+    need = ["policy", "net_value_no_upsell_dr_usd", "net_value_with_upsell_dr_usd", "churners_saved_dr", "cost_per_save_dr_usd"]
+    if not set(need) <= set(t.columns):
+        return placeholder("05_modelC_policy_value.png", title, "Model C CSV found, DR columns missing", f"{p.name}: {list(t.columns)}")
+    t = t.assign(name=t.policy.map(short_policy))
+    t["_o"] = t.name.map(lambda n: POLICY_ORDER.index(n) if n in POLICY_ORDER else 50)
+    t = t.sort_values("_o").reset_index(drop=True)
+    main_c, up_c = "net_value_no_upsell_dr_usd", "net_value_with_upsell_dr_usd"
     f, ax = fig()
-    colors = [MAGENTA if rank(v) == 0 else (GREY if rank(v) == 4 else DARK) for v in t[pc]]
-    bars = ax.barh(t[pc].astype(str), t[metric], color=colors)
+    y = np.arange(len(t))
+    h = 0.38
+    rows = []
+    for i, r in t.iterrows():
+        n = r["name"]
+        if n == "Model B EV chooser":
+            col, hatch, ec = MODELB_PINK, None, "none"
+        elif n == "Model C T-learner":
+            col, hatch, ec = MODELC_COL, None, "none"
+        elif n.startswith("Oracle"):
+            col, hatch, ec = "#EDEDED", "////", "#9A9A9A"
+        else:
+            col, hatch, ec = "#7A7A7A", None, "none"
+        ax.barh(i - h / 2, r[main_c], h, color=col, hatch=hatch, edgecolor=ec, lw=0.6, zorder=3)
+        ax.barh(i + h / 2, r[up_c], h, color=col, alpha=0.35 if not n.startswith("Oracle") else 1.0, hatch=hatch,
+                edgecolor=ec, lw=0.6, zorder=3)
+        rows.append(dict(policy=r.policy, label=n, net_value_no_upsell_dr_usd=r[main_c], net_value_with_upsell_dr_usd=r[up_c],
+                         churners_saved_dr=r.churners_saved_dr, cost_per_save_dr_usd=r.cost_per_save_dr_usd,
+                         n_contacted=r.get("n_contacted")))
+    lo = min(0, t[[main_c, up_c]].min().min())
+    hi = max(0, t[[main_c, up_c]].max().max())
+    span = hi - lo
+    xtxt = hi + span * 0.04
+    for i, r in t.iterrows():
+        if r["name"] == "Do nothing":
+            lab = "$0 (baseline: no offers)"
+        else:
+            cps = f"${r.cost_per_save_dr_usd:,.0f}/save" if pd.notna(r.cost_per_save_dr_usd) else "n/a"
+            lab = (f"{_money(r[main_c])}  |  {_money(r[up_c])} w/ upsell\n"
+                   f"{r.churners_saved_dr:.1f} saves · {cps}")
+        ax.text(xtxt, i, esc(lab), va="center", ha="left", fontsize=8.6, color=DARK, linespacing=1.25,
+                fontweight="bold" if r["name"] == "Model B EV chooser" else "normal")
+    ax.set_yticks(y, t.name)
+    for tl in ax.get_yticklabels():
+        if tl.get_text() == "Model B EV chooser":
+            tl.set_fontweight("bold")
+            tl.set_color(MODELB_PINK)
     ax.invert_yaxis()
-    ax.axvline(0, color=GREY, lw=0.8)
-    money = rc is not None
-    for b, (_, r) in zip(bars, t.iterrows()):
-        v = r[metric]
-        lab = (f"-${abs(v):,.0f}" if v < 0 else f"${v:,.0f}") if money else f"{v:,.0f}"
-        extra = []
-        if sc and money:
-            extra.append(f"{r[sc]:,.0f} saved")
-        if cc and pd.notna(r.get(cc)):
-            extra.append(f"${r[cc]:,.0f}/save")
-        lab += ("  (" + ", ".join(extra) + ")") if extra else ""
-        ax.text(max(v, 0), b.get_y() + b.get_height() / 2, "  " + esc(lab), va="center", ha="left", fontsize=10,
-                fontweight="bold" if rank(r[pc]) == 0 else "normal")
-    ax.set_xlabel(("Retained revenue net of offer cost" if money else "Churners saved") + " (simulated)")
-    if money:
-        ax.xaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter("${x:,.0f}"))
-    ax.set_title("Targeted offers vs blanket policies")
-    lo, hi = ax.get_xlim()
-    ax.set_xlim(lo - (hi - lo) * 0.05 if lo < 0 else lo, max(hi, 0) + (hi - lo) * 0.6)
-    f.subplots_adjust(left=0.2, top=0.88)
-    save(f, "05_modelC_policy_value.png", f"Source: {p.name} (tm-offers).")
-    return {"file": str(p), "table": t.drop(columns="_o").to_dict("records")}
+    ax.axvline(0, color=GREY, lw=0.8, zorder=2)
+    ax.grid(axis="x", color=LIGHT, lw=0.6, alpha=0.7, zorder=0)
+    ax.set_xlim(lo - span * 0.04, hi + span * 0.62)
+    ax.set_xticks([v for v in ax.get_xticks() if lo - span * 0.04 <= v <= hi * 1.001])
+    ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: _money(v, plus=False) if v else "$0"))
+    ax.set_xlabel("Net value, 24-month margin minus offer cost (doubly-robust estimate)")
+    ax.set_title("Targeted offers beat blanket policies")
+    from matplotlib.patches import Patch
+    ax.legend(handles=[Patch(color="#7A7A7A", label="Retention only"), Patch(color="#7A7A7A", alpha=0.35, label="With upsell")],
+              frameon=False, loc="lower left", fontsize=8, handlelength=1.2, borderaxespad=0.2)
+    f.subplots_adjust(left=0.25, right=0.98, top=0.9)
+    n_test = int(t.n_test_accounts.iloc[0]) if "n_test_accounts" in t else None
+    reps = int(t.trial_replicates.iloc[0]) if "trial_replicates" in t else None
+    save(f, "05_modelC_policy_value.png",
+         esc(f"{CIRC_NOTE} DR estimates, {n_test:,} test accounts x {reps} re-randomized cohorts. "
+             f"Oracle uses the hidden simulated effects (reference only). Source: {p.parent.name}/{p.name} (tm-offers)."))
+    return {"file": str(p), "estimator": "doubly_robust", "table": rows}
 
 
 # ------------------------------------------------------------------ 06 learning curve
@@ -474,7 +530,7 @@ def main():
             SCORE_NOTE = f"Holdout scores: {hold.name}."
     if not SCORE_NOTE:
         SCORE_NOTE = "Scores on all accounts (incl. training rows); see model card for holdout metrics."
-    out = {"sources": {k: (v.source, v.path) for k, v in data.items()}}
+    out = {"sources": {k: (v.source, v.path) for k, v in data.items()}, "score_note": SCORE_NOTE}
     out["quadrant"] = chart_quadrant(df)
     chart_top20(df)
     out["gain"] = chart_gain(eval_df)

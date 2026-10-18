@@ -130,13 +130,35 @@ def open_card(acc: str):
 
 
 # ---------------- Insights ----------------
+def held_out_gain() -> dict | None:
+    """Held-out Model A gain stats written by app/charts/make_charts.py (None if missing or not out-of-fold)."""
+    import json
+    p = Path(__file__).resolve().parent / "charts" / "chart_stats.json"
+    try:
+        s = json.loads(p.read_text())
+        g = s.get("gain") or {}
+        if "model_top10" not in g or not str(s.get("score_note", "")).startswith("Holdout"):
+            return None
+        return g
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def insights():
     st.title("Insights from T-Mobile's own sandbox data")
     st.caption("Judge-provided sandbox: 5,000 synthetic households, 12 months of usage, billing and support. "
                "Churn figures are **sandbox scoring** (real outcomes are private to the judges).")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Expected to churn in 90 days", "14.6%", help="Sandbox scoring, 5,000 accounts (plan doc)")
-    c2.metric("Churners in riskiest 20% of accounts", "61%", help="Targeting beats blanket discounts")
+    gain = held_out_gain()
+    if gain is not None:
+        c2.metric("Churners caught by calling the riskiest 10%", f"{gain['model_top10']:.0%}",
+                  help="Model A held-out (5-fold out-of-fold) scores on synthetic labels"
+                       + (f"; oracle {gain['oracle_top10']:.0%}" if gain.get("oracle_top10") is not None else "")
+                       + (f", support-calls ranking {gain['rule_rank_top10']:.0%}" if gain.get("rule_rank_top10") is not None else "")
+                       + ". All data synthetic.")
+    else:
+        c2.metric("Churners in riskiest 20% of accounts", "61%", help="Targeting beats blanket discounts")
     c3.metric("Asked about cancelling", "346 accounts")
     c4.metric("Promo expired recently", "553 accounts")
 

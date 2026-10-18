@@ -17,7 +17,7 @@ en/es phone mockup). Messages are deterministic templates in `app/messages.py`.
 
 ## Charts
 `python app/charts/make_charts.py` regenerates slide-ready 1600x900 PNGs in `app/charts/` from `harness/out/` (also shown on
-the in-app **Charts** screen, with a Regenerate button). Model C charts read `harness/model_c_artifacts/` (preferred) or
-`harness/out/`, and stay placeholders until `TM_MODELC_FINAL=1`. The learning curve reads
+the in-app **Charts** screen, with a Regenerate button). Model C charts read `harness/model_c_artifacts/` (doubly-robust
+policy values, IPW Qini curves) and are final by default; `TM_MODELC_PLACEHOLDER=1` forces placeholders. The learning curve reads
 `harness/bench/out/learning_curve_long.csv` (target == churn_90d). The phone mockup shows offers.csv `message_en`/`message_es`
 verbatim when present, otherwise the `app/messages.py` templates.
