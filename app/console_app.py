@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import sys
 from pathlib import Path
 
@@ -15,6 +16,7 @@ import streamlit as st
 
 from harness.engine import build_console
 from harness.messages import outbound_title
+from harness.playbook.rules import ASSUMPTION_CREDIT_CENTS, FREQUENCY_CAP_DAYS, RULES, VALUE_FORMULA
 from harness.projections import acceptance_curve, project, upgrade_curve
 
 st.set_page_config(page_title="Retention Console", layout="wide")
@@ -51,6 +53,13 @@ def dollars(cents: int | None) -> str:
 @st.cache_resource(show_spinner="Scoring the sandbox…")
 def get_console():
     return build_console()
+
+
+@st.cache_resource(show_spinner="Building the targeting playbook…")
+def get_playbook():
+    from harness.playbook.build import build_playbook
+
+    return build_playbook(get_console())
 
 
 def apply_css() -> None:
@@ -530,6 +539,128 @@ def projections(console) -> None:
     )
 
 
+def _playbook_message(decision: dict, credit_cents: int, language: str) -> str:
+    text = decision["message_en"] if language != "es" else decision["message_es"]
+    if decision.get("offer_is_assumption"):
+        text = text.replace(f"{decision['offer_cents']} cents", f"{int(credit_cents)} cents")
+    return text
+
+
+def targeting_page(console) -> None:
+    playbook = get_playbook()
+    st.subheader("Targeting playbook")
+    st.caption(VALUE_FORMULA)
+    st.caption(
+        f"Product setting: at most one outbound nudge per customer per {FREQUENCY_CAP_DAYS} days. "
+        "This screen does not show projected churn or dollar outcomes."
+    )
+    credit = st.number_input(
+        "Assumption credit (cents). Not a T-Mobile price.",
+        min_value=0,
+        max_value=100_000,
+        value=ASSUMPTION_CREDIT_CENTS,
+        step=500,
+    )
+    priority = playbook.grid.loc[playbook.grid["priority"]].iloc[0]
+    st.markdown(
+        f"**Priority cell: {priority['risk_label']} × {priority['value_label']}.** "
+        f"{int(priority['accounts']):,} accounts, "
+        f"{priority['expected_churners']:.0f} expected churners from the sandbox score."
+    )
+    heat = playbook.grid.pivot(index="risk_label", columns="value_label", values="accounts")
+    heat = heat.reindex(index=["Top 10% risk", "10–30% risk", "Rest"])
+    fig = go.Figure(
+        go.Heatmap(
+            z=heat.values,
+            x=list(heat.columns),
+            y=list(heat.index),
+            colorscale=[[0, "#F7F1EA"], [1, "#E20074"]],
+            text=heat.values,
+            texttemplate="%{text}",
+            hovertemplate="%{y} × %{x}<br>%{z} accounts<extra></extra>",
+        )
+    )
+    fig.update_layout(title="Accounts by risk band and value")
+    chart(fig, height=320)
+    counts = playbook.grid.copy()
+    counts["expected_churners"] = counts["expected_churners"].map(lambda value: f"{value:.1f}")
+    st.dataframe(
+        counts[["risk_label", "value_label", "accounts", "expected_churners", "priority"]],
+        hide_index=True,
+        width="stretch",
+    )
+    st.markdown("**Rules, first match wins**")
+    st.dataframe(pd.DataFrame(RULES)[["when", "action", "offer", "channel"]], hide_index=True, width="stretch")
+
+    ranked = playbook.ranked()
+    st.markdown("**Ranked targets**")
+    st.caption("Rank score is Model A risk times the value score. It is not a projected save.")
+    show = ranked.head(200).copy()
+    show["model_p"] = show["model_p"].map(lambda value: f"{value:.1%}")
+    show["value_score_cents"] = show["value_score_cents"].map(lambda value: f"{value:,.0f}¢")
+    show["rank_score"] = show["rank_score"].map(lambda value: f"{value:,.0f}")
+    st.dataframe(
+        show[
+            [
+                "account_id",
+                "risk_band",
+                "value_band",
+                "trigger",
+                "action",
+                "offer",
+                "reason_1",
+                "reason_1_source",
+                "rejected_next",
+            ]
+        ],
+        hide_index=True,
+        width="stretch",
+        height=360,
+    )
+    st.download_button(
+        "Download the full target list (CSV)",
+        ranked.to_csv(index=False).encode("utf-8"),
+        file_name="targeting_playbook.csv",
+        mime="text/csv",
+    )
+
+    options = [row.account_id for row in ranked.itertuples()]
+    choice = st.selectbox("One customer", options, index=0)
+    decision = playbook.decision(choice)
+    st.markdown(f"**{choice}** · {decision['action']}")
+    st.write(decision["why"])
+    row = playbook.frame.set_index("account_id").loc[choice]
+    columns = st.columns(2)
+    columns[0].metric("Segment", f"{row['risk_band']} / {row['value_band']}")
+    columns[1].metric("Channel", decision["channel"])
+    st.write(f"Trigger: {decision['trigger']}")
+    st.write(f"Rule: {decision['rule_id']}")
+    offer_cents = int(credit) if decision.get("offer_is_assumption") else decision.get("offer_cents")
+    offer_text = decision["offer_name"]
+    if offer_cents is not None:
+        offer_text += f" · {dollars(int(offer_cents))}"
+        if decision.get("offer_is_assumption"):
+            offer_text += " (assumption, not a T-Mobile price)"
+    st.write(f"Offer: {offer_text}")
+    if decision.get("assumption_note"):
+        st.caption(decision["assumption_note"])
+    st.write(f"Why the next action was rejected: {decision['rejected']}")
+    st.markdown("**Top reasons**")
+    for reason in decision["reasons"]:
+        if reason["text"]:
+            st.write(f"· {reason['text']} ({reason['source']})")
+    english = _playbook_message(decision, int(credit), "en")
+    spanish = _playbook_message(decision, int(credit), "es")
+    st.markdown("**Draft**")
+    st.markdown(
+        "<div class='phone'><div class='phone-bar'></div>"
+        f"<div class='quiet'>English</div><div class='bubble'>{html.escape(english)}</div>"
+        f"<div class='quiet'>Español</div><div class='bubble'>{html.escape(spanish)}</div>"
+        "<div class='quiet'>On-screen mockup. Nothing is sent from this phone.</div></div>",
+        unsafe_allow_html=True,
+    )
+
+
 def main() -> None:
     apply_css()
     banner()
@@ -542,7 +673,7 @@ def main() -> None:
     st.caption("DubHacks '26 · T-Mobile track")
     page = st.sidebar.radio(
         "Screen",
-        ["Overview", "At-risk queue", "Next best action", "Projections"],
+        ["Overview", "At-risk queue", "Next best action", "Targeting playbook", "Projections"],
     )
     st.sidebar.caption("Synthetic sandbox data. Money is cents until it is shown as dollars.")
     if page == "Overview":
@@ -551,6 +682,8 @@ def main() -> None:
         queue(console)
     elif page == "Next best action":
         action_page(console)
+    elif page == "Targeting playbook":
+        targeting_page(console)
     else:
         projections(console)
 
