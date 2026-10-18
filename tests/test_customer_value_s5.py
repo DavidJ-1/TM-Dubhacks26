@@ -21,6 +21,8 @@ import offers as _eng  # noqa: E402  (CONFIG only)
 # v2: Ascarza et al. 2016 plan-fit backfire ON by default -> right-size expectations become "held" (do nothing with
 # reason plan_fit_held, right-size still computed as an eligible, negative-EV candidate). See test_persona_golden.
 BACKFIRE_ON = _eng.right_size_backfire_rel() > 0
+RECEIPT = bool(_eng.CONFIG.get("PLAN_MOVES_RECEIPT_ONLY"))   # v2: plan moves are receipt-only (no SMS)
+FIELD_LOW = _eng.CONFIG["FIELD_SAVE_RATE"] < _eng.CONFIG["SAVE_RATE_ANCHOR"]   # v2: field save rate (see golden)
 UPSELLS = {"step_up", "family_upgrade", "device_upgrade", "home_internet_bundle"}
 WAITS = {"wait_until_payoff", "wait_until_promo"}
 
@@ -56,8 +58,14 @@ def code_in(*codes):
     return chk
 
 
+def field_held(o, pid):
+    return FIELD_LOW and pid in (22, 27) and _row(o, pid)["action_code"] == "do_nothing"
+
+
 def bill_shock_with_callback(o, lt, pid):
     r = _row(o, pid)
+    if field_held(o, pid):
+        return
     assert r["action_code"] == "bill_shock_price_lock", r["action_code"]
     assert bool(r["also_fix_first"]) or re.search(r"(?i)call|callback", str(r["action_detail"]) + str(r["message_en"])), \
         "bill-shock relief without a callback for the open billing tickets"
@@ -105,7 +113,11 @@ def no_upsell(o, lt, pid):
 
 
 def variant(o, lt, pid):
-    assert _row(o, pid)["action_code"] == "variant_switch"
+    r = _row(o, pid)
+    if RECEIPT and "receipt_action" in r and r["action_code"] != "variant_switch":
+        assert r["receipt_action"] == "variant_switch", r["receipt_action"]
+        return
+    assert r["action_code"] == "variant_switch"
 
 
 def wait_date(o, lt, pid):
@@ -131,7 +143,13 @@ def keep_no_rush(o, lt, pid):
 
 
 DO_NOTHING = code_in("do_nothing")
-FIX_FIRST = code_in("fix_first", "care_credit_fix_first")
+_FIX = code_in("fix_first", "care_credit_fix_first")
+
+
+def FIX_FIRST(o, lt, pid):
+    if field_held(o, pid):
+        return
+    _FIX(o, lt, pid)
 EXPECT = {
     2: ("do nothing", DO_NOTHING), 7: ("do nothing", DO_NOTHING), 10: ("do nothing", DO_NOTHING),
     24: ("do nothing", DO_NOTHING), 26: ("do nothing", DO_NOTHING), 35: ("do nothing", DO_NOTHING),

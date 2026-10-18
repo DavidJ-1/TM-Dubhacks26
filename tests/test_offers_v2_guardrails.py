@@ -109,3 +109,43 @@ def test_right_size_excludes_volatile_or_declining(run):
         pytest.skip("no offer_candidates")
     blk = c[(c.action_code == "right_size") & c.blocked_or_ineligible_reason.fillna("").str.contains("backfire guardrail")]
     assert (blk.eligible.astype(str) == "False").all()
+
+
+# ---- v2: field save rate, profit gate, receipt-only plan moves, perk reminder -----------------------------------
+def test_field_save_rate_scales_base_table_preserving_ratios():
+    C = eng.CONFIG
+    k = C["FIELD_SAVE_RATE"] / C["SAVE_RATE_ANCHOR"]
+    for a, d in C["SAVE_RATE_BASE"].items():
+        if a in C.get("SAVE_RATE_ABSOLUTE", {}):
+            continue
+        for t, v in d.items():
+            assert abs(C["SAVE_RATE"][a][t] - v * k) < 1e-6, (a, t)
+    assert C["SAVE_RATE"]["perk_reminder"] == {"on_target": 0.02, "off_target": 0.01}
+    assert C["PERK_REMINDER_COST"] == 0.50
+
+
+def test_apply_field_save_rate_roundtrip():
+    old = eng.CONFIG["FIELD_SAVE_RATE"]
+    try:
+        eng.apply_field_save_rate(0.22)
+        assert abs(eng.CONFIG["SAVE_RATE"]["fix_first"]["on_target"] - 0.35 * 0.22 / 0.45) < 1e-6
+    finally:
+        eng.apply_field_save_rate(old)
+
+
+def test_no_nonforced_contact_with_nonpositive_ev(run):
+    o, _, _ = run
+    c = o[o.action_code != "do_nothing"]
+    bad = c[(c.expected_value <= 0) & c.pick_override.isna()]
+    assert bad.empty, f"{len(bad)} non-forced contacts with EV <= 0"
+
+
+def test_plan_moves_receipt_only(run):
+    o, _, _ = run
+    if not eng.CONFIG["PLAN_MOVES_RECEIPT_ONLY"] or "receipt_action" not in o:
+        pytest.skip("receipt-only off / old outputs")
+    assert not o.action_code.isin(["variant_switch", "right_size"]).any()
+    assert set(o.receipt_action.dropna()) <= {"variant_switch", "right_size"}
+    assert (o.loc[o.action_code == "do_nothing", "channel"] == "none").all()
+    assert (o.loc[o.action_code != "do_nothing", "channel"] == "sms").all()
+    assert (o.loc[o.action_code == "do_nothing", "message_en"].fillna("") == "").all()

@@ -193,3 +193,16 @@ Persona golden tests: `tests/test_persona_golden.py` (42 personas).
   held accounts get do_nothing_reason `plan_fit_held` ("They could save $X/month ... we'll show it if they ask").
   `scale` is the sensitivity knob (0.25 keeps 120 right-sizes). SAME_COVERAGE_RULE, PORT_OUT_ALWAYS_CONTACT,
   fix-first and BILL_SHOCK_RELIEF_OVERRIDE are unchanged.
+
+## v2: field save rate, profit gate, receipt-only plan moves (Sat 10/17 ~11 PM PDT; all numbers synthetic)
+- `FIELD_SAVE_RATE` 0.10 (env `TM_FIELD_SAVE_RATE`): SAVE_RATE = SAVE_RATE_BASE x 0.10 / 0.45 (anchor = risk-weighted
+  mean save rate of the engine's contacts under the base table). Per-action ratios preserved; the right-size
+  backfire is not scaled. Field evidence 5-15% (Ascarza et al. Marketing Science 2018; Verhelst et al. 2023).
+- `PROFIT_GATE` (default ON): no non-forced contact with EV <= 0 ("Stay silent: expected to cost more than it
+  saves."). pick() already enforces EV > 0, so the gate is a defensive check; forced EV <= 0 contacts are the
+  port-out check-ins / fix-firsts (pick_override = port_out).
+- `PLAN_MOVES_RECEIPT_ONLY` (default ON): right_size / variant_switch are never texted; they are computed and put on
+  the receipt (`receipt_action`, `receipt_skus`, `receipt_monthly_saving`, `receipt_expected_revenue_given_up_mo`,
+  `receipt_reason`; `channel` = sms / none). SAME_COVERAGE_RULE forces the variant onto the receipt.
+- perk reminder: save 2% / 1% (field units, unscaled), cost $0.50 (RESEARCH.md s12). SERVICE_MARGIN 0.50 = upper bound.
+- `scripts/overpaying_accounts.py` reproduces the household optimizer's 682 accounts / $14,830/mo.
