@@ -42,7 +42,7 @@ def write_summary(out: Path, led, hh, mv, hv, src, offers, cand, acct):
       f"Essentials plan): **{len(lfl)} accounts, ${lfl.saving_mo.sum():,.0f}/mo**. Trade-off moves (receipt "
       f"'you'd lose X' line only): {len(pf) - len(lfl)} accounts, ${pf.saving_mo.sum() - lfl.saving_mo.sum():,.0f}/mo.")
     ov = pf[pf.account_id.isin(eng)]
-    w(f"- Grok Bot's 488/194 split is a different cut: optimizer movers that the engine also flags right-size/variant "
+    w(f"- the team's 488/194 split is a different cut: optimizer movers that the engine also flags right-size/variant "
       f"= **{len(ov)}** (${ov.saving_mo.sum():,.0f}/mo) vs optimizer-only {len(pf) - len(ov)} "
       f"(${pf.saving_mo.sum() - ov.saving_mo.sum():,.0f}/mo). That is 'engine agrees', not 'no trade-off': "
       f"{int((~ov.like_for_like).sum())} of the {len(ov)} still give something up, and "
@@ -50,7 +50,7 @@ def write_summary(out: Path, led, hh, mv, hv, src, offers, cand, acct):
       "Essentials Saver) are optimizer-only.\n")
     m44 = pf.merge(mv[["account_id", "current_plan", "best_plan"]], on="account_id")
     m44 = m44[(m44.current_plan == "Experience More 2.0") & (m44.best_plan == "Essentials 4 Line Offer 2.0")]
-    w(f"- **Headline (Grok Bot decision) = the {len(ov)}: ${ov.saving_mo.sum():,.0f}/mo if all accept; expected "
+    w(f"- **Headline (team decision) = the {len(ov)}: ${ov.saving_mo.sum():,.0f}/mo if all accept; expected "
       f"money back ${0.03 * ov.saving_mo.sum():,.0f}/mo at 3%, ${0.13 * ov.saving_mo.sum():,.0f}/mo at 13%.** "
       f"Strictly trade-off-free part of it: {int(ov.like_for_like.sum())} accounts, "
       f"${ov[ov.like_for_like].saving_mo.sum():,.0f}/mo.")

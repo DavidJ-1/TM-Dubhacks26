@@ -128,7 +128,7 @@ CONFIG = {
     #     (PORT_OUT_ALWAYS_CONTACT, SAME_COVERAGE_RULE, BILL_SHOCK_RELIEF_OVERRIDE) are not overridden; their
     #     EV <= 0 contacts are counted in offers.csv (pick_override + expected_value) for David to decide.
     "PROFIT_GATE": True,
-    # --- v2 spec (Grok Bot): plan moves (right_size, variant_switch) no longer produce an SMS. They are still
+    # --- v2 spec (team): plan moves (right_size, variant_switch) no longer produce an SMS. They are still
     #     computed and shown on the RECEIPT only (offers.csv receipt_* columns, channel='receipt'); the text
     #     decision is made among the other actions on company-side EV (customer savings weighted zero: only plan
     #     moves carry customer benefit, and they are excluded from texts). SAME_COVERAGE_RULE now forces the
@@ -218,7 +218,7 @@ CONFIG = {
     #   request; the sandbox has no carrier port-request field). So PORT_OUT_SIGNAL_ORIGIN = "self_initiated".
     #   Default "all" (the signal is the customer's own port_out_inquiry). off: port-out accounts get no outreach. self_initiated_only / all: one save attempt, reported in
     #   already_leaving_save_attempt, NEVER in the headline count or net (in_headline=False).
-    "PORT_OUT_CONTACT": "all",       # v2 default 'all' (Grok Bot): the sandbox signal is the customer's own inquiry
+    "PORT_OUT_CONTACT": "all",       # v2 default 'all' (team): the sandbox signal is the customer's own inquiry
     "PORT_OUT_SIGNAL_ORIGIN": "self_initiated",
     # v2: an open unresolved support ticket (unresolved_90d >= 1) makes fix-first (or care credit + fix-first) the
     #   ONLY allowed message type for the account (no upsell / other offers). FIX_FIRST_FORCE (David can flip):

@@ -1,7 +1,7 @@
 """Per-account money ledger (tm-design column spec, final) + events.csv. ALL NUMBERS SYNTHETIC (docs say so;
 no output string says it, per David's rule). Read-only inputs: committed guardrail + detail (v2-efficacy engine_rules/out/demo),
 outreach_card.csv (TM-Dubhacks26 docs/outreach; v2-efficacy has none), events.build_events (sandbox opened mode=ro),
-base.py economics. Open-ticket rule (Grok Bot / tm-design 23:33): a contacted account with an open ticket
+base.py economics. Open-ticket rule (team 23:33): a contacted account with an open ticket
 (unresolved_90d >= 1) whose action is perk_reminder gets the engine's fix-first message instead (cost $15, annoyance $4,
 save rate 0.35 before the 10%/44.4% scaling); fix-first types are unchanged. The total is NOT forced to $4,109."""
 import sys, json, re, numpy as np, pandas as pd
