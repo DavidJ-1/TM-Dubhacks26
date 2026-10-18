@@ -1,0 +1,5 @@
+model,AUC,top10_capture,EMP_default_usd,EMP_opt_contact_frac,EMP_ourCLV_usd,EMP_ourCLV_opt_frac
+baseline LR (incl. port-out/competitor),0.8531,0.62,0.351,0.0347,7.985,0.1791
+compliant spline LR,0.854,0.62,0.365,0.0349,8.026,0.2095
+class-weighted LR,0.8547,0.584,0.329,0.0358,8.063,0.2083
+oracle p_true (ceiling),0.8639,0.642,0.385,0.0373,8.291,0.1795

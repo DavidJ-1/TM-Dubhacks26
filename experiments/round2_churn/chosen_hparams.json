@@ -1,0 +1,128 @@
+{
+ "[full] baseline ModelA LR": [
+  "",
+  "",
+  "",
+  "",
+  ""
+ ],
+ "[full] spline-LR tuned (core)": [
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}",
+  "{'columntransformer__s__n_knots': 4, 'logisticregression__C': 0.01}",
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}",
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}",
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}"
+ ],
+ "[full] spline-LR tuned (core+raw contacts)": [
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}",
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}",
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}",
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}",
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}"
+ ],
+ "[full] EBM interactions=10 (core+raw contacts)": [
+  "",
+  "",
+  "",
+  "",
+  ""
+ ],
+ "[full] HGB tuned inner-CV (core+raw contacts)": [
+  "{'l2_regularization': 1.0, 'max_iter': 150, 'max_leaf_nodes': 4, 'min_samples_leaf': 150}",
+  "{'l2_regularization': 10.0, 'max_iter': 150, 'max_leaf_nodes': 4, 'min_samples_leaf': 50}",
+  "{'l2_regularization': 10.0, 'max_iter': 400, 'max_leaf_nodes': 4, 'min_samples_leaf': 50}",
+  "{'l2_regularization': 1.0, 'max_iter': 150, 'max_leaf_nodes': 4, 'min_samples_leaf': 50}",
+  "{'l2_regularization': 1.0, 'max_iter': 150, 'max_leaf_nodes': 4, 'min_samples_leaf': 150}"
+ ],
+ "[full] LightGBM tuned inner-CV (core+raw contacts)": [
+  "{'min_child_samples': 50, 'n_estimators': 500, 'num_leaves': 3, 'reg_lambda': 20.0}",
+  "{'min_child_samples': 150, 'n_estimators': 200, 'num_leaves': 3, 'reg_lambda': 1.0}",
+  "{'min_child_samples': 50, 'n_estimators': 500, 'num_leaves': 7, 'reg_lambda': 20.0}",
+  "{'min_child_samples': 150, 'n_estimators': 200, 'num_leaves': 7, 'reg_lambda': 1.0}",
+  "{'min_child_samples': 150, 'n_estimators': 200, 'num_leaves': 3, 'reg_lambda': 1.0}"
+ ],
+ "[full] RECIPE-LR: generator terms (fits synthetic recipe)": [
+  "",
+  "",
+  "",
+  "",
+  ""
+ ],
+ "[full] RECIPE-spline-LR (fits synthetic recipe)": [
+  "",
+  "",
+  "",
+  "",
+  ""
+ ],
+ "[full] stack LR-meta[recipe-LR, spline, EBM]": [
+  "",
+  "",
+  "",
+  "",
+  ""
+ ],
+ "[compliant] baseline ModelA LR": [
+  "",
+  "",
+  "",
+  "",
+  ""
+ ],
+ "[compliant] spline-LR tuned (core)": [
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}",
+  "{'columntransformer__s__n_knots': 4, 'logisticregression__C': 0.01}",
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}",
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}",
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}"
+ ],
+ "[compliant] spline-LR tuned (core+raw contacts)": [
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}",
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}",
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}",
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}",
+  "{'columntransformer__s__n_knots': 3, 'logisticregression__C': 0.01}"
+ ],
+ "[compliant] EBM interactions=10 (core+raw contacts)": [
+  "",
+  "",
+  "",
+  "",
+  ""
+ ],
+ "[compliant] HGB tuned inner-CV (core+raw contacts)": [
+  "{'l2_regularization': 1.0, 'max_iter': 150, 'max_leaf_nodes': 4, 'min_samples_leaf': 150}",
+  "{'l2_regularization': 10.0, 'max_iter': 150, 'max_leaf_nodes': 4, 'min_samples_leaf': 50}",
+  "{'l2_regularization': 10.0, 'max_iter': 400, 'max_leaf_nodes': 4, 'min_samples_leaf': 50}",
+  "{'l2_regularization': 1.0, 'max_iter': 150, 'max_leaf_nodes': 4, 'min_samples_leaf': 50}",
+  "{'l2_regularization': 10.0, 'max_iter': 400, 'max_leaf_nodes': 4, 'min_samples_leaf': 150}"
+ ],
+ "[compliant] LightGBM tuned inner-CV (core+raw contacts)": [
+  "{'min_child_samples': 50, 'n_estimators': 500, 'num_leaves': 3, 'reg_lambda': 20.0}",
+  "{'min_child_samples': 150, 'n_estimators': 500, 'num_leaves': 3, 'reg_lambda': 20.0}",
+  "{'min_child_samples': 50, 'n_estimators': 200, 'num_leaves': 7, 'reg_lambda': 1.0}",
+  "{'min_child_samples': 150, 'n_estimators': 200, 'num_leaves': 7, 'reg_lambda': 1.0}",
+  "{'min_child_samples': 150, 'n_estimators': 500, 'num_leaves': 3, 'reg_lambda': 1.0}"
+ ],
+ "[compliant] RECIPE-LR: generator terms (fits synthetic recipe)": [
+  "",
+  "",
+  "",
+  "",
+  ""
+ ],
+ "[compliant] RECIPE-spline-LR (fits synthetic recipe)": [
+  "",
+  "",
+  "",
+  "",
+  ""
+ ],
+ "[compliant] stack LR-meta[recipe-LR, spline, EBM]": [
+  "",
+  "",
+  "",
+  "",
+  ""
+ ]
+}
