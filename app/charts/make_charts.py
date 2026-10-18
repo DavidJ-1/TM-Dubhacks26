@@ -523,7 +523,7 @@ def _plot_learning(t: pd.DataFrame, src: str):
     save(f, "06_learning_curve.png",
          f"Real 5k: trained on n sandbox accounts, scored on a 25% holdout (10 seeds). Synthetic 50k: trained on n of tm-data's "
          f"Gaussian-copula synthetic accounts, scored on all 5,000 sandbox accounts (3-10 seeds). Labels in both come from our "
-         f"own simulated recipe, so this is a pipeline check, not real-world accuracy. Pink band = +/-1 sd for the Model A logistic regression. Source: {Path(src).name} (tm-bench).")
+         f"own simulated recipe, so this is a pipeline check, not real-world accuracy. Points above the ceiling are noise: on the same real rows the oracle scores 0.864 and the model 0.869 (difference +0.005, 95% CI -0.003 to +0.015). Pink band = +/-1 sd for the Model A logistic regression. Source: {Path(src).name} (tm-bench).")
     return {"file": str(src), "metric": met, "ceiling": ceiling, "series": out}
 
 
