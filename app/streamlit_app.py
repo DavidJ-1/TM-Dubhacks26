@@ -144,6 +144,7 @@ def clean_text(t) -> str:
     t = re.sub(r"(?i)\basked (us )?about porting (their |the |a )?number( out)?\b", "Asked us about transferring their number", t)
     t = re.sub(r"(?i)\bport(ing)?[- ]out\b", "number transfer", t)
     t = re.sub(r"(?i)\bporting\b", "transferring", t)
+    t = re.sub(r"no-income upgrade model('|&#x27;)s top", r"simulated upgrade score\1s top", t)
     return t.strip()
 
 

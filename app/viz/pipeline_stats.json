@@ -1362,7 +1362,7 @@
      "option": "family upgrade",
      "cost": "\u2014",
      "customer": "\u2014",
-     "why": "not eligible: upgrade gate: not in the no-income upgrade model's top 15% (pct 4)",
+     "why": "not eligible: upgrade gate: not in the simulated upgrade score's top 15% (pct 4)",
      "win": false,
      "elig": false,
      "ev": null
@@ -1371,7 +1371,7 @@
      "option": "device upgrade",
      "cost": "\u2014",
      "customer": "\u2014",
-     "why": "not eligible: upgrade gate: not in the no-income upgrade model's top 15% (pct 4)",
+     "why": "not eligible: upgrade gate: not in the simulated upgrade score's top 15% (pct 4)",
      "win": false,
      "elig": false,
      "ev": null
@@ -1485,7 +1485,7 @@
      "option": "family upgrade",
      "cost": "\u2014",
      "customer": "\u2014",
-     "why": "not eligible: upgrade gate: not in the no-income upgrade model's top 15% (pct 47)",
+     "why": "not eligible: upgrade gate: not in the simulated upgrade score's top 15% (pct 47)",
      "win": false,
      "elig": false,
      "ev": null
@@ -1494,7 +1494,7 @@
      "option": "device upgrade",
      "cost": "\u2014",
      "customer": "\u2014",
-     "why": "not eligible: upgrade gate: not in the no-income upgrade model's top 15% (pct 47)",
+     "why": "not eligible: upgrade gate: not in the simulated upgrade score's top 15% (pct 47)",
      "win": false,
      "elig": false,
      "ev": null
@@ -1626,7 +1626,7 @@
      "option": "family upgrade",
      "cost": "\u2014",
      "customer": "\u2014",
-     "why": "not eligible: upgrade gate: not in the no-income upgrade model's top 15% (pct 51)",
+     "why": "not eligible: upgrade gate: not in the simulated upgrade score's top 15% (pct 51)",
      "win": false,
      "elig": false,
      "ev": null
