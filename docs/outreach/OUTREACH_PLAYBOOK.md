@@ -1,6 +1,8 @@
 # Outreach playbook: when we reach out, how, and what we say
 
-**All customers and numbers here are synthetic** (judge sandbox stub data, as_of 2026-10-01). No real T-Mobile customer data. No LLM: every message is a fixed template (`templates.json`) whose slots are filled from sandbox fields or the engine output by `draft_outreach.py`. Research basis: `RESEARCH.md` §14 (outreach channel, timing and rules; commit 63067b4). Brief line references are to `handoff/plan-doc-2026-10-17.txt`.
+**All customers and numbers here are synthetic** (judge sandbox stub data, as_of 2026-10-01). No real T-Mobile customer data. No LLM: every message is a fixed template (`templates.json`) whose slots are filled from sandbox fields or the engine output by `draft_outreach.py`. Research basis: `RESEARCH.md` §14 (outreach channel, timing and rules; commit 63067b4) and §15 (family plans, multi-line accounts and lock-in; commit f7cce1e).
+
+**Labels:** "synthetic" stays in internal docs like this one. **No customer message, receipt line or UI card text says "synthetic"** (David's rule). The script fails if one does. Brief line references are to `handoff/plan-doc-2026-10-17.txt`.
 
 **Current run (synthetic):** 184 accounts get a message and 4,858 stay silent. 3,935 accounts get at least one bill/app receipt line (6,339 lines). See `outreach_summary.md`.
 
@@ -58,7 +60,7 @@ Only texts say Reply YES/STOP. The script checks this.
 - **Skip anyone who opted out of marketing.** A marketing opt-out ends all marketing. Opt-outs are honored within 10 business days. We keep fix messages free of promotions.
 - **Send only 8 a.m.–8 p.m. in the customer's local time.** The sandbox has no time zone, so this is a send-time rule.
 - **Every text carries STOP.** Every channel has its own opt-out.
-- **Messages never use port-out or location data.** No template cites them. Note: the engine's risk score and its port-out contact override do read `port_out_inquiry` (see §7).
+- **Messages never use port-out or location data.** No template cites them. Note: the engine's risk score and its port-out contact override do read `port_out_inquiry` (see §8).
 - **We make no claim about pending FCC rule changes.** The only one checked (FCC 26-67) is not yet in force.
 
 ## 5. Tone and framing by customer type
@@ -74,7 +76,15 @@ Maps to: explainability and trust (L45), fixed en/es templates (L33), fields use
 
 We don't vary the pitch to persuade. In the Hillstrom test, choosing a different message per customer did not beat one good message. So the claim is: **the message matches your account and is easy to act on**. The push-away guardrail belongs to tm-models (taken over from tm-efficacy).
 
-## 6. Non-creepy rules
+## 6. Family accounts, lock-in and the price guarantee (RESEARCH.md §15)
+Maps to: explainability and trust (L45), feasibility (L46).
+- **Over 90% of T-Mobile postpaid phone *lines* are on multi-line accounts.** That's lines, not accounts (TMUS Q4'25 call, §15a). Our sandbox has more single-line accounts, about 17% of lines, so we score and message at the account level. Family messages open with "your N-line account".
+- **We never claim that multi-line accounts churn X% less, or that adding a line lowers churn.** No US carrier publishes the gap, and multi-line customers self-select (§15a, §15c). The −0.15 per extra line in `harness/labels.py` is an assumption in our generator, not a finding. There's no add-a-line message.
+- **A phone upgrade buys lock-in; a plan step-up adds margin but no lock-in** (§15e). The lock-in comes from the device plan and promo credits that are lost on leaving. Step-ups and phone upgrades are not part of outreach today: the retention-only policy picks neither.
+- **The early termination fee is $0. The 5-year price guarantee is a price promise, not a lock-in** (§15b, §15e). Templates state it only as "comes with / keeps its N-year price guarantee". The script rejects any customer text containing lock, locked, contract, contrato or permanencia.
+- **Line departures** (a member leaving the account) are the risky family moment, but the sandbox has no signal for them. The customer-friendly future play is "keep your number at T-Mobile on your own line" (Change of Responsibility), never a hard save (§15d).
+
+## 7. Non-creepy rules
 Maps to: trust (L45), life events as future vision only (L39), no scraping (L122), avoid pushy copy (L248).
 - We only cite facts the customer would recognize from their own bill or account.
 - We never cite inferred life events, income, jobs, kids, location, or usage beyond the bill. There's no "we noticed you…": the streaming line says the perk is included, not that they stream a lot.
@@ -82,11 +92,12 @@ Maps to: trust (L45), life events as future vision only (L39), no scraping (L122
 - No codenames, SKUs, account ids, tool names or staff names in customer text.
 - The script checks all of this, plus forbidden words in English and Spanish (age, income, job, kids, "we noticed", AI).
 
-## 7. Outputs, checks, open items
+## 8. Outputs, checks, open items
 - **Outputs:**
   - `outreach_drafts.csv` (5,042 rows): `account_id, contact_yes_no, reason, channel, template_id, message_en, message_es, primary_language, facts_used, receipt_lines, receipt_line_en, receipt_line_es, in_bill_change_1412, open_issue_90d, guardrail_block_reason, guardrail_why_line, bill_change_exemption, data_note`
   - `outreach_receipt_lines.csv` (one row per bill/app line)
   - `outreach_summary.md`
+- `outreach_card.csv` (5,042 rows) for tm-ui's customer card, with exactly `account_id, outreach_reason, message_en, message_es`. `outreach_reason` is a short plain-English reason; for silent accounts it's the do-not-contact reason. Messages are blank when silent.
 - **Inputs:** committed under `inputs/` (see `inputs/README.md`). The script defaults to them.
 - **The script exits non-zero if any check fails:**
   - a slot is left unfilled
@@ -97,7 +108,7 @@ Maps to: trust (L45), life events as future vision only (L39), no scraping (L122
   - a text is over 320 characters (other channels: 420)
   - a message lacks its channel's opt-out
   - text-only wording appears outside texts
-  - a forbidden word appears
+  - a forbidden word or label appears (incl. "synthetic" and lock-in wording)
 - **Deterministic:** two runs give byte-identical files.
 - **Open item:** RESEARCH.md §14c says the engine "never uses port-out data", but `harness/offers.py` uses `port_out_inquiry` for risk and the port-out contact override. Messages never cite it. Whether the engine should stop using it is a product call.
 

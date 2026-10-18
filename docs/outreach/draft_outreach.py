@@ -41,8 +41,56 @@ OFFSETS_BILL_CHANGE = {"care_credit_fix_first", "care_credit", "bill_shock_price
 PLAN_MOVE_CODES = {"right_size", "variant_switch"}
 FORBIDDEN = [r"\bage\b", r"\bages\b", r"\bincome\b", r"\bjob\b", r"\bkids?\b", r"we noticed", r"\bAI\b",
              r"\bedad\b", r"\bingresos\b", r"\btrabajo\b", r"\bhijos?\b", r"notamos", r"\bIA\b",
-             r"STUB", r"PROMO-", r"TMO-", r"\btm-", r"/workspace", r"Grok", r"\.py\b", r"older", r"senior", r"student"]
+             r"STUB", r"PROMO-", r"TMO-", r"\btm-", r"/workspace", r"Grok", r"\.py\b", r"older", r"senior", r"student",
+             r"(?i)synthetic", r"(?i)sint[eé]tic", r"(?i)\block", r"(?i)locked", r"(?i)contract", r"(?i)permanencia",
+             r"(?i)contrato"]
 TEXT_MIN, TEXT_MAX = 100, 320
+# Plain-English reason for tm-ui's customer card (outreach_card.csv). No internal codes, no data labels.
+CARD_REASON = {
+    "fix_first": "Open support issue: we offer a callback to fix it.",
+    "care_credit_fix_first": "Open support issue: we offer a callback to fix it, plus a one-time $25 credit.",
+    "fix_first_override": "An open support issue comes first, so we offer a fix callback instead of a perk reminder.",
+    "care_credit": "Several recent support contacts: a one-time $25 goodwill credit.",
+    "bill_shock_price_lock": "A promo ended and the bill rose: we explain why and add a one-time $25 credit.",
+    "check_in": "Higher risk of leaving: a no-pressure plan check-in with no offer attached.",
+    "fix_recent": "Several recent support contacts: we offer a callback to make sure it's sorted.",
+    "fix_recent_credit": "Several recent support contacts: we offer a callback to make sure it's sorted, plus a one-time $25 credit.",
+    "perk_reminder": "Reminder of a perk already included in their plan.",
+    "engine_do_nothing:happy": "No message: nothing is going wrong on this account, so we leave them alone.",
+    "engine_do_nothing:open_ticket": "No message: support is already working an open ticket, and there's no marketing until it's closed.",
+    "engine_do_nothing:wait_payoff": "No message: a phone is still being paid off, so the honest advice is to wait.",
+    "engine_do_nothing:recent_complaints": "No message: recent complaints are closed, so we keep watching instead of selling.",
+    "engine_do_nothing:low_risk": "No message: low risk of leaving and nothing needs fixing.",
+    "engine_do_nothing:bill_shock_low_risk": "No message: the bill went up recently but risk is low, and a message would only point at the increase.",
+    "engine_do_nothing:usage_need_held": "No message: usage is near the plan limit, but a bigger plan isn't worth pushing now.",
+    "engine_do_nothing:shopping_low_risk": "No message: comparing options at low risk, and a pitch now could backfire.",
+    "engine_do_nothing:nothing_helps": "No message: nothing we could offer would genuinely help right now.",
+    "not_worth_contacting_at_realistic_save_rates": "No message: no offer here pays off at realistic save rates.",
+    "plan_move_receipt_only": "No message: the cheaper plan is shown on the bill and in the app only.",
+    "guardrail:bill_change_no_fix": "No message: the bill just went up and we have nothing that offsets it.",
+    "guardrail:not_worth_contacting": "No message: no offer here pays off at realistic save rates.",
+    "guardrail:receipt_only_plan_move": "No message: the cheaper plan is shown on the bill and in the app only.",
+    "guardrail:contacted_this_quarter": "No message: already contacted this quarter.",
+    "recent_bill_change_backfire": "No message: the bill just went up and we have nothing that offsets it.",
+    "contacted_within_quarter": "No message: already contacted this quarter.",
+    "opted_out_of_marketing": "No message: opted out of marketing.",
+}
+CHANNEL_WORD = {"text": "text", "in_app": "in-app message", "email": "email", "phone_call": "agent call"}
+
+
+def card_reason(reason, channel, care_usd, template_id=""):
+    base = reason.split("|")[0]
+    if template_id.startswith("FIX_CALLBACK_CREDIT_RECENT"):
+        r = CARD_REASON["fix_recent_credit"]
+    elif template_id.startswith("FIX_CALLBACK_RECENT"):
+        r = CARD_REASON["fix_recent"]
+    elif base.startswith("retention_pays_at_10pct:"):
+        r = CARD_REASON[base.split(":", 1)[1]]
+    elif base.startswith("fix_first_override_of_"):
+        r = CARD_REASON["fix_first_override"]
+    else:
+        return CARD_REASON[base]
+    return r.replace("$25", f"${care_usd}") + f" Sent as: {CHANNEL_WORD[channel]}."
 
 
 def args():
@@ -402,6 +450,17 @@ def main():
 
     out = Path(a.out_dir)
     D.to_csv(out / "outreach_drafts.csv", index=False)
+    # tm-ui customer card: exactly account_id, outreach_reason, message_en, message_es (blank when silent)
+    C = pd.DataFrame({"account_id": D.account_id,
+                      "outreach_reason": [card_reason(r, c, usd(care_credit_cents), t) for r, c, t in zip(D.reason, D.channel, D.template_id)],
+                      "message_en": D.message_en, "message_es": D.message_es})
+    for col in ("outreach_reason", "message_en", "message_es"):
+        for aid, t in zip(C.account_id, C[col]):
+            if re.search(r"(?i)synthetic|sint[eé]tic|\block|locked", t or ""):
+                problems.append(f"{aid} card {col}: forbidden label")
+    assert len(C) == 5042 and list(C.columns) == ["account_id", "outreach_reason", "message_en", "message_es"]
+    assert ((C.message_en == "") == (D.contact_yes_no == "no")).all()
+    C.to_csv(out / "outreach_card.csv", index=False)
     RL.to_csv(out / "outreach_receipt_lines.csv", index=False)
 
     # ---------- summary (synthetic)
@@ -409,6 +468,7 @@ def main():
          f"Generated by `draft_outreach.py` from (all under `inputs/` unless noted): picks `{Path(picks_src).name if 'FALLBACK' not in picks_src else picks_src}`, "
          f"engine `{Path(a.offers).name}`, receipt `{Path(a.receipt).name}`, hidden value `{Path(a.hidden).name}`, sandbox.db (read-only). "
          f"Guardrail: `{Path(guard_src).name if Path(guard_src).exists() else guard_src}`; exemptions already applied in file: {ex_applied}.", "",
+         f"- Card for the customer screen: `outreach_card.csv` (account_id, outreach_reason, message_en, message_es; {len(C):,} rows, messages blank when silent).",
          f"- Accounts: {len(D):,}. Direct contacts: {(D.contact_yes_no=='yes').sum():,}. Silent: {(D.contact_yes_no=='no').sum():,}.",
          f"- Bill-change guardrail field (non-stable reason, change > 0, bill months {last3[0]}..{last3[-1]}): {len(bill_change_ids):,} accounts "
          f"(not the {len(bill_up_ids):,} whose bill simply went up).",
