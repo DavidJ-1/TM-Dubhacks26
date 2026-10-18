@@ -118,8 +118,11 @@
   "waiting": "Waiting on final Model C"
  },
  "learning": {
-  "placeholder": true,
-  "expects": "Expected: harness/bench/out/learning_curve_long.csv\n(target, train_source, model, n_train, metric, value, sd; filtered to target == churn_90d)\nor harness/bench/*.csv with model, n_train, metric, value",
-  "waiting": "Waiting on tm-bench"
+  "file": "learning_curve_long.csv",
+  "metric": "auc",
+  "last": {
+   "hgb_sigmoid": 0.8223,
+   "logreg_unweighted": 0.8107
+  }
  }
 }
