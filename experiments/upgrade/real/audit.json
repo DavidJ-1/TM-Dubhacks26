@@ -1,0 +1,56 @@
+{
+ "2026-06": {
+  "label_agreement": {
+   "purchase_label_pos": 1021,
+   "billing_label_pos": 901,
+   "both": 901
+  },
+  "top_single_feature_auc": {
+   "n_device_lines": 0.718,
+   "voice_minutes_l3": 0.701,
+   "n_lines": 0.699,
+   "streaming_hours_l3": 0.662,
+   "data_gb_l3": 0.659,
+   "bill_mean": 0.652,
+   "bill_last": 0.648,
+   "data_p3": 0.627
+  },
+  "top_lr_coefs": {
+   "n_device_lines": 0.906,
+   "n_lines": 0.774,
+   "bill_mean": -0.763,
+   "bill_last": -0.686,
+   "n_fin_starts_pre": -0.5,
+   "data_gb_l3": 0.37,
+   "n_fin_ends_pre": -0.347,
+   "n_byod": -0.22
+  }
+ },
+ "2026-03": {
+  "label_agreement": {
+   "purchase_label_pos": 791,
+   "billing_label_pos": 684,
+   "both": 684
+  },
+  "top_single_feature_auc": {
+   "n_device_lines": 0.708,
+   "n_lines": 0.685,
+   "voice_minutes_l3": 0.681,
+   "streaming_hours_l3": 0.648,
+   "data_gb_l3": 0.646,
+   "bill_mean": 0.632,
+   "bill_last": 0.629,
+   "data_p3": 0.625
+  },
+  "top_lr_coefs": {
+   "n_device_lines": 0.825,
+   "n_lines": 0.707,
+   "bill_last": -0.598,
+   "bill_mean": -0.562,
+   "n_fin_ends_pre": -0.319,
+   "data_gb_l3": 0.3,
+   "family_experience_beyond": 0.207,
+   "acct_addon_home_internet": 0.204
+  }
+ }
+}
