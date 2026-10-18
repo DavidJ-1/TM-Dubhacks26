@@ -13,7 +13,7 @@ Strength: **strong** = SEC/IR filing or peer-reviewed; **medium** = reputable pr
 6. **Households, not phones.** T-Mobile now reports churn per **account** (0.99%/mo; ARPA $152.91; 34.7M accounts, Q2 2026), and a port-out usually takes every line. So we score and value accounts. SEC Ex 99.1, https://www.sec.gov/Archives/edgar/data/1283699/000128369926000100/tmus06302026ex991.htm
 7. **The payoff cliff is real.** AT&T's CFO attributed part of a 14 bp YoY churn rise to "customers reaching the end of device financing periods" (Q3 2025). T-Mobile's CEO said 2025 churn "normalized" after 36-month plans had suppressed it (Q4'25 call, Feb 11, 2026). https://www.phonearena.com/news/hidden-in-its-q3-report-is-news-that-could-lead-to-big-problems-at-at-t_id175350 ; https://www.fool.com/earnings/call-transcripts/2026/02/11/t-mobile-tmus-q4-2025-earnings-call-transcript/
 8. **Reasons, built to a legal standard.** Every recommendation ships with ≤3 reasons taken from the model's actual contributions. That mirrors the "specific, actual factors, ≤4 reasons" rule US credit law (Reg B) sets for automated decisions, used here as an analogy. https://www.law.cornell.edu/cfr/text/12/appendix-Supplement_I_to_part_1002
-Not used as headline facts: "5-25x cheaper to retain" (unsourced, not telecom-specific); the 0.85% T-Mobile Q2'26 phone churn (a CFO remark on the call, not in the filing); and our AUC 0.85 (synthetic; see Round 2).
+Not used as headline facts: "5-25x cheaper to retain" (unsourced, not telecom-specific); the 0.85% T-Mobile Q2'26 phone churn (a CFO remark on the call, not in the filing); and our AUC 0.85, which is against our own labels (against the judges' public example model it's 0.797; see Round 2).
 
 ## 2. Benchmark table
 | Figure | Number | Source | Date | Strength | Maps to |
@@ -87,7 +87,7 @@ Not used as headline facts: "5-25x cheaper to retain" (unsourced, not telecom-sp
 |---|---|---|---|---|
 | Orange KDD Cup 2009 churn (French telco, 1,299 teams) | best AUC **0.7651**; Orange in-house 0.7435 | https://kdd.org/kdd-cup/view/kdd-cup-2009/Results | 2009 | strong |
 | Duke/Teradata (Cell2Cell) tournament, 44 entries | top-decile lift 1.07-3.01 (mean ~2.1) | Neslin et al. 2006 (above); numbers from search summary | 2006 | medium |
-| **Ours** | AUC **0.85**, top-10% captures **62%** (lift ≈ 6.2) | synthetic | — | — |
+| **Ours** | AUC **0.85** against our own labels (0.797 against the judges' public example model), top-10% captures **62%** (lift ≈ 6.2) | synthetic | — | — |
 
 **Read:** our numbers are well above every real benchmark. That is almost certainly because the model is **recovering the synthetic generator's own rules**, not because it is better than real-world models. On the slide: "synthetic; real-world churn models reach AUC ~0.65-0.77, top-decile lift ~2-3." Leakage checks: point-in-time features with an out-of-time split; household-grouped folds; no retention-call or cancel-intent fields (Kaufman et al., ACM TKDD 2012, https://dl.acm.org/doi/10.1145/2382577.2382579, strong).
 
