@@ -53,6 +53,15 @@ TRIAL_REPLICATES = 20      # K independent re-randomized cohorts of the same 5,0
                            # (~28 churners in the test split vs ~12 true saves); env TM_TRIAL_REPLICATES overrides.
 RANDOM_POLICY_SEED = 99
 TRIAL_REPLICATES = int(os.environ.get("TM_TRIAL_REPLICATES", TRIAL_REPLICATES))
+# ---- TRIAL SIZE KNOB (default OFF = the 5,042 real sandbox accounts). TM_TRIAL_N=<n> grows the simulated
+# population to n accounts by resampling real accounts with jitter (p_churn x lognormal(0, 0.15), continuous
+# features x (1 + N(0, 0.05))); clones keep the original's eligibility, drivers and Model B terms and get ids
+# like "ACC-00001~1". Combine with TM_TRIAL_REPLICATES for more cohorts. Defaults unchanged.
+TRIAL_N = int(os.environ.get("TM_TRIAL_N", 0))
+TRIAL_N_SEED = 4242
+TRIAL_N_P_JITTER_SD = 0.15
+TRIAL_N_FEATURE_JITTER_SD = 0.05
+PROVISIONAL_NOTE = "PROVISIONAL: small test split, ranking not reliable"
 MIN_ARM_TRAIN = 40         # fewer treated train rows (or one outcome class) -> fallback model for that arm
 LOGREG_C = 0.3
 CURVE_POINTS = 101
@@ -324,7 +333,7 @@ def policy_table(policies: dict, test: pd.DataFrame, long_test: pd.DataFrame, re
                        "test split only; self-normalized IPW and doubly-robust estimates; "
                        "true_* columns use the hidden simulated effects. Truth is grounded in our own save-rate "
                        "assumptions (partly circular); not measured lift. Net value = 24-month margin net of "
-                       "offer cost (annoyance excluded).")
+                       "offer cost (annoyance excluded). " + PROVISIONAL_NOTE)
     return pe
 
 
@@ -398,7 +407,8 @@ def auuc_table(curve: pd.DataFrame) -> pd.DataFrame:
 # ------------------------------------------------------------------ charts
 FOOTNOTE = ("SYNTHETIC: simulated customers and a simulated randomized trial (test split). Circularity caveat: the "
             "hidden 'true' effects are built from our own\nsave-rate assumptions and sandbox promo rules, so this "
-            "validates the method end to end, not real-world lift. No real offer outcomes exist.")
+            "validates the method end to end, not real-world lift. No real offer outcomes exist.\n"
+            "PROVISIONAL: small test split; policy ranking and dollar figures are not reliable yet.")
 
 
 def charts(curve: pd.DataFrame, pe: pd.DataFrame) -> list[str]:
@@ -430,7 +440,7 @@ def charts(curve: pd.DataFrame, pe: pd.DataFrame) -> list[str]:
     axes[0].set_ylabel("cumulative incremental saves (test split)")
     axes[1].legend(fontsize=8, loc="lower right")
     fig.suptitle("Who to contact: Qini / uplift curves (SIMULATED)")
-    fig.tight_layout(rect=(0, 0.08, 1, 0.97))
+    fig.tight_layout(rect=(0, 0.10, 1, 0.97))
     fig.text(0.01, 0.01, FOOTNOTE, fontsize=7, color="#444444")
     p1 = CHART_DIR / "uplift_curve.png"
     fig.savefig(p1, dpi=140)
@@ -453,12 +463,41 @@ def charts(curve: pd.DataFrame, pe: pd.DataFrame) -> list[str]:
         ax.grid(axis="x", alpha=0.3)
     axes[1].legend(fontsize=8)
     fig.suptitle("Policy value on the simulated trial (SIMULATED)")
-    fig.tight_layout(rect=(0, 0.08, 1, 0.97))
+    fig.tight_layout(rect=(0, 0.10, 1, 0.97))
     fig.text(0.01, 0.01, FOOTNOTE, fontsize=7, color="#444444")
     p2 = CHART_DIR / "policy_value.png"
     fig.savefig(p2, dpi=140)
     plt.close(fig)
     return [str(p1), str(p2)]
+
+
+def expand_population(n_target: int, offers: pd.DataFrame, details: dict, features: pd.DataFrame,
+                      facts: pd.DataFrame, seed: int = TRIAL_N_SEED):
+    """Grow the simulated population to n_target accounts by resampling real accounts with jitter (TM_TRIAL_N)."""
+    n0 = len(offers)
+    if n_target <= n0:
+        return offers, details, features, facts
+    rng = np.random.default_rng(seed)
+    src = rng.choice(offers["account_id"].values, size=n_target - n0, replace=True)
+    count: dict[str, int] = {}
+    new_ids = []
+    for a in src:
+        count[a] = count.get(a, 0) + 1
+        new_ids.append(f"{a}~{count[a]}")
+    m = dict(zip(new_ids, src))
+    o2 = offers.set_index("account_id").loc[src].reset_index(drop=True)
+    o2.insert(0, "account_id", new_ids)
+    o2["p_churn_90d"] = (o2["p_churn_90d"] * np.exp(rng.normal(0, TRIAL_N_P_JITTER_SD, len(o2)))).clip(1e-4, 0.95)
+    f2 = features.set_index("account_id").loc[src].reset_index(drop=True)
+    cont = [c for c in f2.select_dtypes("float").columns if c != "is_persona"]
+    f2[cont] = f2[cont] * (1 + rng.normal(0, TRIAL_N_FEATURE_JITTER_SD, (len(f2), len(cont))))
+    f2.insert(0, "account_id", new_ids)
+    x2 = facts.set_index("account_id").loc[src].reset_index(drop=True)
+    x2.insert(0, "account_id", new_ids)
+    d2 = dict(details)
+    d2.update({nid: details[orig] for nid, orig in m.items()})
+    return (pd.concat([offers, o2], ignore_index=True), d2, pd.concat([features, f2], ignore_index=True),
+            pd.concat([facts, x2], ignore_index=True))
 
 
 # ------------------------------------------------------------------ pipeline
@@ -477,6 +516,9 @@ def run_once() -> dict:
     features = pd.read_csv(OUT / "features.csv")
     conn = ob.det.connect_ro()
     facts, _ = ob.det.apply_features_csv(ob.det.build_account_facts(conn), OUT / "features.csv")
+    details = dict(details)
+    if TRIAL_N > len(offers):
+        offers, details, features, facts = expand_population(TRIAL_N, offers, details, features, facts)
     p = offers.set_index("account_id")["p_churn_90d"]
     tenure = facts.set_index("account_id")["tenure_months"]
 
@@ -537,9 +579,11 @@ def run_once() -> dict:
     auuc.to_csv(OUT / "uplift_auuc.csv")
     pngs = charts(curve, pe)
 
-    # deck-ready committed copies
-    ARTIFACT_DIR.mkdir(exist_ok=True)
-    for src in [OUT / "policy_eval.csv", OUT / "uplift_curve.csv", OUT / "uplift_auuc.csv"] + [Path(x) for x in pngs]:
+    # deck-ready committed copies (only for the canonical out/ dir, so test runs never overwrite them)
+    write_artifacts = OUT.resolve() == (HERE / "out").resolve()
+    if write_artifacts:
+        ARTIFACT_DIR.mkdir(exist_ok=True)
+    for src in ([] if not write_artifacts else [OUT / "policy_eval.csv", OUT / "uplift_curve.csv", OUT / "uplift_auuc.csv"] + [Path(x) for x in pngs]):
         shutil.copy2(src, ARTIFACT_DIR / src.name)
 
     lt_c = lt[lt.action_code != "do_nothing"]
@@ -550,7 +594,7 @@ def run_once() -> dict:
         "churn_scores_mtime_epoch": scores_mtime,
         "churn_source": offers["churn_source"].iloc[0],
         "n_train": int((split == "train").sum()), "n_test": int((split == "test").sum()),
-        "trial_replicates": TRIAL_REPLICATES,
+        "trial_replicates": TRIAL_REPLICATES, "trial_n_accounts": len(offers),
         "arm_models": {k: {"kind": v["kind"], "n_train": v["n_train"]} for k, v in models.items()},
         "corr_uplift_hat_true_test_pearson": round(corr_p, 3),
         "corr_uplift_hat_true_test_spearman": round(corr_s, 3),

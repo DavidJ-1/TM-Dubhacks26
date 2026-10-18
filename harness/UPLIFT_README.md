@@ -3,6 +3,9 @@
 > **SYNTHETIC.** The customers come from the judge sandbox, and the trial, outcomes and "true" effects are our own
 > simulation. **Circularity caveat:** the hidden true effects are built from our save-rate assumptions and the
 > sandbox promo rules, so this validates the method end to end, not real-world lift. No real offer outcomes exist.
+>
+> **PROVISIONAL: small test split, ranking not reliable.** The dollar figures in policy_eval.csv and the policy
+> ranking can change with a larger trial. David is deciding whether to grow it (see "Scaling the trial").
 
 ## Run
 ```bash
@@ -10,6 +13,15 @@ python harness/uplift.py              # rebuilds offers.csv, offer_candidates.cs
                                       # uplift_curve.csv, uplift_auuc.csv, out/charts/*.png, model_c_artifacts/
 TM_TRIAL_REPLICATES=1 python harness/uplift.py   # a single trial cohort (underpowered; see caveats)
 ```
+
+## Scaling the trial (knobs; defaults unchanged)
+- `TM_TRIAL_N=<n>`: grows the simulated population to n accounts by resampling real sandbox accounts with jitter:
+  `p_churn × lognormal(0, 0.15)` and continuous features `× (1 + N(0, 0.05))`. Clones keep the original's
+  eligibility, drivers and Model B terms, get ids like `ACC-00001~1`, and appear in uplift.csv. The default is
+  0 (off), which means the 5,042 real accounts.
+- `TM_TRIAL_REPLICATES=<k>`: the number of independent re-randomized cohorts (default 20).
+- Example: `TM_TRIAL_N=50000 TM_TRIAL_REPLICATES=20 python harness/uplift.py`. Runtime grows roughly linearly.
+  Deck copies in `model_c_artifacts/` are only written when the output dir is the default `harness/out/`.
 A run takes about 40 s. If `out/churn_scores.csv` changes during the run, the script rebuilds once more.
 `out/offers_pipeline_run.json` records the churn_scores mtime used.
 **Dependency:** the PNGs need `matplotlib`, which is not in the shared `requirements.txt` (that file isn't owned by
@@ -53,6 +65,17 @@ writes every CSV and skips the PNGs.
    estimate of incremental saves from treating the top k,
    `Σ [1(A=do nothing)·churn/e − 1(A=arm)·churn/e]`, with the same ranking valued on the hidden truth in extra
    columns. AUUC is the mean gap between each curve and its random baseline (`uplift_auuc.csv`).
+
+## Reading the results (PROVISIONAL)
+- **Model B vs the oracle.** Doubly robust puts Model B slightly *above* the oracle on net value without upsell
+  (+$24.3k vs +$23.6k). That is estimator noise. On the hidden true effects the oracle wins ($21.8k vs $19.2k),
+  as it must by construction. The test split is too small to separate policies this close.
+- **Why Model C has the lowest Qini.** Its T-learner recovers effects that are weak and small (Spearman 0.38
+  between uplift_hat and true_uplift on test rows). It also picks arms by *net value*
+  (uplift × value − cost − annoyance), not by saves, so the arms it names save fewer churners and its
+  saves-based Qini curve tops out lower than the other models'. Model A and Model B rank by risk or EV and name
+  Model B's best arm, which is closer to the truth because the truth is built from similar assumptions
+  (the circularity caveat).
 
 ## Schemas
 **`out/uplift.csv`** has one row per account × eligible action, in this column order:
