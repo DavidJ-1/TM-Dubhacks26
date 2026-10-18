@@ -102,6 +102,118 @@ def company_money(s) -> bool:
     return "$" in CUSTOMER_MONEY.sub("", str(s))
 
 
+# ---- plain, short reasons (tm-design: one sentence, <=15 words, no column names, no jargon, no "callback" off-call)
+def msg_reason(offer: str, chan: str, conv: bool) -> str:
+    if conv:
+        return "Their open issue comes first, so we'll help fix it instead of a perk note."
+    if offer in FIX:
+        credit = offer == "care_credit_fix_first"
+        if chan == "call":
+            return ("A callback to fix their open issue plus a one-time credit is likely worth it."
+                    if credit else "A callback to fix their open issue is likely worth it.")
+        return ("We'll help fix it and add a one-time credit; likely worth it."
+                if credit else "We'll help fix their open issue, which is likely worth it.")
+    return {"check_in": "A no-pressure plan check-in is likely worth it and passed every rule.",
+            "bill_shock_price_lock": "A credit for their recent bill jump is likely worth it.",
+            "perk_reminder": "A reminder about a perk they already have is likely worth it.",
+            }.get(offer, "This message is likely worth it and passed every outreach rule.")
+
+
+PLAIN = [  # first matching clause wins; matched on the raw engine text (first clause of a ';' list)
+    (r"no bill credits below", "Not likely enough to leave for a credit to make sense."),
+    (r"no usage need", "Their usage doesn't call for a bigger plan."),
+    (r"no unused streaming perk", "No unused streaming perk to point out."),
+    (r"no cheaper discount variant", "No cheaper version of their plan that they qualify for."),
+    (r"no bill shock", "Their bill hasn't jumped recently."),
+    (r"no cheaper plan fits", "No cheaper plan fits how they use their lines."),
+    (r"still paying off a phone", "They're still paying off their phone."),
+    (r"trade-in-eligible", "They don't have a paid-off phone to trade in."),
+    (r"months tenure", "They haven't been with us long enough for this yet."),
+    (r"no open or network issue", "There's no open issue to fix."),
+    (r"support contacts in", "Not enough recent support contacts for this to apply."),
+    (r"no shopping", "No sign they're thinking of leaving."),
+    (r"Home Internet", "Home Internet doesn't fit this account."),
+    (r"not a family plan", "This isn't a family plan."),
+    (r"child/teen line \(|no child", "There's no child or teen line on the account."),
+    (r"family plan with a child", "The family upgrade already covers this move."),
+    (r"upgrade gate", "Not among the customers most ready for a new phone."),
+    (r"highest-risk", "They're at high risk of leaving, so they get care, not a sale."),
+    (r"contacted support .* times", "They contacted support recently, so we fix things before selling."),
+    (r"top plan family", "They're already on our top plan."),
+    (r"no price guarantee", "Their plan has no price guarantee to point out."),
+    (r"replaced by bill-shock relief", "The bill-jump credit already covers this."),
+    (r"needs both the care credit", "This needs both a credit-worthy issue and an open problem."),
+    (r"care-credit rule", "They don't meet the rule for a care credit."),
+    (r"bill-shock guardrail", "Their bill just jumped, so we hold off on selling."),
+    (r"affordability", "It would raise their bill by too much."),
+    (r"cheaper eligible version", "A cheaper version of their own plan comes first."),
+    (r"shopping / port-out|top driver", "They seem to be shopping around, so we don't sell to them."),
+    (r"open support|fix first|open .*issue", "Their open issue comes first."),
+    (r"backfire", "A cheaper-plan nudge could backfire given how their usage is changing."),
+    (r"disabled|not offered|off in", "This option is turned off."),
+]
+
+
+def plain_reason(raw) -> str:
+    s = "" if raw is None or (isinstance(raw, float) and pd.isna(raw)) else str(raw)
+    s = re.sub(r"^blocked:\s*", "", s)
+    s = re.sub(r"^upsell guardrail:\s*", "", s)
+    for pat, out in PLAIN:
+        if re.search(pat, s, flags=re.I):
+            return out
+    return "Not a fit for this account."
+
+
+GN_REWRITE = [  # tm-models' guardrail_note shortened in OUR joined copy only (their file is untouched)
+    (r"^Bill went up when a promo ended and we have nothing that offsets it, so we stay quiet\.$",
+     "Bill rose when a promo ended and nothing offsets it, so we stay quiet."),
+    (r"^Bill went up when a promo ended, so the message only offers to fix their open (.+) issue, with no sales pitch\.$",
+     r"Promo ended and bill rose, so we only help fix their \1 issue."),
+    (r"^Bill went up when a promo ended, so the message comes with a credit that offsets it\.$",
+     "Promo ended and bill rose, so the message includes an offsetting credit."),
+    (r"^Bill went up for a new phone payment they chose, so that doesn't hold a message back\.$",
+     "Bill rose from a new phone they chose, so we can still message."),
+    (r"^Bill went up for a new phone payment and we have nothing that offsets it, so we stay quiet\.$",
+     "Bill rose from a new phone payment and nothing offsets it, so we stay quiet."),
+    (r"^Bill went up for a new phone payment, so the message only offers to fix their open (.+) issue, with no sales pitch\.$",
+     r"New phone payment raised the bill, so we only help fix their \1 issue."),
+    (r"^Bill went up for a new phone payment, so the message comes with a credit that offsets it\.$",
+     "New phone payment raised the bill, so the message includes an offsetting credit."),
+    (r"^Bill went up after a phone payment plan changed and we have nothing that offsets it, so we stay quiet\.$",
+     "Phone payment change raised the bill and nothing offsets it, so we stay quiet."),
+    (r"^Bill went up after a phone payment plan changed, so the message only offers to fix their open (.+) issue, with no sales pitch\.$",
+     r"Phone payment change raised the bill, so we only help fix their \1 issue."),
+]
+
+
+def short_note(s) -> str:
+    s = "" if s is None or (isinstance(s, float) and pd.isna(s)) else str(s)
+    for pat, rep in GN_REWRITE:
+        s2 = re.sub(pat, rep, s)
+        if s2 != s:
+            return s2
+    return s
+
+
+IDENT = re.compile(r"\b[a-z]+_[a-z_]+\b|\b[a-z]+\.[a-z_]+\b|\(")
+
+
+def reason_problem(s, call_ok: bool = False) -> str:
+    """'' if s is one plain sentence <=15 words with no identifiers/parentheses (and no callback off-call)."""
+    s = str(s)
+    if not s:
+        return ""
+    if len(s.split()) > 15:
+        return "more than 15 words"
+    if "." in s.rstrip(".") and not re.search(r"\d\.\d", s):
+        return "more than one sentence"
+    if IDENT.search(s):
+        return "identifier or parentheses"
+    if not call_ok and re.search(r"(?i)callback", s):
+        return "callback on a non-call row"
+    return ""
+
+
 def ledger_file() -> Path | None:
     p = os.environ.get("TM_LEDGER_PER_ACCOUNT")
     if p:
@@ -183,8 +295,10 @@ def sandbox_facts():
 # Strict bill-line rule (agreed): like-for-like plan AND the customer loses nothing (value_ledger receipt.csv,
 # like_for_like & no_tradeoff; tm-offers-ledger c8f5224): 394 accounts, $4,600/mo. Snapshot committed here.
 STRICT_RECEIPT = Path(os.environ.get("TM_STRICT_RECEIPT", ROOT / "data/decisions/strict_receipt.csv"))
-# Trade-off bill lines (same locked ledger: like_for_like & not no_tradeoff = 94): a cheaper plan that gives something
-# up is still shown on the bill with an explicit "you'd lose" line. Nobody goes silent for losing something.
+# Trade-off bill lines: every "you'd lose X" plan-move line in the data = 110 accounts (outreach_receipt_lines
+# plan_move_you_lose_x). The locked ledger flags 94 of them like_for_like; the other 16 (Experience More -> Essentials 4
+# Line) carry the same "you'd lose" line there with like_for_like False. A cheaper plan that gives something up is still
+# shown on the bill with an explicit "you'd lose" line. Nobody goes silent for losing something.
 TRADEOFF_RECEIPT = Path(os.environ.get("TM_TRADEOFF_RECEIPT", ROOT / "data/decisions/tradeoff_receipt.csv"))
 AL_NOTE_OPEN = "Asked us about moving their number. We still reach out because fixing their open issue is worth it."
 STALE_LEDGER = {"9e4d402", "f9629d6"}   # tm-models: money in these ledger commits is not the headline (27c2870 is)
@@ -237,9 +351,7 @@ def build(out: Path):
                 msg_en, msg_es = no_call(msg_en), no_call(msg_es)
             if conv:
                 converted.append(aid)
-            reason = ("Open support issue, so the only message is about fixing it; the perk reminder is dropped."
-                      if conv else f"{lab.get(offer, offer)}: worth sending at realistic save rates and it passed "
-                                   "every outreach rule.")
+            reason = msg_reason(offer, chan, conv)
         else:
             br = gr.block_reason if isinstance(gr.block_reason, str) else "not_worth_contacting"
             line, other_plan, tline = "", "", ""
@@ -252,29 +364,28 @@ def build(out: Path):
                 lose = str(tr.tradeoff_line).split("you'd lose:", 1)[-1].strip().rstrip(".")
                 tline = f"Could pay ${float(tr.customer_saves_usd_mo):.0f}/mo less on {tr.best_plan}, but you'd lose {lose}."
             elif aid in lose_x or str(r.get("receipt_action", "") or "") in eng.PLAN_MOVES:
-                other_plan = "lose_x" if aid in lose_x else "not_same"
+                other_plan = "not_same"
             decision = "receipt_only" if (line or tline) else "silent"
             chan = "bill" if (line or tline) else "none"
             rule = {"bill_change_no_fix": 4, "contacted_this_quarter": 5}.get(
                 br, 1 if (r.action_code == "do_nothing" and br != "receipt_only_plan_move") else 2)
             if br == "bill_change_no_fix":
-                reason = clean(gr.why_line) or "Bill went up recently and nothing we have offsets it, so no message."
-                if not line and "cheaper plan is on your bill" in reason:   # no bill line under the strict rule
-                    reason = reason.split(". ")[0] + (". A cheaper plan exists but it isn't a like-for-like match, "
-                                                      "so we don't suggest it.")
+                why = str(gr.why_line)
+                rose = ("Bill rose after a new phone payment" if "phone" in why
+                        else "Bill rose recently" if "recently" in why else "Bill rose after a promo ended")
+                reason = (f"{rose}; a cheaper plan is on the bill." if line
+                          else f"{rose}; a cheaper plan with tradeoffs is on the bill." if tline
+                          else f"{rose}, and nothing we have offsets it.")
             elif decision == "receipt_only" and tline:
-                reason = "No message: a cheaper plan that gives something up is shown on the bill, with what they'd lose."
+                reason = "No message; a cheaper plan and what they'd lose show on the bill."
             elif decision == "receipt_only":
-                reason = "No message: the cheaper plan is shown on the bill and in the app only."
-            elif other_plan == "lose_x":
-                reason = "A cheaper plan exists but it isn't a like-for-like match, so we don't suggest it."
-            elif other_plan == "not_same":
-                reason = "A cheaper plan exists but it isn't a like-for-like match, so we don't suggest it."
+                reason = "No message; the cheaper plan shows on the bill and in the app."
+            elif other_plan:
+                reason = "A cheaper plan exists but isn't like-for-like, so we don't suggest it."
             elif str(r.get("already_leaving_save_attempt", "")) == "True":
-                reason = ("No message: they asked us about moving their number, and a check-in isn't expected to "
-                          "pay off at realistic save rates.")
+                reason = "They asked about leaving, and a check-in isn't likely to pay off."
             else:
-                reason = "No message: nothing we'd offer pays off at realistic save rates."
+                reason = "No message, since nothing we could offer is likely to pay off."
         cost, saves = 0.0, 0.0
         if offer:
             if (aid, offer) in C.index:
@@ -313,7 +424,7 @@ def build(out: Path):
                 olab = olab.replace("fix-first callback", "fix-first message")
             if str(c.eligible) != "True":
                 opts.append({"account_id": aid, "option_label": olab, "verdict": "ruled_out",
-                             "reason": money_free(clean(c.blocked_or_ineligible_reason)) or "Not eligible.",
+                             "reason": plain_reason(c.blocked_or_ineligible_reason),
                              "net_mid_usd": None})
                 continue
             ev = float(c.expected_value)
@@ -350,6 +461,8 @@ def build(out: Path):
             D = D.merge(E, on="account_id", how="left")
         D = D.set_index("account_id").loc[L.account_id].reset_index()   # keep tm-models' ids and order
         assert ((D.guardrail_result == "pass") == (D.decision == "message")).all(), "ledger pass != our message set"
+    if "guardrail_note" in D.columns:
+        D["guardrail_note"] = D.guardrail_note.map(short_note)
     if "already_leaving_note" in D.columns:      # Grok Bot's wording for messaged already-leaving accounts with an open issue
         al = (D.decision == "message") & (D.already_leaving.astype(str) == "True")
         D.loc[al & D.account_id.isin(topic.index), "already_leaving_note"] = AL_NOTE_OPEN
@@ -371,6 +484,12 @@ def build(out: Path):
     for c in [c for c in MONEY_TEXT_COLS if c in D.columns]:
         bad = D[c].fillna("").map(company_money)
         assert not bad.any(), ("company money in text", c, D.loc[bad, c].head(3).tolist())
+    for c in [c for c in ("decision_reason", "guardrail_note") if c in D.columns]:
+        probs = [reason_problem(s, ch == "call") for s, ch in zip(D[c].fillna(""), D.channel)]
+        bad = [(a, s, p) for a, s, p in zip(D.account_id, D[c], probs) if p]
+        assert not bad, (c, bad[:3])
+    ob = O.reason.fillna("").map(reason_problem)
+    assert not ob.astype(bool).any(), O.loc[ob.astype(bool), "reason"].head(3).tolist()
     bad = O.reason.fillna("").map(company_money)
     assert not bad.any(), ("company money in options reason", O.loc[bad, "reason"].head(3).tolist())
     assert (O.groupby("account_id").head(1).option_label == "Do nothing").all()

@@ -1,95 +1,111 @@
-account_id,current_plan,best_plan,tradeoff_line,customer_saves_usd_mo
-ACC-PERSONA-05,Experience Beyond 2.0,Essentials 2.0,"Cheaper by $110/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",110.0
-ACC-PERSONA-37,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-00119,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $15/mo, but you'd lose: high-speed hotspot, plan perks",15.0
-ACC-00339,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-00414,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-00562,Experience Beyond w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-00615,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-00717,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-00722,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-00726,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-00743,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-00749,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-00773,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0
-ACC-00846,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-00859,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $15/mo, but you'd lose: high-speed hotspot, plan perks",15.0
-ACC-00936,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-00951,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-00958,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0
-ACC-01000,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-01125,Experience More w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $20/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",20.0
-ACC-01269,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-01290,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-01343,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $15/mo, but you'd lose: high-speed hotspot, plan perks",15.0
-ACC-01352,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-01358,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-01395,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-01434,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-01623,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-01657,Experience Beyond 2.0,Essentials 2.0,"Cheaper by $110/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",110.0
-ACC-01658,Experience Beyond w/ Community Savings 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-01688,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-01764,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-01822,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $60/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",60.0
-ACC-01823,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $90/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",90.0
-ACC-01855,Experience Beyond w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-01893,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0
-ACC-01971,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-02076,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-02078,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-02136,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $15/mo, but you'd lose: high-speed hotspot, plan perks",15.0
-ACC-02175,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $110/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",110.0
-ACC-02230,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-02261,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $15/mo, but you'd lose: high-speed hotspot, plan perks",15.0
-ACC-02274,Experience Beyond w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-02316,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-02340,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-02355,Experience More w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $20/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",20.0
-ACC-02360,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-02435,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $15/mo, but you'd lose: high-speed hotspot, plan perks",15.0
-ACC-02533,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-02557,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-02721,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-02760,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-03004,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-03021,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-03048,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $60/mo, but you'd lose: high-speed hotspot, plan perks",60.0
-ACC-03083,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $60/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",60.0
-ACC-03190,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-03397,Experience More w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $20/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",20.0
-ACC-03423,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-03426,Experience More w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $20/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",20.0
-ACC-03450,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0
-ACC-03453,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-03458,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-03534,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-03665,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $30/mo, but you'd lose: high-speed hotspot, plan perks",30.0
-ACC-03666,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-03722,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-03772,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-03785,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-03945,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $15/mo, but you'd lose: high-speed hotspot, plan perks",15.0
-ACC-04022,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-04026,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-04142,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $90/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",90.0
-ACC-04231,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0
-ACC-04236,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0
-ACC-04284,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-04299,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-04326,Experience Beyond w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-04329,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-04331,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0
-ACC-04354,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $110/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",110.0
-ACC-04364,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-04368,Experience Beyond 2.0,Essentials 2.0,"Cheaper by $110/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",110.0
-ACC-04440,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-04518,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0
-ACC-04543,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-04601,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-04661,Experience More 2.0,Essentials 2.0,"Cheaper by $65/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",65.0
-ACC-04731,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-04782,Experience Beyond w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
-ACC-04861,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0
-ACC-04902,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0
-ACC-04958,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0
+account_id,current_plan,best_plan,tradeoff_line,customer_saves_usd_mo,ledger_like_for_like
+ACC-PERSONA-05,Experience Beyond 2.0,Essentials 2.0,"Cheaper by $110/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",110.0,True
+ACC-PERSONA-37,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-00116,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $110/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",110.0,False
+ACC-00119,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $15/mo, but you'd lose: high-speed hotspot, plan perks",15.0,True
+ACC-00339,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-00414,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-00464,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0,False
+ACC-00562,Experience Beyond w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-00615,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-00717,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-00722,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-00726,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-00743,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-00749,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-00773,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0,True
+ACC-00846,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-00859,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $15/mo, but you'd lose: high-speed hotspot, plan perks",15.0,True
+ACC-00936,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-00951,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-00958,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0,True
+ACC-01000,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-01121,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,False
+ACC-01125,Experience More w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $20/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",20.0,True
+ACC-01269,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-01290,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-01343,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $15/mo, but you'd lose: high-speed hotspot, plan perks",15.0,True
+ACC-01352,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-01358,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-01395,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-01434,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-01499,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,False
+ACC-01623,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-01657,Experience Beyond 2.0,Essentials 2.0,"Cheaper by $110/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",110.0,True
+ACC-01658,Experience Beyond w/ Community Savings 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-01688,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-01764,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-01822,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $60/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",60.0,True
+ACC-01823,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $90/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",90.0,True
+ACC-01855,Experience Beyond w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-01893,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0,True
+ACC-01971,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-02076,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-02078,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-02136,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $15/mo, but you'd lose: high-speed hotspot, plan perks",15.0,True
+ACC-02175,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $110/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",110.0,True
+ACC-02230,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-02261,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $15/mo, but you'd lose: high-speed hotspot, plan perks",15.0,True
+ACC-02274,Experience Beyond w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-02316,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-02321,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0,False
+ACC-02340,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-02355,Experience More w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $20/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",20.0,True
+ACC-02360,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-02395,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,False
+ACC-02435,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $15/mo, but you'd lose: high-speed hotspot, plan perks",15.0,True
+ACC-02533,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-02557,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-02721,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-02760,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-03004,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-03021,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-03048,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $60/mo, but you'd lose: high-speed hotspot, plan perks",60.0,True
+ACC-03083,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $60/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",60.0,True
+ACC-03137,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,False
+ACC-03150,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,False
+ACC-03190,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-03348,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,False
+ACC-03397,Experience More w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $20/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",20.0,True
+ACC-03423,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-03426,Experience More w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $20/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",20.0,True
+ACC-03450,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0,True
+ACC-03453,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-03458,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-03534,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-03565,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,False
+ACC-03665,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $30/mo, but you'd lose: high-speed hotspot, plan perks",30.0,True
+ACC-03666,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-03667,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0,False
+ACC-03722,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-03772,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-03785,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-03798,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,False
+ACC-03945,Experience Beyond 2.0,Experience More 2.0,"Cheaper by $15/mo, but you'd lose: high-speed hotspot, plan perks",15.0,True
+ACC-04022,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-04026,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-04142,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $90/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",90.0,True
+ACC-04148,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,False
+ACC-04231,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0,True
+ACC-04236,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0,True
+ACC-04284,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-04299,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-04308,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,False
+ACC-04322,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,False
+ACC-04326,Experience Beyond w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-04329,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-04331,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0,True
+ACC-04354,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $110/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",110.0,True
+ACC-04358,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,False
+ACC-04364,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-04368,Experience Beyond 2.0,Essentials 2.0,"Cheaper by $110/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",110.0,True
+ACC-04440,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-04518,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $100/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",100.0,True
+ACC-04543,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-04601,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-04661,Experience More 2.0,Essentials 2.0,"Cheaper by $65/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",65.0,True
+ACC-04731,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-04782,Experience Beyond w/ 55+ Savings 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True
+ACC-04861,Experience More 2.0,Essentials Saver 2.0,"Cheaper by $35/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",35.0,True
+ACC-04902,Experience More 2.0,Essentials 4 Line Offer 2.0,"Cheaper by $105/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",105.0,True
+ACC-04958,Experience Beyond 2.0,Essentials Saver 2.0,"Cheaper by $50/mo, but you'd lose: price guarantee, high-speed hotspot, plan perks; unlimited premium data (Essentials has a 50 GB cap)",50.0,True

@@ -213,8 +213,8 @@ def test_decisions_file():
     assert set(d.decided_by_rule.astype(int)) <= {1, 2, 3, 4, 5, 6}
     strict = set(pd.read_csv(dout.STRICT_RECEIPT).account_id)     # strict bill-line rule: 394 like-for-like, nothing lost
     ro = set(d.account_id[d.decision == "receipt_only"])
-    trade = set(pd.read_csv(dout.TRADEOFF_RECEIPT).account_id)  # "cheaper but you'd lose X": 94, still on the bill
-    assert len(strict) == 394 and len(trade) == 94
+    trade = set(pd.read_csv(dout.TRADEOFF_RECEIPT).account_id)  # "cheaper but you'd lose X": 110, still on the bill
+    assert len(strict) == 394 and len(trade) == 110 and not (strict & trade)
     assert ro == (strict | trade) - set(d.account_id[msg])
     if "already_leaving_note" in d.columns:
         al = msg & (d.already_leaving.astype(str) == "True")
@@ -255,3 +255,16 @@ def test_fix_first_wording_templates():
     assert dout.FORBIDDEN.search("a flat $1,478 per account")
     assert dout.company_money("Expected net $42") and dout.company_money("same $25 credit plus the explanation")
     assert not dout.company_money("Your bill went up $26.85 when a promo ended. Saves you $8/mo.")
+
+
+def test_reasons_plain_short():
+    import decisions_out as dout
+    d, o = _decisions()
+    for c in [c for c in ("decision_reason", "guardrail_note") if c in d.columns]:
+        assert not [s for s, ch in zip(d[c], d.channel) if dout.reason_problem(s, ch == "call")], c
+    assert not o.reason.map(dout.reason_problem).astype(bool).any()
+    assert not o.reason.str.contains(r"(?i)callback|_|port-out|top driver").any()
+    picked = o[o.verdict == "picked"].merge(d[["account_id", "channel"]], on="account_id")
+    assert not picked[(picked.channel != "call") & picked.option_label.str.contains("callback")].any().any()
+    assert dout.reason_problem("no child/teen line (lines.member_role)")
+    assert dout.reason_problem("fix-first callback: worth it.", call_ok=False)
