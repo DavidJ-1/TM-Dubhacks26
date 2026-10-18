@@ -392,7 +392,10 @@ def key_facts(r, edits=None) -> str:
     bits = []
     if pd.notna(n("support_270d")):
         sent = n("avg_sentiment")
-        bits.append(f"{int(n('support_270d'))} support contacts in 270 days, {int(n('unresolved_270d') or 0)} unresolved"
+        s90 = n("support_90d")
+        sup = (f"{int(s90)} support contacts in 90 days ({int(n('support_270d'))} in 270)" if pd.notna(s90)
+               else f"{int(n('support_270d'))} support contacts in 270 days")
+        bits.append(f"{sup}, {int(n('unresolved_270d') or 0)} unresolved"
                     + (f", avg sentiment {sent:+.2f}" if pd.notna(sent) and n("support_270d") > 0 else ""))
     if pd.notna(n("port_out_inquiry")):
         bits.append("asked us about transferring their number" if n("port_out_inquiry") > 0 else "hasn't asked about transferring their number")
@@ -532,7 +535,8 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
     h1.markdown(f"#### {html.escape(title) or 'Customer #' + num}  \n<span class='cid'>Customer #{num} (synthetic) · "
                 f"{r.get('segment', '')} · "
                 f"{int(r.get('tenure_months', 0) or 0) // 12} yrs with us</span>", unsafe_allow_html=True)
-    h2.metric("Churn risk, 90 days", fmt_prob(r.p_churn_90d),
+    risk_ph = h2.empty()
+    risk_ph.metric("Churn risk, 90 days", fmt_prob(r.p_churn_90d),
               help="Churn risk model: the single churn number used on every screen (synthetic).")
     why_ph = st.empty()
     warn_ph = st.empty()
@@ -557,6 +561,10 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
             if w["p"] is None:
                 st.markdown(f"<div class='whatif'>{html.escape(w['error'])}</div>", unsafe_allow_html=True)
             else:
+                with risk_ph.container():
+                    st.metric("Churn risk, 90 days", fmt_prob(w["p"]),
+                              help="What-if: re-scored live by the churn risk model with the switched-off facts removed (synthetic).")
+                    st.caption(f"(what-if, was {fmt_prob(r.p_churn_90d)})")
                 line = f"Risk {fmt_prob(r.p_churn_90d)} → <b>{fmt_prob(w['p'])}</b>"
                 if w["action"]:
                     na = normalize_action(w["action"])
@@ -741,7 +749,7 @@ with top_c:
         st.markdown(f"<div class='big'>{n_flag:,}</div><div class='sub'>flagged: top 10% most likely to leave in 90 days</div>",
                     unsafe_allow_html=True)
         if catch is not None:
-            st.caption(f"Tested on held-out customers, the top 10% catches {catch:.0%} of churners.")
+            st.caption(f"Tested on held-out customers, the top 10% catches {catch:.0%} of churners (synthetic).")
     with steps[2], st.container(border=True):
         st.markdown("<div class='step'>3 · Why this score</div>", unsafe_allow_html=True)
         st.markdown("<div class='sub'>Top drivers among flagged customers</div>", unsafe_allow_html=True)
