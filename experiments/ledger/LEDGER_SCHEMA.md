@@ -8,42 +8,39 @@ Join key: `account_id`. There is one row per account in `ledger.csv` (**5,042 ro
 tm-offers owns decision, channel, options and messages and joins this file onto those by `account_id`. This file doesn't
 carry them.
 
-## Headline number (asserted in the build)
-- **Mid total over the 184 `pass` accounts: +$6,428.** The build asserts the column sums to this, to the dollar.
-  It went +$4,109 → +$3,939 (open-ticket rule) → **+$6,428 (channel costing)**.
-- **Bootstrap** (2,000 resamples of all 5,042 accounts, true churn probability, random churn × save draws; same method as before, and the
-  build checks it still reproduces the old −$2,805 to +$13,292): **95% range −$703 to +$15,657** at a 10% save rate (mean +$6,307).
-  **P(net > 0) 0.949 at 10%, 0.731 at 5%.**
-- **Break-even save rate 2.11%** (same definition as the old 4.80%: the average save rate at which the 184 net $0).
-  Effective per attempt: a contact keeps **1.9%** of the would-be leavers it reaches, risk-weighted. That's about **0.5 saved accounts per 100 contacts**.
-- Low / high totals: −$270 / +$16,210. 152 non-port-out accounts make up mid +$4,845; the 32 `already_leaving` +$1,583. The 30 `in_holdout` are +$893.
-- Text-channel count among the 184 = 64, asserted against `outreach_card.csv`.
+## Headline number (asserted in the build). All figures are synthetic.
+- **Mid total over the 184 `pass` accounts: +$3,938**, on the conservative costing below. The build asserts the column sums to this, to the dollar.
+  History: +$4,109 (shipped), then +$3,939 (open-ticket rule, every fix-first priced as a $15 call), then **+$3,938** (Grok Bot's ruling: agent time on every fix-first contact plus channel send cost).
+- **95% range at a 10% save rate: −$3,186 to +$13,148** (mean +$3,817). This is a 2,000-resample realized-outcome bootstrap, the same method as before, and the build checks it still reproduces the old −$2,805 to +$13,292.
+- **P(net > 0): 0.801 at 10%, 0.408 at 5%.**
+- **Break-even save rate: 5.17%**, same definition as the old 4.80%. Per attempt that's **4.7%** of the would-be leavers a contact reaches, risk-weighted, or about 1.2 saved accounts per 100 contacts.
+- Low / high totals: −$2,760 / +$13,720. The 152 regular accounts are +$2,745 and the 32 `already_leaving` accounts +$1,193 (mid). The 30 `in_holdout` accounts are +$458.
+- Text-channel count among the 184 is 64, asserted against `outreach_card.csv`.
 
-### Channel costing (Grok Bot, 23:37)
-Each fix-first contact is costed by the channel it actually goes out on (`outreach_card.csv` "Sent as"). Only real calls pay the $15 callback.
-A care credit + fix-first keeps its $25 credit. The $4 annoyance charge is unchanged. The engine (`offers.py`, tm-offers-v2 a20b2dd) has no
-per-channel costs (only callback $15, check-in $2, perk reminder $0.50), so digital costs come from the research14 channel study (RESEARCH §14a list prices):
+### Costing (Grok Bot ruling, 23:39). The net columns use this.
+Every fix-first contact, including care credit + fix-first, pays agent time whatever the channel goes out on: **$10.75 per live contact + $4.25 escalation = $15.00**
+(research14 channel study, from Gartner's $8.01–13.50 per assisted contact). The channel's own send cost goes on top. **Agent calls pay the engine's $15 callback only.** That callback *is*
+the agent contact plus escalation (it's equal to $10.75 + $4.25), so adding the split on top would count the same agent twice. The $25 credit and $4 annoyance charge stay.
+The other 4 contacts (1 perk reminder, 2 check-ins, 1 bill-shock credit) keep their engine costs. The engine's `offers.py` (tm-offers-v2 a20b2dd) has no per-channel send costs, so those come from research14 (RESEARCH §14a list prices).
 
-| channel | cost per contact | source | fix-first | care credit + fix-first |
+| channel | cost per fix-first contact | made of | fix-first | care credit + fix-first (+$25 credit) |
 |---|---|---|---|---|
-| agent call | $15.00 | engine `FIX_FIRST_CALLBACK_COST` | 11 | 3 |
-| text | $0.013 | SMS list price (research14) | 49 | 14 |
-| in-app message | $0.00 | push/in-app (research14) | 64 | 9 |
-| email | $0.0001 | email (research14) | 27 | 3 |
+| agent call | $15.00 | engine callback (agent + escalation) | 11 | 3 |
+| text | $15.013 | $15 agent + $0.013 SMS | 49 | 14 |
+| in-app message | $15.00 | $15 agent + $0 push | 64 | 9 |
+| email | $15.0001 | $15 agent + $0.0001 email | 27 | 3 |
 
-180 of the 184 are fix-first types (166 of them digital). Perk reminders, check-ins and the bill-shock credit keep their engine costs.
-**Caveat:** a digital fix-first contact keeps the 35% fix-first save rate but pays no agent time. If fixing the issue still takes an agent
-(research14 charges $10.75 per live contact plus $4.25 escalation whenever the customer is reached), the total goes back toward
-+$3,939. Read +$6,428 as "the fix is self-serve or already in support's queue."
+### Secondary, Q&A only: "if the fix is self-serve"
+Only calls pay $15, and digital fix-first contacts pay the send cost only. **+$6,428**, 95% range −$703 to +$15,657, P(net>0) 0.949 at 10% and 0.731 at 5%,
+break-even 2.11% (1.9% per attempt). Low/high −$270 / +$16,210. This is in `ledger_summary.json` → `self_serve_secondary`. **It's not in the net columns and shouldn't be on the meter.**
 
 ### Open-ticket rule
-The 25 contacted accounts with an open ticket whose planned message was a perk reminder get the fix-first message instead, with the perk mention dropped
-(fix-first save rate 0.35 vs 0.08). Those 25: +$28 as reminders → −$142 if every one were a $15 call → **+$218 on their real channels**.
-We count 25, not the 21 + 2 that was quoted, using open ticket = an unresolved support contact in the last 90 days. They match the "open support issue comes first"
-rows in `outreach_card.csv`. The 2 fix-first accounts tm-offers' engine leaves silent are already fix-first here.
+The 25 contacted accounts with an open ticket whose planned message was a perk reminder get the fix-first message instead, and the perk mention is dropped (save rate 0.35 vs 0.08).
+Those 25 add up to +$28 as reminders and **−$142** on the conservative costing (+$218 if self-serve). We count 25, not the 21 + 2 that was quoted. "Open ticket" here means an unresolved
+support contact in the last 90 days, and these 25 match the "open support issue comes first" rows in `outreach_card.csv`. The 2 fix-first accounts tm-offers' engine leaves silent are already fix-first here.
 
 ### Flag for tm-offers (wording owner)
-ACC-01607's line says "We'll call", but `outreach_card.csv` routes it as an in-app message. We cost it as in-app. The wording needs fixing.
+ACC-01607's line says "We'll call", but `outreach_card.csv` routes it as an in-app message. Under this costing the cost is the same either way ($15), but the wording needs fixing.
 
 ## `ledger.csv`
 | column | type | meaning |
@@ -53,7 +50,7 @@ ACC-01607's line says "We'll call", but `outreach_card.csv` routes it as an in-a
 | `guardrail_note` | str (≤130 chars) | one plain sentence on why it passed or was blocked, e.g. "Bill went up when a promo ended, so the message comes with a credit that offsets it." |
 | `save_rate_low` / `_mid` / `_high` | float | 0.05 / 0.10 / 0.22: the average share of people about to leave whom a message keeps, for each case |
 | `net_low_usd` | float $ | expected net at a 5% save rate **with each account's own survival-weighted kept value** (a kept customer keeps their current high risk for 24 months, 10%/yr discount). The harshest case. 0 if blocked. |
-| `net_mid_usd` | float $ | expected net at a 10% save rate, $1,478 average kept value (per-account margin × 19.34 months): chance of leaving in 90 days × chance the message keeps them × kept value − offer cost (by channel, see above) − annoyance cost. 0 if blocked. **Sums to +$6,428.** |
+| `net_mid_usd` | float $ | expected net at a 10% save rate, $1,478 average kept value (per-account margin × 19.34 months): chance of leaving in 90 days × chance the message keeps them × kept value − offer cost (conservative costing above) − annoyance cost. 0 if blocked. **Sums to +$3,938.** |
 | `net_high_usd` | float $ | same as mid at a 22% save rate. **This is an upper bound, above published field results (about 2–11%).** 0 if blocked. |
 | `why_low` / `why_mid` / `why_high` | str (≤90 chars) | one short line each. `why_high` always starts "Upper bound, above published results". Blocked rows read "No message, so nothing is spent or counted." |
 | `already_leaving` | bool | the customer asked us about moving their number to another carrier (196 accounts, 32 of them `pass`). Show these on their own line, not in money saved. |

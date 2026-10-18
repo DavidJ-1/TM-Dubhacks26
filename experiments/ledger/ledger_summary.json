@@ -1,30 +1,32 @@
 {
  "contacts": 184,
- "total_mid": 6428.0,
- "total_mid_before_channel_costing": 3939.0,
+ "costing": "conservative: agent time on every fix-first contact + channel send cost",
+ "total_mid": 3938.0,
+ "total_mid_all_fix_first_as_15_calls": 3939.0,
  "total_mid_before_open_ticket_rule": 4109.0,
  "open_ticket_swaps": 25,
  "swap_mid_before": 28.0,
- "swap_mid_after_call_cost": -142.0,
- "swap_mid_after": 218.0,
- "total_low": -270.0,
- "total_high": 16210.0,
+ "swap_mid_after_all_calls": -142.0,
+ "swap_mid_after": -142.0,
+ "swap_mid_after_self_serve": 218.0,
+ "total_low": -2760.0,
+ "total_high": 13720.0,
  "already_leaving_in_184": 32,
- "mid_already_leaving": 1583.0,
+ "mid_already_leaving": 1193.0,
  "in_holdout": 30,
- "mid_holdout": 893.0,
+ "mid_holdout": 458.0,
  "text_channel_count": 64,
  "channel_cost_usd": {
   "agent call": 15.0,
-  "text": 0.013,
-  "in-app message": 0.0,
-  "email": 0.0001
+  "text": 15.013,
+  "in-app message": 15.0,
+  "email": 15.0001
  },
  "channel_cost_source": {
-  "agent call": "engine FIX_FIRST_CALLBACK_COST $15",
-  "text": "SMS list price $0.013/attempt (research14, RESEARCH s14a)",
-  "in-app message": "push/in-app $0 (research14, RESEARCH s14a)",
-  "email": "email $0.0001 (research14, RESEARCH s14a)"
+  "agent call": "engine FIX_FIRST_CALLBACK_COST $15 (= agent live contact + escalation; not added twice)",
+  "text": "agent $10.75 + escalation $4.25 (research14) + SMS $0.013 (RESEARCH s14a)",
+  "in-app message": "agent $10.75 + escalation $4.25 (research14) + push/in-app $0",
+  "email": "agent $10.75 + escalation $4.25 (research14) + email $0.0001"
  },
  "fix_first_contacts_by_channel": {
   "agent call": {
@@ -44,20 +46,38 @@
    "fix_first": 49
   }
  },
- "boot10_mean": 6307.0,
- "range95_low": -703.0,
- "range95_high": 15657.0,
- "p_net_pos_at_10": 0.949,
- "p_net_pos_at_5": 0.731,
- "boot5_lo95": -1816.0,
- "boot5_hi95": 9867.0,
- "breakeven_save_rate": 0.0211,
- "breakeven_effective_per_attempt_riskweighted": 0.0191,
- "breakeven_saves_per_100_contacts": 0.51,
+ "boot10_mean": 3817.0,
+ "range95_low": -3186.0,
+ "range95_high": 13148.0,
+ "p_net_pos_at_10": 0.801,
+ "p_net_pos_at_5": 0.408,
+ "boot5_lo95": -4357.0,
+ "boot5_hi95": 7280.0,
+ "breakeven_save_rate": 0.0517,
+ "breakeven_effective_per_attempt_riskweighted": 0.0467,
+ "breakeven_saves_per_100_contacts": 1.23,
  "old_range95": [
   -2805.0,
   13292.0
  ],
+ "self_serve_secondary": {
+  "label": "if the fix is self-serve (Q&A only)",
+  "total_mid": 6428.0,
+  "total_low": -270.0,
+  "total_high": 16210.0,
+  "range95_low": -703.0,
+  "range95_high": 15657.0,
+  "p_net_pos_at_10": 0.949,
+  "p_net_pos_at_5": 0.731,
+  "breakeven_save_rate": 0.0211,
+  "breakeven_effective_per_attempt_riskweighted": 0.0191,
+  "channel_cost_usd": {
+   "agent call": 15.0,
+   "text": 0.013,
+   "in-app message": 0.0,
+   "email": 0.0001
+  }
+ },
  "events_rows": 2705,
  "events_accounts": 1855,
  "event_types": {
