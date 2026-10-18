@@ -251,3 +251,18 @@ Thesis: the carrier tells customers when they're overpaying, says "don't upgrade
 - That uplift models are proven better than churn models in telecom (Orange Belgium: tie or worse, within noise).
 - That a US carrier today proactively flags overpaying (not verified; Ascarza 2016 only mentions Verizon, AT&T and Vodafone plan recommendations at the time).
 - Any trust → churn number from J.D. Power or ACSI (not verified).
+
+## 11. Plan-switch acceptance (replaces unsourced 45%)
+`harness/offers.py` currently sets `CONFIG["P_ACCEPT"]["right_size"] = 0.45`, with no source. Randomized public evidence puts acceptance far lower. Full table: `research-notes/notes_trust.md` §7. Accessed 2026-10-17.
+
+| Setting | Treated vs control | Source (date) | Strength |
+|---|---|---|---|
+| Wireless operator, phone call recommending a money-saving plan + $15/mo credit for 3 months (54,089 treated) | **1.5% accepted** (828). Any plan change in 3 mo: 9.59% vs 6.54% | [Ascarza, Iyengar & Schleicher, JMR Feb 2016](https://evaascarza.com/papers/ascarza_iyengar_schleicher_16.pdf) | A |
+| UK energy, Cheaper Market Offers Letter (RCT, 137,876) | 2.4–3.4% vs 1.0% switched (30 days) | [Ofgem, Nov 2017](https://www.ofgem.gov.uk/sites/default/files/docs/2017/11/cmol_report_0.pdf) | A |
+| UK energy, cheaper-offer letter + reminder | 6.8–7.5% vs 2.9% | [Ofgem, Sep 2019](https://www.ofgem.gov.uk/sites/default/files/docs/2019/09/cmoc_report_final_updated_template_0.pdf) | A |
+| UK energy, on default tariff 3+ yrs | 12.1–13.4% vs 6.8% (14 weeks) | [Ofgem, Nov 2017](https://www.ofgem.gov.uk/sites/default/files/docs/2017/11/small_scale_database_trial_paper_pdf.pdf) | A |
+| UK broadband, end-of-contract notices | 62% vs 47% re-signed or switched **at contract end**: any action at a natural decision point, *not* acceptance of a single offer | [Ofcom, Nov 2021](https://www.ofcom.org.uk/siteassets/resources/documents/consultations/category-2-6-weeks/130197-helping-consumers-get-better-deals-on-their-broadband/associated-documents/helping-customers-get-better-deals-2021.pdf) | A (before/after) |
+
+**Recommendation:** set `right_size` acceptance to a **3% base (range 2–5%)** with a **sensitivity of up to 13%**. Apply a timing bump only at contract end or device payoff (Ofcom: +8–15 pp at contract end). No public source supports 45%. Caveat: Ascarza's plans saved money by cutting overage, and Ofgem's are energy, not telecom.
+
+**Synthetic implication (our 5,042 synthetic accounts; all figures synthetic):** 682 accounts are right-size-eligible, worth about **$450/mo at 3%** and about **$1,900/mo at 13%**, against a **$14,830/mo ceiling** if everyone accepted.
