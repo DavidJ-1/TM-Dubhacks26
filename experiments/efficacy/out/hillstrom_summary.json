@@ -1,0 +1,197 @@
+{
+ "sleeping_dogs": [
+  {
+   "outcome": "visit",
+   "model": "T-learner LR",
+   "share_negative_best_msg": 0.0,
+   "share_ci": [
+    0.0,
+    0.0
+   ],
+   "n_flagged": 0,
+   "share_negative_for_some_msg": 0.090875,
+   "observed_uplift_in_flagged": null,
+   "observed_uplift_ci": null,
+   "wrong_msg_obs_uplift": {
+    "mens": null,
+    "womens": 0.01837274078198975
+   },
+   "wrong_msg_share": {
+    "mens": 0.0,
+    "womens": 0.090875
+   }
+  },
+  {
+   "outcome": "visit",
+   "model": "S-learner LR (interactions)",
+   "share_negative_best_msg": 0.0,
+   "share_ci": [
+    0.0,
+    0.0
+   ],
+   "n_flagged": 0,
+   "share_negative_for_some_msg": 0.09684375,
+   "observed_uplift_in_flagged": null,
+   "observed_uplift_ci": null,
+   "wrong_msg_obs_uplift": {
+    "mens": null,
+    "womens": 0.01370444573641788
+   },
+   "wrong_msg_share": {
+    "mens": 0.0,
+    "womens": 0.09684375
+   }
+  },
+  {
+   "outcome": "visit",
+   "model": "X-learner GBM",
+   "share_negative_best_msg": 0.0,
+   "share_ci": [
+    0.0,
+    0.0
+   ],
+   "n_flagged": 0,
+   "share_negative_for_some_msg": 0.031828125,
+   "observed_uplift_in_flagged": null,
+   "observed_uplift_ci": null,
+   "wrong_msg_obs_uplift": {
+    "mens": null,
+    "womens": 0.009432280945634058
+   },
+   "wrong_msg_share": {
+    "mens": 0.0,
+    "womens": 0.031828125
+   }
+  },
+  {
+   "outcome": "visit",
+   "model": "T-learner GBM",
+   "share_negative_best_msg": 0.0035,
+   "share_ci": [
+    0.0030773437500000002,
+    0.003937890625
+   ],
+   "n_flagged": 224,
+   "share_negative_for_some_msg": 0.1209375,
+   "observed_uplift_in_flagged": 0.03125,
+   "observed_uplift_ci": [
+    -0.0499471816846191,
+    0.1156435612353833
+   ],
+   "wrong_msg_obs_uplift": {
+    "mens": 0.051854319342660465,
+    "womens": 0.019503603273855696
+   },
+   "wrong_msg_share": {
+    "mens": 0.00446875,
+    "womens": 0.11996875
+   }
+  },
+  {
+   "outcome": "conversion",
+   "model": "T-learner LR",
+   "share_negative_best_msg": 0.0055625,
+   "share_ci": [
+    0.004983984375,
+    0.006205078125000001
+   ],
+   "n_flagged": 356,
+   "share_negative_for_some_msg": 0.18975,
+   "observed_uplift_in_flagged": 0.020689686130862597,
+   "observed_uplift_ci": [
+    0.005294210648884014,
+    0.03999351170403802
+   ],
+   "wrong_msg_obs_uplift": {
+    "mens": 0.03496503496503497,
+    "womens": -0.0007787497411749899
+   },
+   "wrong_msg_share": {
+    "mens": 0.006734375,
+    "womens": 0.188578125
+   }
+  },
+  {
+   "outcome": "conversion",
+   "model": "S-learner LR (interactions)",
+   "share_negative_best_msg": 0.002125,
+   "share_ci": [
+    0.001765625,
+    0.00253125
+   ],
+   "n_flagged": 136,
+   "share_negative_for_some_msg": 0.167890625,
+   "observed_uplift_in_flagged": 0.04124149659863945,
+   "observed_uplift_ci": [
+    0.016795977011494254,
+    0.06751912489133584
+   ],
+   "wrong_msg_obs_uplift": {
+    "mens": 0.03278688524590164,
+    "womens": -0.0007901972680603598
+   },
+   "wrong_msg_share": {
+    "mens": 0.002703125,
+    "womens": 0.1673125
+   }
+  },
+  {
+   "outcome": "conversion",
+   "model": "X-learner GBM",
+   "share_negative_best_msg": 0.005171875,
+   "share_ci": [
+    0.00459296875,
+    0.00570390625
+   ],
+   "n_flagged": 331,
+   "share_negative_for_some_msg": 0.07221875,
+   "observed_uplift_in_flagged": 0.009952366474105606,
+   "observed_uplift_ci": [
+    -0.006472259848159547,
+    0.031279534056033044
+   ],
+   "wrong_msg_obs_uplift": {
+    "mens": -0.0007494145199063232,
+    "womens": 0.0003516631652981713
+   },
+   "wrong_msg_share": {
+    "mens": 0.00796875,
+    "womens": 0.069421875
+   }
+  },
+  {
+   "outcome": "conversion",
+   "model": "T-learner GBM",
+   "share_negative_best_msg": 0.037390625,
+   "share_ci": [
+    0.035950390625,
+    0.038720703125000006
+   ],
+   "n_flagged": 2393,
+   "share_negative_for_some_msg": 0.186375,
+   "observed_uplift_in_flagged": 0.0047217128964538455,
+   "observed_uplift_ci": [
+    -0.0028472608651275875,
+    0.010441320132813384
+   ],
+   "wrong_msg_obs_uplift": {
+    "mens": 0.005510694807027809,
+    "womens": -4.6624326749863595e-05
+   },
+   "wrong_msg_share": {
+    "mens": 0.045734375,
+    "womens": 0.17803125
+   }
+  }
+ ],
+ "segments": {
+  "visit": {
+   "persuadable": 1.0
+  },
+  "conversion": {
+   "lost cause": 0.4999,
+   "sure thing": 0.4913,
+   "persuadable": 0.0088
+  }
+ }
+}

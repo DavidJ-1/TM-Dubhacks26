@@ -1,0 +1,97 @@
+{
+ "contacts": 184,
+ "costing": "conservative: agent time on every fix-first contact + channel send cost",
+ "total_mid": 3938.0,
+ "total_mid_all_fix_first_as_15_calls": 3939.0,
+ "total_mid_before_open_ticket_rule": 4109.0,
+ "open_ticket_swaps": 25,
+ "swap_mid_before": 28.0,
+ "swap_mid_after_all_calls": -142.0,
+ "swap_mid_after": -142.0,
+ "swap_mid_after_self_serve": 218.0,
+ "total_low": -2760.0,
+ "total_high": 13720.0,
+ "already_leaving_in_184": 32,
+ "mid_already_leaving": 1193.0,
+ "in_holdout": 30,
+ "mid_holdout": 458.0,
+ "text_channel_count": 64,
+ "channel_cost_usd": {
+  "agent call": 15.0,
+  "text": 15.013,
+  "in-app message": 15.0,
+  "email": 15.0001
+ },
+ "channel_cost_source": {
+  "agent call": "engine FIX_FIRST_CALLBACK_COST $15 (= agent live contact + escalation; not added twice)",
+  "text": "agent $10.75 + escalation $4.25 (research14) + SMS $0.013 (RESEARCH s14a)",
+  "in-app message": "agent $10.75 + escalation $4.25 (research14) + push/in-app $0",
+  "email": "agent $10.75 + escalation $4.25 (research14) + email $0.0001"
+ },
+ "fix_first_contacts_by_channel": {
+  "agent call": {
+   "care_credit_fix_first": 3,
+   "fix_first": 11
+  },
+  "email": {
+   "care_credit_fix_first": 3,
+   "fix_first": 27
+  },
+  "in-app message": {
+   "care_credit_fix_first": 9,
+   "fix_first": 64
+  },
+  "text": {
+   "care_credit_fix_first": 14,
+   "fix_first": 49
+  }
+ },
+ "boot10_mean": 3817.0,
+ "range95_low": -3186.0,
+ "range95_high": 13148.0,
+ "p_net_pos_at_10": 0.801,
+ "p_net_pos_at_5": 0.408,
+ "boot5_lo95": -4357.0,
+ "boot5_hi95": 7280.0,
+ "breakeven_save_rate": 0.0517,
+ "breakeven_effective_per_attempt_riskweighted": 0.0467,
+ "breakeven_saves_per_100_contacts": 1.23,
+ "old_range95": [
+  -2805.0,
+  13292.0
+ ],
+ "self_serve_secondary": {
+  "label": "if the fix is self-serve (Q&A only)",
+  "total_mid": 6428.0,
+  "total_low": -270.0,
+  "total_high": 16210.0,
+  "range95_low": -703.0,
+  "range95_high": 15657.0,
+  "p_net_pos_at_10": 0.949,
+  "p_net_pos_at_5": 0.731,
+  "breakeven_save_rate": 0.0211,
+  "breakeven_effective_per_attempt_riskweighted": 0.0191,
+  "channel_cost_usd": {
+   "agent call": 15.0,
+   "text": 0.013,
+   "in-app message": 0.0,
+   "email": 0.0001
+  }
+ },
+ "events_rows": 2705,
+ "events_accounts": 1855,
+ "event_types": {
+  "open_ticket": 2355,
+  "bill_up": 350
+ },
+ "note_mismatches_vs_decisions": {
+  "silent_cheaper_plan": 47,
+  "bill_line_but_blocked_for_bill_change": 33,
+  "bill_line_but_not_worth_contacting": 12
+ },
+ "note_counts": {
+  "bill_line_clean": 390,
+  "bill_line_tradeoff": 107,
+  "notes_saying_bill": 497
+ }
+}

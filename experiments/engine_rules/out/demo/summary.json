@@ -1,0 +1,53 @@
+{
+ "guardrail": {
+  "rule": "new",
+  "policy": "retention10",
+  "value_scale": 0.805743080150583,
+  "save_rate_scale": 0.22535626507287765,
+  "base_rate": 0.44374182349739044,
+  "n_policy": 202,
+  "n_swapped": 0,
+  "policy_ev": 4141.884145128496,
+  "blocking_accounts": 562,
+  "bill_change_accounts": 1412,
+  "contact_ok": 184,
+  "block_reasons": {
+   "not_worth_contacting": 4041,
+   "receipt_only_plan_move": 499,
+   "bill_change_no_fix": 318,
+   "(contact ok)": 184
+  },
+  "contacted_ev": 4109.34
+ },
+ "timing": {
+  "silent": 4165,
+  "now": 866,
+  "wait": 11
+ },
+ "timing_scored_accounts": 5000,
+ "timing_wait_by_action": {
+  "care_credit_fix_first": 9,
+  "care_credit": 1,
+  "family_upgrade": 1
+ },
+ "timing_wait_dates": {
+  "2026-11-05": 9,
+  "2026-12-03": 2
+ },
+ "timing_among_contact_ok": {
+  "now": 175,
+  "wait": 7,
+  "silent": 2
+ },
+ "holdout_share": 0.2,
+ "holdout_seed": 2026,
+ "holdout": 30,
+ "texts_sent": 154,
+ "text_send": {
+  "now": 148,
+  "2026-11-05": 5,
+  "2026-12-03": 1
+ },
+ "engine_dir": "/workspace/tmobile/v2-efficacy/demo_data",
+ "as_of": "2026-10-01"
+}
