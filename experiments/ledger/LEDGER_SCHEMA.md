@@ -39,6 +39,14 @@ The 25 contacted accounts with an open ticket whose planned message was a perk r
 Those 25 add up to +$28 as reminders and **−$142** on the conservative costing (+$218 if self-serve). We count 25, not the 21 + 2 that was quoted. "Open ticket" here means an unresolved
 support contact in the last 90 days, and these 25 match the "open support issue comes first" rows in `outreach_card.csv`. The 2 fix-first accounts tm-offers' engine leaves silent are already fix-first here.
 
+### Agreement with tm-offers' decisions.csv (v2 6b53f7c)
+The build reads `data/decisions/decisions.csv` and asserts: the same 184 messaged accounts; channels in_app 74 / text 64 / email 32 / call 14; mid total +$3,938;
+bill-line notes on exactly the 390 `clean` + 107 `tradeoff` accounts (`receipt_kind`) and on no others; no "callback" on a non-call row.
+Reported, not forced (the counts are in `ledger_summary.json` → `note_mismatches_vs_decisions`):
+- 47 accounts the committed guardrail marked cheaper-plan-on-bill have no bill line in decisions.csv. They're silent, and the note says so. (This was quoted as 48. decisions.csv has 47.)
+- 45 bill-line accounts carry a different guardrail block reason: 33 bill rose with nothing to offset it, 12 nothing worth messaging. The guardrail's rule order puts those reasons ahead of
+  the cheaper-plan rule. Their note gives the reason first, then the bill line, e.g. "Bill rose, nothing offsets it; a same-features cheaper plan shows on the bill."
+
 ### Flag for tm-offers (wording owner)
 ACC-01607's line says "We'll call", but `outreach_card.csv` routes it as an in-app message. Under this costing the cost is the same either way ($15), but the wording needs fixing.
 
@@ -47,14 +55,14 @@ ACC-01607's line says "We'll call", but `outreach_card.csv` routes it as an in-a
 |---|---|---|
 | `account_id` | str | join key |
 | `guardrail_result` | `pass` / `blocked` | `pass` = contact allowed by the do-not-contact rule (184). Taken from the committed guardrail. |
-| `guardrail_note` | str (≤130 chars) | one plain sentence on why it passed or was blocked, e.g. "Bill went up when a promo ended, so the message comes with a credit that offsets it." |
+| `guardrail_note` | str (≤15 words) | one plain sentence on why the account got a message or didn't. It uses tm-offers' shortened wording from `data/decisions/decisions.csv` where that exists, and the same style elsewhere. Every bill-line account says so: 390 "No message; a same-features cheaper plan shows on the bill." and 107 "...the bill shows a cheaper plan and its trade-offs." The 47 cheaper-plan accounts tm-offers made silent say "No message, and no cheaper plan is a close enough match to suggest." The build checks there are ≤15 words, no column-style names, and no "callback" outside call rows. |
 | `save_rate_low` / `_mid` / `_high` | float | 0.05 / 0.10 / 0.22: the average share of people about to leave whom a message keeps, for each case |
 | `net_low_usd` | float $ | expected net at a 5% save rate **with each account's own survival-weighted kept value** (a kept customer keeps their current high risk for 24 months, 10%/yr discount). The harshest case. 0 if blocked. |
 | `net_mid_usd` | float $ | expected net at a 10% save rate, $1,478 average kept value (per-account margin × 19.34 months): chance of leaving in 90 days × chance the message keeps them × kept value − offer cost (conservative costing above) − annoyance cost. 0 if blocked. **Sums to +$3,938.** |
 | `net_high_usd` | float $ | same as mid at a 22% save rate. **This is an upper bound, above published field results (about 2–11%).** 0 if blocked. |
 | `why_low` / `why_mid` / `why_high` | str (≤90 chars) | one short line each. `why_high` always starts "Upper bound, above published results". Blocked rows read "No message, so nothing is spent or counted." |
 | `already_leaving` | bool | the customer asked us about moving their number to another carrier (196 accounts, 32 of them `pass`). Show these on their own line, not in money saved. |
-| `already_leaving_note` | str | "Asked us about moving their number to another carrier, so this account is counted on its own line, not in money saved." Empty if false. |
+| `already_leaving_note` | str (≤15 words) | 31 messaged with an open issue: "Asked us about moving their number; we still reach out to fix their open issue." 1 other messaged: "...because it's likely worth it." 164 not messaged: "Asked us about moving their number to another carrier; no money is counted." Empty if false. |
 | `in_holdout` | bool | random holdout (30, all `pass`). **It changes nothing else in this file**, and it's asserted that holdout rows are still `pass` with their nets. |
 | `timing` | `now` / `wait` / empty | from the timing rule, for `pass` rows only (177 now, 7 wait). Empty if blocked. |
 | `wait_until` | ISO date or empty | send date when `timing` = `wait` (2026-11-05 or 2026-12-03) |

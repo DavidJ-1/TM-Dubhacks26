@@ -83,5 +83,15 @@
  "event_types": {
   "open_ticket": 2355,
   "bill_up": 350
+ },
+ "note_mismatches_vs_decisions": {
+  "silent_cheaper_plan": 47,
+  "bill_line_but_blocked_for_bill_change": 33,
+  "bill_line_but_not_worth_contacting": 12
+ },
+ "note_counts": {
+  "bill_line_clean": 390,
+  "bill_line_tradeoff": 107,
+  "notes_saying_bill": 497
  }
 }

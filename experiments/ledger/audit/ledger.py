@@ -43,6 +43,39 @@ L = pd.DataFrame({"account_id": card.account_id.values})
 L = L.merge(g, on="account_id", how="left")
 L["guardrail_result"] = np.where(L.contact_ok, "pass", "blocked")
 L["guardrail_note"] = [note(a, ok, br) for a, ok, br in zip(L.account_id, L.contact_ok, L.block_reason)]
+# ---------- agree with tm-offers' decisions.csv (v2 6b53f7c): short notes, bill-line kinds, no "callback" off-call
+DEC = pd.read_csv("/workspace/tmobile/v2-efficacy/data/decisions/decisions.csv").set_index("account_id").reindex(L.account_id)
+assert DEC.index.notna().all() and len(DEC) == 5042
+assert set(DEC.index[DEC.decision == "message"]) == set(L.account_id[L.contact_ok])          # same 184 messaged
+dec_ch = DEC.channel[DEC.decision == "message"].value_counts().to_dict()
+assert dec_ch == {"in_app": 74, "text": 64, "email": 32, "call": 14}, dec_ch                  # same channels as the card
+L["_long_note"] = L.guardrail_note
+short = DEC.guardrail_note.values                                                          # tm-offers' shortened copy of our note
+same_src = pd.Series(short).notna().values
+L["guardrail_note"] = np.where(same_src, short, L.guardrail_note)
+rk = DEC.receipt_kind.values
+KIND_TXT = {"clean": "a same-features cheaper plan shows on the bill",
+            "tradeoff": "the bill shows a cheaper plan and its trade-offs"}
+LEAD = {"bill_change_no_fix": "Bill rose, nothing offsets it;",
+        "not_worth_contacting": "Nothing worth messaging;", "receipt_only_plan_move": "No message;"}
+NOTE_FIX = {}
+for k, (a, br, kind) in enumerate(zip(L.account_id, L.block_reason.fillna(""), rk)):
+    if isinstance(kind, str):                                   # 390 clean + 107 trade-off bill lines
+        NOTE_FIX[k] = f"{LEAD.get(br, 'No message;')} {KIND_TXT[kind]}."
+    elif br == "receipt_only_plan_move":                         # tm-offers made these silent: no bill line
+        NOTE_FIX[k] = "No message, and no cheaper plan is a close enough match to suggest."
+for k, t in NOTE_FIX.items(): L.iat[k, L.columns.get_loc("guardrail_note")] = t
+MISMATCH = dict(
+    silent_cheaper_plan=int(((L.block_reason == "receipt_only_plan_move").values & ~pd.Series(rk).notna().values).sum()),
+    bill_line_but_blocked_for_bill_change=int(((L.block_reason == "bill_change_no_fix").values & pd.Series(rk).notna().values).sum()),
+    bill_line_but_not_worth_contacting=int(((L.block_reason == "not_worth_contacting").values & pd.Series(rk).notna().values).sum()))
+NOTE_COUNTS = dict(bill_line_clean=int((rk == "clean").sum()), bill_line_tradeoff=int((rk == "tradeoff").sum()),
+                   notes_saying_bill=int(L.guardrail_note.str.contains("on the bill|the bill shows").sum()))
+assert NOTE_COUNTS["bill_line_clean"] == 390 and NOTE_COUNTS["bill_line_tradeoff"] == 107
+assert NOTE_COUNTS["notes_saying_bill"] == 497, NOTE_COUNTS
+assert not L.guardrail_note[~pd.Series(rk).notna().values].str.contains("on the bill|the bill shows").any()
+IS_CALL = (DEC.channel.values == "call")
+print("note mismatches vs decisions:", MISMATCH, NOTE_COUNTS)
 L["save_rate_low"], L["save_rate_mid"], L["save_rate_high"] = 0.05, 0.10, 0.22
 M = pd.DataFrame({"account_id": X["ids"], "net_low_usd": low.round(2), "net_mid_usd": mid.round(2), "net_high_usd": high.round(2)})
 M["why_low"] = [f"If only 1 in 20 people about to leave stay, and stay fewer months: {money(v)}." for v in low]
@@ -53,7 +86,10 @@ for c in ("net_low_usd", "net_mid_usd", "net_high_usd"): L[c] = L[c].fillna(0.0)
 nomsg = "No message, so nothing is spent or counted."
 for c in ("why_low", "why_mid", "why_high"): L[c] = L[c].fillna(nomsg)
 L["already_leaving"] = L.account_id.map(feats.port_out_inquiry).fillna(0).astype(int).eq(1).values; po = L.already_leaving.values
-L["already_leaving_note"] = np.where(po, "Asked us about moving their number to another carrier, so this account is counted on its own line, not in money saved.", "")
+_open = L.account_id.map(feats.unresolved_90d).fillna(0).values >= 1
+L["already_leaving_note"] = np.where(~po, "", np.where(~L.contact_ok, "Asked us about moving their number to another carrier; no money is counted.",
+    np.where(_open, "Asked us about moving their number; we still reach out to fix their open issue.",
+             "Asked us about moving their number; we still reach out because it's likely worth it.")))
 L["in_holdout"] = L.holdout.astype(bool)
 L["timing"] = np.where(L.contact_ok, np.where(L.timing.eq("wait"), "wait", "now"), "")
 L["wait_until"] = L.wait_until.fillna("")
@@ -64,11 +100,18 @@ L = L[COLS]
 # ---------- checks
 assert len(L) == 5042 and L.account_id.is_unique and list(L.account_id) == list(card.account_id)
 assert (L.guardrail_result == "pass").sum() == 184
+assert TOTAL_MID == 3938.0, TOTAL_MID                                  # +$3,938 must not change
 assert round(L.loc[L.guardrail_result == "pass", "net_mid_usd"].sum()) == TOTAL_MID, "mid total mismatch"
 assert (L.loc[L.in_holdout, "guardrail_result"] == "pass").all()
 BAD = re.compile(r"synthetic|simulat|sandbox|/workspace|\.py|\.csv|tm-|grok|david|ACC-|EV\b|guardrail", re.I)
 txt = L.select_dtypes(object).drop(columns=["account_id"]).astype(str)
 assert not txt.apply(lambda s: s.str.contains(BAD)).any().any(), "forbidden word in an output string"
+IDENT = re.compile(r"\b[a-z]+_[a-z_]+\b|\b[a-z]+\.[a-z_]+\b|\(")                              # tm-offers' column-name check
+for c in ("guardrail_note", "already_leaving_note"):
+    v = L[c].fillna("").astype(str)
+    assert (v.str.split().str.len() <= 15).all(), (c, v[v.str.split().str.len() > 15].head(3).tolist())
+    assert not v.str.contains(IDENT).any(), (c, v[v.str.contains(IDENT)].head(3).tolist())
+assert not txt[~IS_CALL].apply(lambda s: s.str.contains("callback", case=False)).any().any(), "callback off a call row"
 L.to_csv(HERE / "ledger.csv", index=False)
 
 # ---------- events.csv (past events only, newest first, up to 3 per account)
@@ -137,4 +180,5 @@ S = dict(contacts=184, costing="conservative: agent time on every fix-first cont
          breakeven_effective_per_attempt_riskweighted=round(BE_EFF_RISKW, 4), breakeven_saves_per_100_contacts=round(BE_SAVES_PER_100, 2),
          old_range95=[b_old["lo95"], b_old["hi95"]], self_serve_secondary=SELF, events_rows=len(E), events_accounts=int(E.account_id.nunique()),
          event_types=E.event_type.value_counts().to_dict())
+S.update(note_mismatches_vs_decisions=MISMATCH, note_counts=NOTE_COUNTS)
 json.dump(S, open(HERE / "ledger_summary.json", "w"), indent=1, default=float); print(json.dumps(S, indent=1, default=float))
