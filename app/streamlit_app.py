@@ -328,7 +328,7 @@ def engine():
     return O, cat, d.set_index("account_id")
 
 
-@st.cache_resource(show_spinner="Loading the offer engine (one time, ~7 s)…")
+@st.cache_resource(show_spinner=False)
 def offer_api():
     """tm-offers' per-account chooser (harness/offer_api.py: prepared_row + choose_offer). Read-only, synthetic."""
     import os
@@ -339,6 +339,40 @@ def offer_api():
     from harness import offer_api as api
     api.prepared_row(CARDS[0][0])  # warm the engine cache once
     return api
+
+
+@st.cache_resource(show_spinner=False)
+def prewarm() -> bool:
+    """Load the scorer + offer engine once at startup so the first toggle flip is instant. No choose_offer, no sends."""
+    try:
+        if str(REPO) not in sys.path:
+            sys.path.insert(0, str(REPO))
+        from harness.churn_scorer import score_account
+        f = data["features"].df
+        for acc in ("ACC-PERSONA-21",):
+            if (f.account_id == acc).any():
+                score_account(f[f.account_id == acc].iloc[0].to_dict())
+        api = offer_api()
+        api.prepared_row("ACC-PERSONA-21")
+        return True
+    except Exception as e:  # noqa: BLE001
+        print(f"[tm-ui] prewarm skipped: {type(e).__name__}: {e}")
+        return False
+
+
+def sms_state() -> str:
+    """'dry' | 'real' | 'off' for the caption under the phone. Reads only TM_SMS_DRY_RUN."""
+    import os
+    if str(REPO / "harness") not in sys.path:
+        sys.path.insert(0, str(REPO / "harness"))
+    try:
+        from sms_send import is_configured
+        cfg = bool(is_configured())
+    except Exception:  # noqa: BLE001
+        cfg = False
+    if not cfg:
+        return "off"
+    return "dry" if os.environ.get("TM_SMS_DRY_RUN") else "real"
 
 
 def what_if(acc: str, edits: dict) -> dict:
@@ -506,7 +540,6 @@ def send_button(body: str, key: str):
         ok_cfg = False
     clicked = st.button("📲 Send this text to my phone", key=f"send_{key}", disabled=not ok_cfg)
     if not ok_cfg:
-        st.caption("Phone sending not set up")
         return
     if clicked:  # st.button is True only on the rerun triggered by this click
         res = send_sms(body)
@@ -633,7 +666,9 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
             st.info("No text is sent to this customer: the offer engine chose to wait." if k_now == "do_nothing"
                     else "No text is sent to this customer.", icon="🤫")
         st.caption(("What-if text from the offer engine." if res is not None else "The exact text the offer engine wrote.")
-                   + " Mockup only, nothing is sent.")
+                   + " " + {"dry": "Rehearsal mode: the text is checked but not sent.",
+                            "real": "Sends this exact text to the demo phone.",
+                            "off": "Phone sending not set up."}[sms_state()])
     sp, _gap = st.columns([2.4, 1])
     with sp:
         score_panel(acc, float(r.p_churn_90d), kp)
@@ -648,7 +683,7 @@ with tab2:
             card(acc, story, fits, i)
     with st.expander("More household plan fits (synthetic)"):
         mcols = st.columns(2)
-        for mc, macc in zip(mcols, ("ACC-PERSONA-39", "ACC-PERSONA-05")):
+        for mc, macc in zip(mcols, ("ACC-PERSONA-05",)):
             mr = df[df.account_id == macc]
             if not len(mr):
                 continue
@@ -1080,3 +1115,6 @@ with st.expander("Data provenance", expanded=False):
         l = data[n]
         st.caption(f"{lab_}: " + {"real": "saved sandbox run", "mock": "placeholder mock", "missing": "not loaded"}[l.source])
 st.caption("All customers and numbers are synthetic.")
+
+# warm the live what-if path after the page has rendered (cached; runs once per server)
+prewarm()
