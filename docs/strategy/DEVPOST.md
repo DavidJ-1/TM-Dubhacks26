@@ -35,11 +35,11 @@ Every action a customer qualifies for is priced against doing nothing, which is 
 ## Challenges we ran into
 - With no real outcomes, we couldn't measure lift, so we label every number simulated and don't claim one.
 - Texts that quote prices have to be right every time.
-- Profit depends on a save rate we can only simulate: retention-only texting breaks even at about 4.5% and is a coin flip at 5% (simulated).
+- Profit depends on a save rate we can only simulate: retention-only texting breaks even at about 4.8% and is a coin flip at 5%. Measured retention campaigns run from about 2% to 11% relative; this pays off in the stronger ones and loses money in the weakest (simulated).
 
 ## Accomplishments that we're proud of
 - Restraint you can check: most accounts get no text at all.
-- **The next version still pays at realistic save rates (simulated).** In the next version of the engine, we re-ran it assuming the roughly 10% save rate real retention campaigns report, texting retention offers only where they still pay off: 246 accounts. It breaks even at about 4.5%, below the roughly 6–11% that real retention campaigns have measured ([Verhelst et al. 2023](https://arxiv.org/abs/2312.07206); [Marketing Science 2018](https://doi.org/10.1287/mksc.2018.1099)). At 10% it comes out ahead in about 7 of 8 resamples, and at 5% it's a coin flip. When an offer isn't worth it, the engine picks doing nothing.
+- **The next version pays at realistic save rates (simulated).** In the next version of the engine, we re-ran it assuming a 10% save rate and texted retention offers only where they still pay off, after our do-not-contact rules: 184 accounts. It breaks even at about a 4.8% save rate. Measured retention campaigns run from about 2% to 11% relative ([Ascarza 2018](https://doi.org/10.1509/jmr.16.0163); [Verhelst et al. 2023](https://arxiv.org/abs/2312.07206); [Marketing Science 2018](https://doi.org/10.1287/mksc.2018.1099)), so this pays off in the stronger campaigns and loses money in the weakest. At 10% it comes out ahead in about 4 of 5 resamples, and at 5% it's a coin flip. When an offer isn't worth it, the engine picks doing nothing.
 - One customer moved to a cheaper plan with the same features.
 - **A fairness audit we'd run weekly (simulated).** In our synthetic test, texts reach accounts labeled senior or student about 3 points less often at the same risk. The savings receipt on the bill shows them a cheaper-plan line more often than others, because those matches skew their way. This is the audit we'd run weekly on real data.
 
