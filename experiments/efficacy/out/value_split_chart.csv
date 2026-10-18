@@ -1,0 +1,121 @@
+policy,true_save_rate,contacts,source,bar,usd,data_note
+Do nothing,0.444,0,cross-check (ours),Business net (company $),0.0,SYNTHETIC/SIMULATED
+Discount everyone,0.444,5042,cross-check (ours),Business net (company $),-75835.0,SYNTHETIC/SIMULATED
+3+ support calls rule,0.444,1466,cross-check (ours),Business net (company $),12273.0,SYNTHETIC/SIMULATED
+Top 10% risk score only,0.444,504,cross-check (ours),Business net (company $),30245.0,SYNTHETIC/SIMULATED
+Ours,0.444,1314,cross-check (ours),Business net (company $),27658.0,SYNTHETIC/SIMULATED
+  Ours: retention offers only,0.444,822,cross-check (ours),Business net (company $),60828.0,SYNTHETIC/SIMULATED
+"  Ours: cheaper-plan moves (right-size, variant)",0.444,389,cross-check (ours),Business net (company $),-32859.0,SYNTHETIC/SIMULATED
+  Ours: upsells,0.444,103,cross-check (ours),Business net (company $),-311.0,SYNTHETIC/SIMULATED
+Do nothing,0.22,0,cross-check (ours),Business net (company $),0.0,SYNTHETIC/SIMULATED
+Discount everyone,0.22,5042,cross-check (ours),Business net (company $),-108808.0,SYNTHETIC/SIMULATED
+3+ support calls rule,0.22,1466,cross-check (ours),Business net (company $),-14634.0,SYNTHETIC/SIMULATED
+Top 10% risk score only,0.22,504,cross-check (ours),Business net (company $),7862.0,SYNTHETIC/SIMULATED
+Ours,0.22,1314,cross-check (ours),Business net (company $),-14691.0,SYNTHETIC/SIMULATED
+  Ours: retention offers only,0.22,822,cross-check (ours),Business net (company $),19831.0,SYNTHETIC/SIMULATED
+"  Ours: cheaper-plan moves (right-size, variant)",0.22,389,cross-check (ours),Business net (company $),-34073.0,SYNTHETIC/SIMULATED
+  Ours: upsells,0.22,103,cross-check (ours),Business net (company $),-450.0,SYNTHETIC/SIMULATED
+Do nothing,0.15,0,cross-check (ours),Business net (company $),0.0,SYNTHETIC/SIMULATED
+Discount everyone,0.15,5042,cross-check (ours),Business net (company $),-119107.0,SYNTHETIC/SIMULATED
+3+ support calls rule,0.15,1466,cross-check (ours),Business net (company $),-23039.0,SYNTHETIC/SIMULATED
+Top 10% risk score only,0.15,504,cross-check (ours),Business net (company $),870.0,SYNTHETIC/SIMULATED
+Ours,0.15,1314,cross-check (ours),Business net (company $),-27919.0,SYNTHETIC/SIMULATED
+  Ours: retention offers only,0.15,822,cross-check (ours),Business net (company $),7026.0,SYNTHETIC/SIMULATED
+"  Ours: cheaper-plan moves (right-size, variant)",0.15,389,cross-check (ours),Business net (company $),-34452.0,SYNTHETIC/SIMULATED
+  Ours: upsells,0.15,103,cross-check (ours),Business net (company $),-493.0,SYNTHETIC/SIMULATED
+Do nothing,0.1,0,cross-check (ours),Business net (company $),0.0,SYNTHETIC/SIMULATED
+Discount everyone,0.1,5042,cross-check (ours),Business net (company $),-126463.0,SYNTHETIC/SIMULATED
+3+ support calls rule,0.1,1466,cross-check (ours),Business net (company $),-29042.0,SYNTHETIC/SIMULATED
+Top 10% risk score only,0.1,504,cross-check (ours),Business net (company $),-4124.0,SYNTHETIC/SIMULATED
+Ours,0.1,1314,cross-check (ours),Business net (company $),-37367.0,SYNTHETIC/SIMULATED
+  Ours: retention offers only,0.1,822,cross-check (ours),Business net (company $),-2121.0,SYNTHETIC/SIMULATED
+"  Ours: cheaper-plan moves (right-size, variant)",0.1,389,cross-check (ours),Business net (company $),-34723.0,SYNTHETIC/SIMULATED
+  Ours: upsells,0.1,103,cross-check (ours),Business net (company $),-524.0,SYNTHETIC/SIMULATED
+Do nothing,0.05,0,cross-check (ours),Business net (company $),0.0,SYNTHETIC/SIMULATED
+Discount everyone,0.05,5042,cross-check (ours),Business net (company $),-133820.0,SYNTHETIC/SIMULATED
+3+ support calls rule,0.05,1466,cross-check (ours),Business net (company $),-35045.0,SYNTHETIC/SIMULATED
+Top 10% risk score only,0.05,504,cross-check (ours),Business net (company $),-9118.0,SYNTHETIC/SIMULATED
+Ours,0.05,1314,cross-check (ours),Business net (company $),-46816.0,SYNTHETIC/SIMULATED
+  Ours: retention offers only,0.05,822,cross-check (ours),Business net (company $),-11267.0,SYNTHETIC/SIMULATED
+"  Ours: cheaper-plan moves (right-size, variant)",0.05,389,cross-check (ours),Business net (company $),-34994.0,SYNTHETIC/SIMULATED
+  Ours: upsells,0.05,103,cross-check (ours),Business net (company $),-555.0,SYNTHETIC/SIMULATED
+Do nothing,0.444,0,cross-check (ours),Customer savings,0.0,SYNTHETIC/SIMULATED
+Discount everyone,0.444,5042,cross-check (ours),Customer savings,126050.0,SYNTHETIC/SIMULATED
+3+ support calls rule,0.444,1466,cross-check (ours),Customer savings,36650.0,SYNTHETIC/SIMULATED
+Top 10% risk score only,0.444,504,cross-check (ours),Customer savings,12600.0,SYNTHETIC/SIMULATED
+Ours,0.444,1314,cross-check (ours),Customer savings,75949.0,SYNTHETIC/SIMULATED
+  Ours: retention offers only,0.444,822,cross-check (ours),Customer savings,6976.0,SYNTHETIC/SIMULATED
+"  Ours: cheaper-plan moves (right-size, variant)",0.444,389,cross-check (ours),Customer savings,68973.0,SYNTHETIC/SIMULATED
+  Ours: upsells,0.444,103,cross-check (ours),Customer savings,0.0,SYNTHETIC/SIMULATED
+Do nothing,0.22,0,cross-check (ours),Customer savings,0.0,SYNTHETIC/SIMULATED
+Discount everyone,0.22,5042,cross-check (ours),Customer savings,126050.0,SYNTHETIC/SIMULATED
+3+ support calls rule,0.22,1466,cross-check (ours),Customer savings,36650.0,SYNTHETIC/SIMULATED
+Top 10% risk score only,0.22,504,cross-check (ours),Customer savings,12600.0,SYNTHETIC/SIMULATED
+Ours,0.22,1314,cross-check (ours),Customer savings,75949.0,SYNTHETIC/SIMULATED
+  Ours: retention offers only,0.22,822,cross-check (ours),Customer savings,6976.0,SYNTHETIC/SIMULATED
+"  Ours: cheaper-plan moves (right-size, variant)",0.22,389,cross-check (ours),Customer savings,68973.0,SYNTHETIC/SIMULATED
+  Ours: upsells,0.22,103,cross-check (ours),Customer savings,0.0,SYNTHETIC/SIMULATED
+Do nothing,0.15,0,cross-check (ours),Customer savings,0.0,SYNTHETIC/SIMULATED
+Discount everyone,0.15,5042,cross-check (ours),Customer savings,126050.0,SYNTHETIC/SIMULATED
+3+ support calls rule,0.15,1466,cross-check (ours),Customer savings,36650.0,SYNTHETIC/SIMULATED
+Top 10% risk score only,0.15,504,cross-check (ours),Customer savings,12600.0,SYNTHETIC/SIMULATED
+Ours,0.15,1314,cross-check (ours),Customer savings,75949.0,SYNTHETIC/SIMULATED
+  Ours: retention offers only,0.15,822,cross-check (ours),Customer savings,6976.0,SYNTHETIC/SIMULATED
+"  Ours: cheaper-plan moves (right-size, variant)",0.15,389,cross-check (ours),Customer savings,68973.0,SYNTHETIC/SIMULATED
+  Ours: upsells,0.15,103,cross-check (ours),Customer savings,0.0,SYNTHETIC/SIMULATED
+Do nothing,0.1,0,cross-check (ours),Customer savings,0.0,SYNTHETIC/SIMULATED
+Discount everyone,0.1,5042,cross-check (ours),Customer savings,126050.0,SYNTHETIC/SIMULATED
+3+ support calls rule,0.1,1466,cross-check (ours),Customer savings,36650.0,SYNTHETIC/SIMULATED
+Top 10% risk score only,0.1,504,cross-check (ours),Customer savings,12600.0,SYNTHETIC/SIMULATED
+Ours,0.1,1314,cross-check (ours),Customer savings,75949.0,SYNTHETIC/SIMULATED
+  Ours: retention offers only,0.1,822,cross-check (ours),Customer savings,6976.0,SYNTHETIC/SIMULATED
+"  Ours: cheaper-plan moves (right-size, variant)",0.1,389,cross-check (ours),Customer savings,68973.0,SYNTHETIC/SIMULATED
+  Ours: upsells,0.1,103,cross-check (ours),Customer savings,0.0,SYNTHETIC/SIMULATED
+Do nothing,0.05,0,cross-check (ours),Customer savings,0.0,SYNTHETIC/SIMULATED
+Discount everyone,0.05,5042,cross-check (ours),Customer savings,126050.0,SYNTHETIC/SIMULATED
+3+ support calls rule,0.05,1466,cross-check (ours),Customer savings,36650.0,SYNTHETIC/SIMULATED
+Top 10% risk score only,0.05,504,cross-check (ours),Customer savings,12600.0,SYNTHETIC/SIMULATED
+Ours,0.05,1314,cross-check (ours),Customer savings,75949.0,SYNTHETIC/SIMULATED
+  Ours: retention offers only,0.05,822,cross-check (ours),Customer savings,6976.0,SYNTHETIC/SIMULATED
+"  Ours: cheaper-plan moves (right-size, variant)",0.05,389,cross-check (ours),Customer savings,68973.0,SYNTHETIC/SIMULATED
+  Ours: upsells,0.05,103,cross-check (ours),Customer savings,0.0,SYNTHETIC/SIMULATED
+Do nothing,0.444,0,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Discount everyone,0.444,5042,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+3+ support calls rule,0.444,1466,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Top 10% risk score only,0.444,504,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Ours,0.444,1314,cross-check (ours),Margin given up on purpose,68973.0,SYNTHETIC/SIMULATED
+  Ours: retention offers only,0.444,822,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+"  Ours: cheaper-plan moves (right-size, variant)",0.444,389,cross-check (ours),Margin given up on purpose,68973.0,SYNTHETIC/SIMULATED
+  Ours: upsells,0.444,103,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Do nothing,0.22,0,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Discount everyone,0.22,5042,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+3+ support calls rule,0.22,1466,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Top 10% risk score only,0.22,504,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Ours,0.22,1314,cross-check (ours),Margin given up on purpose,68973.0,SYNTHETIC/SIMULATED
+  Ours: retention offers only,0.22,822,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+"  Ours: cheaper-plan moves (right-size, variant)",0.22,389,cross-check (ours),Margin given up on purpose,68973.0,SYNTHETIC/SIMULATED
+  Ours: upsells,0.22,103,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Do nothing,0.15,0,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Discount everyone,0.15,5042,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+3+ support calls rule,0.15,1466,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Top 10% risk score only,0.15,504,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Ours,0.15,1314,cross-check (ours),Margin given up on purpose,68973.0,SYNTHETIC/SIMULATED
+  Ours: retention offers only,0.15,822,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+"  Ours: cheaper-plan moves (right-size, variant)",0.15,389,cross-check (ours),Margin given up on purpose,68973.0,SYNTHETIC/SIMULATED
+  Ours: upsells,0.15,103,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Do nothing,0.1,0,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Discount everyone,0.1,5042,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+3+ support calls rule,0.1,1466,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Top 10% risk score only,0.1,504,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Ours,0.1,1314,cross-check (ours),Margin given up on purpose,68973.0,SYNTHETIC/SIMULATED
+  Ours: retention offers only,0.1,822,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+"  Ours: cheaper-plan moves (right-size, variant)",0.1,389,cross-check (ours),Margin given up on purpose,68973.0,SYNTHETIC/SIMULATED
+  Ours: upsells,0.1,103,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Do nothing,0.05,0,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Discount everyone,0.05,5042,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+3+ support calls rule,0.05,1466,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Top 10% risk score only,0.05,504,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+Ours,0.05,1314,cross-check (ours),Margin given up on purpose,68973.0,SYNTHETIC/SIMULATED
+  Ours: retention offers only,0.05,822,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED
+"  Ours: cheaper-plan moves (right-size, variant)",0.05,389,cross-check (ours),Margin given up on purpose,68973.0,SYNTHETIC/SIMULATED
+  Ours: upsells,0.05,103,cross-check (ours),Margin given up on purpose,0.0,SYNTHETIC/SIMULATED

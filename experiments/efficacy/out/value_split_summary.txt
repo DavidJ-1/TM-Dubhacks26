@@ -1,0 +1,17 @@
+[SYNTHETIC] Ours minus Top-10% risk, dev chart definition, assumed save rate: $-2,587
+  Ours: retention offers only: contacts 822, business net $60,828, customer savings $6,976, margin given up $0
+  Ours: cheaper-plan moves (right-size, variant): contacts 389, business net $-32,859, customer savings $68,973, margin given up $68,973
+  Ours: upsells: contacts 103, business net $-311, customer savings $0, margin given up $0
+validation flags: none
+
+business net by realized save rate (cross-check, picks fixed):
+true_save_rate                                      0.444     0.220     0.150     0.100     0.050
+policy                                                                                           
+  Ours: cheaper-plan moves (right-size, variant) -32859.0  -34073.0  -34452.0  -34723.0  -34994.0
+  Ours: retention offers only                     60828.0   19831.0    7026.0   -2121.0  -11267.0
+  Ours: upsells                                    -311.0    -450.0    -493.0    -524.0    -555.0
+3+ support calls rule                             12273.0  -14634.0  -23039.0  -29042.0  -35045.0
+Discount everyone                                -75835.0 -108808.0 -119107.0 -126463.0 -133820.0
+Do nothing                                            0.0       0.0       0.0       0.0       0.0
+Ours                                              27658.0  -14691.0  -27919.0  -37367.0  -46816.0
+Top 10% risk score only                           30245.0    7862.0     870.0   -4124.0   -9118.0
