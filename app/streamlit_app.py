@@ -1,7 +1,7 @@
 """T-Mobile churn + upsell: lean demo app (tm-ui lane). ALL CUSTOMERS AND NUMBERS ARE SYNTHETIC.
 
 Run:  streamlit run app/streamlit_app.py
-Tabs: Dashboard · Customer journey · Four customers · Pipeline visual.
+Tabs: Four customers · How it decides · Customer journey · Pipeline visual.
 Data: TM_OUT_DIR -> demo_data/ -> harness/out/ -> app/mock/ (mock is flagged with a banner). See app/data.py.
 One churn number everywhere: churn_scores.csv p_churn_90d. On screen: "Churn risk model" / "Offer engine",
 no file paths, SKUs or codenames (provenance sits in a collapsed expander).
@@ -25,7 +25,7 @@ from data import clean_stays, is_mock, load_all, merged, persona_titles  # noqa:
 from messages import action_label, normalize_action  # noqa: E402
 
 MAGENTA = "#E20074"
-# Dashboard: show app/charts/06_upgrade_or_wait.png only once tm-strategy signs off on its post-8:50 figures.
+# How-it-decides tab: show app/charts/06_upgrade_or_wait.png only once tm-strategy signs off on its post-8:50 figures.
 SHOW_UPGRADE_WAIT = False
 st.set_page_config(page_title="T-Mobile Next Best Moment (synthetic)", page_icon="📱", layout="wide")
 st.markdown(f"""
@@ -100,7 +100,7 @@ def money(v) -> str:
     return "—" if pd.isna(v) else f"${v:,.0f}"
 
 
-tab1, tabj, tab2, tab3 = st.tabs(["Dashboard", "Customer journey", "Four customers", "Pipeline visual"])
+tab2, tab1, tabj, tab3 = st.tabs(["Four customers", "How it decides", "Customer journey", "Pipeline visual"])
 
 # ---------------- Customer journey (HTML built by another worker; embedded as-is) ----------------
 with tabj:
@@ -625,7 +625,7 @@ with tab2:
                     st.markdown(f"Saves **${m2.group(1)}/mo**")
                 st.markdown(phone(me.strip() or None, "en"), unsafe_allow_html=True)
 
-# ---------------- TAB 1: Dashboard ----------------
+# ---------------- TAB: How it decides ----------------
 with tab1:
     import plotly.express as px
     import plotly.graph_objects as go
@@ -771,7 +771,7 @@ with tab1:
                 st.markdown(f"<div class='bubble' style='font-size:.78rem'>{html.escape(m_.strip())}</div>", unsafe_allow_html=True)
             else:
                 st.markdown("<div class='sub'>🤫 No message sent: we decided to wait.</div>", unsafe_allow_html=True)
-    st.markdown("#### Whole-base view")
+    st.markdown(f"#### Across all {n_acc:,} customers")
     k = st.columns(6)
     k[0].metric("Accounts", f"{n_acc:,}", help="Judge sandbox accounts incl. 42 personas (synthetic).")
     k[1].metric("Flagged at-risk", f"{n_flag:,}", help=f"Churn risk ≥ {fmt_prob(cut)}: the top 10% of regular accounts (synthetic).")
