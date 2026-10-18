@@ -158,6 +158,29 @@ def signal_type(text: str) -> str:
     return "Commerce"
 
 
+_REASON_CATS = [
+    (r"unresolved support contact", "Unresolved support contacts (90 days)"),
+    (r"unhappy support contact", "Unhappy support contacts (90 days)"),
+    (r"promo ended, bill up|promo recently ended", "Promo ended, bill went up"),
+    (r"^bill up", "Bill went up vs prior months"),
+    (r"^new customer", "New customer"),
+    (r"^phone is \d+ months old", "Older phone"),
+    (r"shopping other carriers", "Shopping other carriers"),
+    (r"rarely uses the app", "Rarely uses the app"),
+    (r"porting|transferring their number", "Asked us about transferring their number"),
+    (r"asked about cancelling", "Asked about cancelling"),
+]
+
+
+def reason_category(t) -> str:
+    """Plain label for a risk reason with the numbers removed (for counts across customers)."""
+    t = str(t or "").strip()
+    for pat, lab in _REASON_CATS:
+        if re.search(pat, t, re.I):
+            return lab
+    return clean_text(t)
+
+
 PILL = {"Commerce": "p-com", "Customer": "p-cus", "Real-time": "p-rt"}
 
 
@@ -358,7 +381,8 @@ def what_if(acc: str, edits: dict) -> dict:
     return out
 
 
-def key_facts(r) -> str:
+def key_facts(r, edits=None) -> str:
+    edits = edits or {}
     """Verifiable facts straight from features.csv (synthetic), so the why-line can be checked on screen."""
     def n(c):
         try:
@@ -373,7 +397,8 @@ def key_facts(r) -> str:
     if pd.notna(n("port_out_inquiry")):
         bits.append("asked us about transferring their number" if n("port_out_inquiry") > 0 else "hasn't asked about transferring their number")
     if pd.notna(n("competitor_research_score")):
-        bits.append(f"shopping score {n('competitor_research_score'):.2f}")
+        bits.append("not comparing carriers" if "competitor_research_score" in edits
+                    else f"shopping score {n('competitor_research_score'):.2f}")
     if pd.notna(n("bill_change_3m_pct")):
         bits.append(f"bill {n('bill_change_3m_pct'):+.0%} vs prior 3 mo")
     return "Facts: " + " · ".join(bits) + " (synthetic)" if bits else ""
@@ -515,7 +540,7 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
     with left:
         dec_ph = st.empty()
         chips_ph = st.empty()
-        st.caption(key_facts(r))
+        facts_ph = st.empty()
         opt_hdr, tbl_ph = st.empty(), st.empty()
         st.markdown("**What if?** Switch a fact off and our models re-decide live.")
         rel = [(key, lab, ed) for key, lab, cond, ed in TOGGLES if cond(r)]
@@ -551,6 +576,16 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
         for i in (1, 2, 3):
             rr[f"risk_reason_{i}"] = risks[i - 1] if i <= len(risks) else None
         stays, _dropped = clean_stays(rr)
+    rr_now = r.copy()
+    for kk, vv in edits.items():
+        rr_now[kk] = vv
+    facts_ph.caption(key_facts(rr_now, edits))
+    if "port_out_inquiry" in edits:
+        risks = [x for x in risks if not (isinstance(x, str) and re.search(r"porting|transferring their number", x, re.I))]
+        stays = ["Hasn't asked about transferring their number"] + [x for x in stays if "transferring" not in str(x)]
+    if "competitor_research_score" in edits:
+        risks = [x for x in risks if not (isinstance(x, str) and re.search(r"shopping other carriers|comparing carriers", x, re.I))]
+        stays = ["Not comparing carriers"] + [x for x in stays if "shopping" not in str(x).lower() and "comparing" not in str(x).lower()]
     chips = "".join(chip(x, "risk") for x in risks if isinstance(x, str) and x)
     chips += "".join(chip(x, "stay") for x in stays)
     chips_ph.markdown(chips + LEGEND, unsafe_allow_html=True)
@@ -676,8 +711,7 @@ with top_c:
     # ================= End-to-end process band (one screen explains the pipeline) =================
     st.markdown("#### How it works, end to end")
     n_contact = int(D.contact.sum())
-    _rr = NONP[NONP.p_churn_90d >= cut].risk_reason_1.fillna("").str.replace(r"\d+(\.\d+)?", "N", regex=True)
-    _rr = _rr.str.replace(r"\(score N\)", "", regex=True).str.replace("N unresolved support contact in", "N unresolved support contacts in").str.strip()
+    _rr = NONP[NONP.p_churn_90d >= cut].risk_reason_1.fillna("").map(reason_category)
     top_drv = _rr[_rr != ""].value_counts().head(3)
     mix_top = D[D.contact].action_key.map(action_label).value_counts().head(4) if "action_key" in D else pd.Series(dtype=int)
 
@@ -926,17 +960,15 @@ with bottom_c:
         else:
             st.markdown("**Top reason each flagged customer is at risk**")
             fl = D[D.flagged & ~D.account_id.astype(str).str.startswith("ACC-PERSONA")]
-            rr = fl.risk_reason_1.fillna("").str.replace(r"\d+(\.\d+)?", "#", regex=True)
-            rr = rr.str.replace(r"\(score #\)", "", regex=True).str.replace("# unresolved support contact in", "# unresolved support contacts in").str.strip()
+            rr = fl.risk_reason_1.fillna("").map(reason_category)
             t = rr[rr != ""].value_counts().head(8).reset_index()
             t.columns = ["reason", "accounts"]
-            t["reason"] = t.reason.str.replace("#", "N")
             fig = px.bar(t.sort_values("accounts"), x="accounts", y="reason", orientation="h", template="plotly_white",
                          color_discrete_sequence=[MAGENTA], text="accounts")
             fig.update_layout(height=330, margin=dict(l=8, r=8, t=8, b=8), xaxis_title="flagged accounts (synthetic)", yaxis_title=None)
             fig.update_traces(textposition="outside", cliponaxis=False)
             st.plotly_chart(fig, use_container_width=True)
-            st.caption("Top risk reason for the flagged top 10% (N = a count in the reason). Synthetic.")
+            st.caption("Top risk reason for the flagged top 10%. Synthetic.")
 
     with st.expander("Explore: drivers of churn and the at-risk list (synthetic)"):
 
