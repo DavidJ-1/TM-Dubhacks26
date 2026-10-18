@@ -4,9 +4,9 @@
 
 ## Headline
 
-- Ours makes 963 contacts to low-risk customers (no credits: fix-first callbacks, money-saving plan moves, check-ins and usage-based upsells) vs 4,523 for discounting everyone and 978 for the 3+ calls rule, and spends $6,575 on credits vs $126,050 for discounting everyone.
-- Ours reaches 98 of the 138 customers who actually churned in the simulation (71%) with 1,452 contacts; the 3+ calls rule reaches 105 with 1,466, score-only 88 with 504.
-- Depends on assumed save rates: ~43 expected saves at $1,486 per save, 59% cheaper per save than a $25 credit to everyone, net $15,583 vs -$75,835.
+- Ours makes 639 contacts to low-risk customers (no credits: fix-first callbacks, money-saving plan moves, check-ins and usage-based upsells) vs 4,523 for discounting everyone and 978 for the 3+ calls rule, and spends $6,725 on credits vs $126,050 for discounting everyone.
+- Ours reaches 92 of the 138 customers who actually churned in the simulation (67%) with 1,123 contacts; the 3+ calls rule reaches 105 with 1,466, score-only 88 with 504.
+- Depends on assumed save rates: ~42 expected saves at $957 per save, 73% cheaper per save than a $25 credit to everyone, net $38,528 vs -$75,835.
 - Model A puts 62% of actual churners in its top 10% (out-of-fold), vs 54% for ranking by support calls and 10% at random (AUC 0.85 vs 0.83).
 
 ## 1. Assumption-free metrics (5,042 synthetic accounts)
@@ -19,11 +19,11 @@ These depend only on who each strategy contacts: no assumed save rates. Low risk
 | 2. Discount everyone | 5,042 | 4,523 (90%) | $126,050 | 138 (100%) |
 | 3. 3+ support calls rule | 1,466 | 978 (67%) | $36,650 | 105 (76%) |
 | 4. Top 10% risk score only | 504 | 0 (0%) | $12,600 | 88 (64%) |
-| 5. Ours (Model A + EV engine) | 1,452 | 963 (66%) | $6,575 | 98 (71%) |
+| 5. Ours (Model A + EV engine) | 1,123 | 639 (57%) | $6,725 | 92 (67%) |
 
 ## 2. Simulated value (depends on assumed save rates)
 
-Assumed save rates (engine CONFIG, illustrative): $25 care credit 25% if billing/service pain else 5% (+5 pts after bill shock); ours also uses fix-first 35%/4%, right-size/variant 30%/10%, check-in 12%/4% (on/off target); value = 24 mo x 50% margin. Same for every strategy.
+Assumed save rates (engine CONFIG, illustrative): $25 care credit 25% if billing/service pain else 5% (+5 pts after bill shock); ours also uses fix-first 35%/4%, right-size/variant 30%/10%, check-in 12%/4% (on/off target); value = 24 mo x 50% margin. Same for every strategy. Row 5b uses the same picks as 5 but its net value also counts the engine's own upsell margin, lock-in and customer-benefit credit ($66,929), which the baselines don't get; 5 is the like-for-like row.
 
 | strategy | expected saves | offer cost | cost per save | net expected value |
 |---|---:|---:|---:|---:|
@@ -31,7 +31,8 @@ Assumed save rates (engine CONFIG, illustrative): $25 care credit 25% if billing
 | 2. Discount everyone | 35.0 | $126,050 | $3,598 | -$75,835 |
 | 3. 3+ support calls rule | 28.3 | $36,650 | $1,295 | $12,273 |
 | 4. Top 10% risk score only | 23.7 | $12,600 | $532 | $30,245 |
-| 5. Ours (Model A + EV engine) | 43.2 | $64,183 | $1,486 | $15,583 |
+| 5. Ours (Model A + EV engine) | 41.8 | $39,992 | $957 | $38,528 |
+| 5b. Ours (incl. engine other value) | 41.8 | $39,992 | $957 | $105,457 |
 
 ### Truth check (still depends on assumed save rates): same picks, saves re-scored with the hidden simulated churn probability
 
@@ -41,11 +42,32 @@ Assumed save rates (engine CONFIG, illustrative): $25 care credit 25% if billing
 | 2. Discount everyone | 34.8 | $3,622 | -$75,557 |
 | 3. 3+ support calls rule | 27.8 | $1,316 | $11,954 |
 | 4. Top 10% risk score only | 22.9 | $549 | $29,350 |
-| 5. Ours (Model A + EV engine) | 42.3 | $1,518 | $14,707 |
+| 5. Ours (Model A + EV engine) | 40.8 | $981 | $37,480 |
+| 5b. Ours (incl. engine other value) | 40.8 | $981 | $104,409 |
 
-Ours also carries $72,620 of non-retention EV (upsell margin, lock-in value and customer-savings trust value) that is **not** included in net value above, to keep the comparison like-for-like.
+## 3. Sensitivity: what if every save rate is lower? (all strategies, same factor)
 
-Ours' 963 low-risk contacts by action: right_size 433, fix_first 218, check_in 121, variant_switch 90, step_up 52, family_upgrade 46, home_internet_bundle 3. None are credits (the engine blocks credits below 5% risk); upsells (step_up/family_upgrade/home_internet_bundle) are the ones a judge could question.
+| save-rate scale | Discount everyone | 3+ support calls rule | Top 10% risk score only | Ours (Model A + EV engine) | Ours (incl. engine other value) |
+|---|---:|---:|---:|---:|---:|
+| x1 net value | -$75,835 | $12,273 | $30,245 | $38,528 | $105,457 |
+| x1 saves | 35.0 | 28.3 | 23.7 | 41.8 | 41.8 |
+| x0.5 net value | -$108,506 | -$14,388 | $8,067 | -$2,894 | $64,036 |
+| x0.5 saves | 17.5 | 14.2 | 11.8 | 20.9 | 20.9 |
+| x0.25 net value | -$124,841 | -$27,718 | -$3,023 | -$23,604 | $43,325 |
+| x0.25 saves | 8.8 | 7.1 | 5.9 | 10.4 | 10.4 |
+
+Does Ours beat each baseline? (net value / saves)
+
+- **Ours (Model A + EV engine), save rates x1:** Do nothing: net yes, saves yes; Discount everyone: net yes, saves yes; 3+ support calls rule: net yes, saves yes; Top 10% risk score only: net yes, saves yes.
+- **Ours (Model A + EV engine), save rates x0.5:** Do nothing: net NO, saves yes; Discount everyone: net yes, saves yes; 3+ support calls rule: net yes, saves yes; Top 10% risk score only: net NO, saves yes.
+- **Ours (Model A + EV engine), save rates x0.25:** Do nothing: net NO, saves yes; Discount everyone: net yes, saves yes; 3+ support calls rule: net yes, saves yes; Top 10% risk score only: net NO, saves yes.
+- **Ours (incl. engine other value), save rates x1:** Do nothing: net yes, saves yes; Discount everyone: net yes, saves yes; 3+ support calls rule: net yes, saves yes; Top 10% risk score only: net yes, saves yes.
+- **Ours (incl. engine other value), save rates x0.5:** Do nothing: net yes, saves yes; Discount everyone: net yes, saves yes; 3+ support calls rule: net yes, saves yes; Top 10% risk score only: net yes, saves yes.
+- **Ours (incl. engine other value), save rates x0.25:** Do nothing: net yes, saves yes; Discount everyone: net yes, saves yes; 3+ support calls rule: net yes, saves yes; Top 10% risk score only: net yes, saves yes.
+
+Saves and saved margin scale linearly with the save rate; offer and contact costs don't, so lower save rates hurt the strategies that spend the most per contact first. Full table: comparison_sensitivity.csv.
+
+Ours' 639 low-risk contacts by action: fix_first 198, step_up 152, right_size 112, variant_switch 90, check_in 67, family_upgrade 17, home_internet_bundle 3. None are credits (the engine blocks credits below 5% risk); upsells (step_up/family_upgrade/home_internet_bundle) are the ones a judge could question.
 
 ## Churn model lift (out-of-fold, 5-fold CV)
 
@@ -76,16 +98,23 @@ The literal 3+ calls rule flags 1,462 accounts (29%) and catches 77% of churners
 - Partly circular: ours is scored with the same assumptions it optimizes. The truth-check table and harness/out/policy_eval.csv (simulated 50k randomized trial) are the less-circular views.
 - Model A scores are in-sample for the strategy table; lift uses out-of-fold scores.
 
-Source: offers.csv rows 5,042; regenerate with `python3 harness/compare_strategies.py`.
+## Inputs used
+
+- Input dir: `demo_data`
+- offers.csv: `demo_data/offers.csv`, mtime 2026-10-17 19:59:15 PDT, 5,042 rows
+- offer_candidates: `demo_data/offer_candidates.csv.gz`, mtime 2026-10-17 20:07:01 PDT
+- Both were copied to a private snapshot before reading, so a concurrent tm-offers rerun can't mix runs.
+- Main-table save-rate scale: x1; sweep: x1, x0.5, x0.25
+- Regenerate: `python3 harness/compare_strategies.py` (options: --input-dir, --save-scale, --sweep; env TM_OUT_DIR).
 
 ## Cross-check: simulated 50k randomized trial (tm-offers' policy_eval.csv, test split, DR estimate)
 
 | policy | contacted | churners saved | offer cost | cost per save | net value (no upsell) |
 |---|---:|---:|---:|---:|---:|
 | do nothing | 0 | 0.0 | $0 | n/a | $0 |
-| random (eligible arm) | 5,887 | 77.0 | $118,233 | $1,534 | $25,117 |
-| 3+ calls rule -> $25 care credit | 841 | 32.7 | $21,025 | $643 | $17,230 |
-| offer to everyone (best eligible offer) | 10,660 | 123.8 | $205,635 | $1,660 | $21,289 |
-| Model B EV chooser | 3,309 | 113.5 | $118,266 | $1,042 | $108,364 |
-| Model C uplift policy | 3,197 | 93.0 | $50,546 | $544 | $116,590 |
-| oracle (true effects; reference only) | 3,209 | 130.0 | $53,936 | $415 | $200,980 |
+| random (eligible arm) | 6,250 | 63.2 | $147,341 | $2,333 | -$40,677 |
+| 3+ calls rule -> $25 care credit | 841 | 31.6 | $21,025 | $666 | $16,580 |
+| offer to everyone (best eligible offer) | 11,241 | 117.8 | $276,429 | $2,347 | -$67,127 |
+| Model B EV chooser | 4,324 | 116.5 | $187,877 | $1,613 | $33,185 |
+| Model C uplift policy | 2,828 | 96.8 | $42,046 | $434 | $140,970 |
+| oracle (true effects; reference only) | 3,065 | 123.4 | $47,207 | $382 | $195,118 |
