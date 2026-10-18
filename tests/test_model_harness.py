@@ -17,6 +17,11 @@ def toy(n=600, seed=0):
         "competitor_research_score": rng.random(n),
         "tenure_months": rng.integers(1, 120, n).astype(float),
         "segment=family": rng.integers(0, 2, n).astype(float),
+        # The upgrade rule reads these. Neutral values so it fits when features.csv is absent.
+        "n_lines": np.ones(n),
+        "plan_data_cap_gb": np.full(n, 50.0),
+        "data_gb_3m_avg": np.full(n, 10.0),
+        "n_lines_over_cap_3m": np.zeros(n),
     }, index=pd.Index([f"ACC-{i:05d}" for i in range(n)], name="account_id"))
     X["segment=single"] = 1 - X["segment=family"]
     logit = -3 + 0.6 * X.support_90d + 2.5 * X.competitor_research_score - 0.01 * X.tenure_months
