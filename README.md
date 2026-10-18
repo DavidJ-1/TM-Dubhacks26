@@ -12,6 +12,8 @@ make run
 
 That creates a virtualenv, installs the Python dependencies, clones the judge sandbox if it is not already in `vendor/dubhacks`, and starts the Retention Console (`app/console_app.py`) at <http://localhost:8501>.
 
+Install the ntfy app, subscribe to the topic, set `NTFY_TOPIC` and `SEND_BACKEND=ntfy`, then click Send.
+
 The teammate demo UI is a second Streamlit app, `app/streamlit_app.py`. It reads `harness/out/*.csv` when those files exist and otherwise the synthetic mocks in `app/mock/`. Its Charts screen reads the bench and Model C artifacts. Those numbers are labeled synthetic and are not used by `make run`. See `app/README.md`.
 
 ```bash
@@ -68,7 +70,7 @@ The sandbox has no observed churn outcomes. Judges score a private model that is
 - No offer-outcome feedback loop and no retraining on imagined acceptances.
 - No scraped or online "what people want to upgrade to" data.
 - No simulated before/after presented as a real result. The projection screen is labeled as an assumption.
-- Photon messaging is not included. There is no Python send path in this demo.
+- Photon messaging is not included.
 
 ## Layout
 

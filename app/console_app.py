@@ -16,6 +16,7 @@ import streamlit as st
 
 from harness.engine import build_console
 from harness.messages import outbound_title
+from harness.notify import hint, send
 from harness.playbook.rules import ASSUMPTION_CREDIT_CENTS, FREQUENCY_CAP_DAYS, RULES, VALUE_FORMULA
 from harness.projections import acceptance_curve, project, upgrade_curve
 
@@ -354,6 +355,27 @@ def queue(console) -> None:
     chart(fig, height=480)
 
 
+def _send_to_my_phone(action: dict, message: dict) -> None:
+    if not message.get("text"):
+        st.write(f"No message sent, here's why: {action['why']}")
+        return
+    note = hint()
+    if note:
+        st.caption(note)
+    if st.button("Send to my phone"):
+        result = send(message["text"])
+        if result.get("hint"):
+            st.caption(result["hint"])
+        if result.get("backend") == "dryrun" or not result.get("sent"):
+            if result.get("ok"):
+                st.toast("Preview only. Nothing was sent.")
+                st.info(result.get("message") or "")
+            else:
+                st.toast(result.get("detail") or "Send failed.")
+        else:
+            st.toast("Sent to your phone." if result.get("ok") else result.get("detail") or "Send failed.")
+
+
 def action_page(console) -> None:
     options = PINNED + sorted(set(console.details) - set(PINNED))
     current = ensure_selection(console)
@@ -415,6 +437,7 @@ def action_page(console) -> None:
                 st.write("No device promotion is eligible on a single trade-in plus one new phone.")
     with right:
         customer_card(detail, message)
+        _send_to_my_phone(action, message)
 
 
 def _label(console, account_id: str) -> str:
