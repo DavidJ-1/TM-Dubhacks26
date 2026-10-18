@@ -115,3 +115,8 @@ $4,590-$7,871; 5% CI -$66 to $1,184.) Break-even save rate: 4.5%.
   than 50% month to month or drops more than 30%. That guardrail is a rule that currently excludes 0 accounts.
 - The real-data validation is retail e-mail, a different product, channel and outcome.
 - Not built yet in v1: per-customer plain-language reasons, the synthetic transfer, and the engine adapter.
+
+## Do-not-contact guardrail (`guardrail.py`, details in GUARDRAIL.md)
+Rule-based: our models can't reliably pick out who will be pushed away, so we use a rule-based guardrail instead.
+`out/guardrail.csv` has one row per account (5,042, synthetic): `contact_ok`, `block_reason`
+(bill_change_no_fix, receipt_only_plan_move, contacted_this_quarter, not_worth_contacting) and a plain `why_line`.
