@@ -53,6 +53,8 @@ _ids = set(df.account_id)
 st.session_state.setdefault("acc", f"{D.PERSONA}38")
 if "customer_pick" not in st.session_state:
     D.apply_shared_selection(st.session_state, st.session_state["acc"])
+if st.session_state.get("seg") not in D.QUICK_IDS:
+    st.session_state["seg"] = st.session_state["acc"] if st.session_state["acc"] in D.QUICK_IDS else None
 pending = st.session_state.pop("_pending_acc", None)
 _seen = st.session_state.get("_seen_dot")
 if pending and pending in _ids:
@@ -87,7 +89,7 @@ def _forget_dot():
 def _from_seg():
     v = st.session_state.get("seg")
     if v:
-        D.apply_shared_selection(st.session_state, f"{D.PERSONA}{v}")
+        D.apply_shared_selection(st.session_state, v)
         _forget_dot()
 
 
@@ -112,9 +114,10 @@ def _from_live():
 
 
 st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-a, b = st.columns([1, 2])
-a.segmented_control("Quick picks", D.DEMO, key="seg", format_func=lambda d: f"Customer {d}", on_change=_from_seg)
-b.selectbox("Find a customer", _menu_ids, key="customer_pick", format_func=lambda i: _menu_labels.get(i, i), on_change=_from_pick)
+_qlabel = {q["id"]: D.quick_button(q) for q in D.QUICK}
+st.segmented_control("Quick picks", list(D.QUICK_IDS), key="seg",
+                     format_func=lambda i: _qlabel.get(i, D.customer_cid(i)), on_change=_from_seg)
+st.selectbox("Find a customer", _menu_ids, key="customer_pick", format_func=lambda i: _menu_labels.get(i, i), on_change=_from_pick)
 st.markdown("<div class='o-lbl' style='text-transform:none;letter-spacing:0;margin:6px 0 0'>Scroll the list or type to search. "
             "Highest risk is first. A chart dot, a table row, the walk-through, and the deal below all follow this customer.</div>",
             unsafe_allow_html=True)
@@ -240,6 +243,6 @@ if hasattr(O, "render_deal_engine"):
     allo = D.all_options()
     _call(O.render_deal_engine, df, acc, options=allo if SHOW_MONEY else D.strip_money(allo),
           decisions=dec_all if SHOW_MONEY else D.strip_money(dec_all),
-          demo_ids=[f"{D.PERSONA}{d}" for d in D.DEMO], on_quick=_on_quick)
+          quick=[(q["id"], D.quick_button(q)) for q in D.QUICK], on_quick=_on_quick)
 _call(O.render_considered, D.considerations() if SHOW_MONEY else D.considerations_no_money(D.considerations()),
       summary=D.considered_summary() if SHOW_MONEY else None)

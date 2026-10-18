@@ -69,6 +69,22 @@ def clean(s) -> str:
 # all write it through apply_shared_selection. Widget keys stay in this dict so a test can check them
 # without starting Streamlit.
 DEMO_CODES = tuple(DEMO)
+# Real accounts across the risk bands. At least one do-nothing. Personas 07, 31, and 24 stay out.
+QUICK = (
+    {"id": "ACC-00347", "band": "low risk", "why": "do nothing"},
+    {"id": "ACC-01116", "band": "low risk", "why": "cheaper plan on the bill"},
+    {"id": "ACC-02363", "band": "high risk", "why": "do nothing"},
+    {"id": "ACC-01607", "band": "very high risk", "why": "fix-first message"},
+)
+QUICK_IDS = tuple(q["id"] for q in QUICK)
+
+
+def quick_label(q: dict) -> str:
+    return f"{q['band']}, {q['why']}"
+
+
+def quick_button(q: dict) -> str:
+    return f"{customer_cid(q['id'])} · {quick_label(q)}"
 
 
 def customer_cid(account_id: str) -> str:
@@ -134,16 +150,14 @@ def apply_shared_selection(state: dict, account_id: str, *, key: str = "acc") ->
     """Point every scroll-page control at one account.
 
     state['acc'] is the customer the walk-through and the deal example show.
-    state['customer_pick'] is the dropdown. state['seg'] is a demo quick pick
-    ('38', '04', '21', '24') or None. state['orbit_deal_quick'] mirrors that
-    pick in the deal section, and is None when the customer is not one of those four.
+    state['customer_pick'] is the dropdown. state['seg'] is a quick-pick account id
+    or None. state['orbit_deal_quick'] mirrors that pick, and is None otherwise.
     """
     account_id = str(account_id)
     state[key] = account_id
     state["customer_pick"] = account_id
-    code = account_id[len(PERSONA):] if account_id.startswith(PERSONA) else ""
-    state["seg"] = code if code in DEMO_CODES else None
-    state["orbit_deal_quick"] = account_id if code in DEMO_CODES else None
+    state["seg"] = account_id if account_id in QUICK_IDS else None
+    state["orbit_deal_quick"] = account_id if account_id in QUICK_IDS else None
     return state
 
 

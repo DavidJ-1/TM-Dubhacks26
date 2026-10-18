@@ -35,16 +35,28 @@ def test_resolve_typed_id():
 
 def test_apply_shared_selection_is_one_customer():
     state = {}
-    D.apply_shared_selection(state, "ACC-PERSONA-24")
-    assert state["acc"] == "ACC-PERSONA-24"
-    assert state["customer_pick"] == "ACC-PERSONA-24"
-    assert state["seg"] == "24"
-    assert state["orbit_deal_quick"] == "ACC-PERSONA-24"
     D.apply_shared_selection(state, "ACC-02363")
     assert state["acc"] == "ACC-02363"
     assert state["customer_pick"] == "ACC-02363"
+    assert state["seg"] == "ACC-02363"
+    assert state["orbit_deal_quick"] == "ACC-02363"
+    D.apply_shared_selection(state, "ACC-00001")
+    assert state["acc"] == "ACC-00001"
+    assert state["customer_pick"] == "ACC-00001"
     assert state["seg"] is None
     assert state["orbit_deal_quick"] is None
+
+
+def test_quick_picks_span_risk_and_keep_a_do_nothing():
+    labels = [D.quick_label(q) for q in D.QUICK]
+    assert any(x == "low risk, do nothing" for x in labels)
+    assert any(x.startswith("low risk") for x in labels)
+    assert any(x.startswith("high risk") for x in labels)
+    assert any(x.startswith("very high risk") and "fix-first" in x for x in labels)
+    ids = {q["id"] for q in D.QUICK}
+    assert "ACC-02363" in ids
+    assert not ids & {"ACC-PERSONA-07", "ACC-PERSONA-31", "ACC-PERSONA-24"}
+    assert D.quick_button(D.QUICK[0]).startswith("#")
 
 
 def test_point_selection_reads_the_account_id():
