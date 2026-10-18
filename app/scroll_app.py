@@ -1,4 +1,4 @@
-"""Scroll page: the churn + upsell board as one long 3D scroll (built from the design team's orbit mock).
+"""Scroll page: the churn + upsell board as one long page (built from the design team's orbit mock).
 
 Run: python -m streamlit run app/scroll_app.py
 Data loading and every count live in orbit_data.py and here; orbit_sections.py only draws.
@@ -42,18 +42,32 @@ def frame():
 
 
 df = frame()
-_call(O.render_hero, df)
+_hero_points = _call(O.render_hero, df) or []
+dot = D.account_from_point_selection(_hero_points)
 
 dec = D.offer_decisions(df)   # next-version decisions (offers team's decisions.csv; ledger fallback)
 
-# ---- one selected customer. The dropdown, a quick pick, a table row, and (later) a chart dot all write
+# ---- one selected customer. The dropdown, a quick pick, a chart dot, and a table row all write
 # st.session_state["acc"] through D.apply_shared_selection, before the widgets are created.
+_ids = set(df.account_id)
 st.session_state.setdefault("acc", f"{D.PERSONA}38")
 if "customer_pick" not in st.session_state:
     D.apply_shared_selection(st.session_state, st.session_state["acc"])
 pending = st.session_state.pop("_pending_acc", None)
-if pending and pending in set(df.account_id):
+_seen = st.session_state.get("_seen_dot")
+if pending and pending in _ids:
     D.apply_shared_selection(st.session_state, pending)
+    # Drop a stale dot highlight so it cannot put the previous customer back.
+    if dot and dot != pending:
+        st.session_state["_chart_gen"] = int(st.session_state.get("_chart_gen", 0)) + 1
+        st.session_state["_seen_dot"] = None
+        st.rerun()
+    st.session_state["_seen_dot"] = None
+elif dot and dot in _ids and dot != _seen:
+    D.apply_shared_selection(st.session_state, dot)
+    st.session_state["_seen_dot"] = dot
+elif not dot:
+    st.session_state["_seen_dot"] = None
 
 _menu_ids = D.customers_by_risk(df)
 _menu_labels = {
@@ -64,16 +78,24 @@ if st.session_state["acc"] not in _menu_labels and len(_menu_ids):
     D.apply_shared_selection(st.session_state, _menu_ids[0])
 
 
+def _forget_dot():
+    """A picker changed the customer, so the chart's last click should not win on the next run."""
+    st.session_state["_chart_gen"] = int(st.session_state.get("_chart_gen", 0)) + 1
+    st.session_state["_seen_dot"] = None
+
+
 def _from_seg():
     v = st.session_state.get("seg")
     if v:
         D.apply_shared_selection(st.session_state, f"{D.PERSONA}{v}")
+        _forget_dot()
 
 
 def _from_pick():
     v = st.session_state.get("customer_pick")
     if v:
         D.apply_shared_selection(st.session_state, v)
+        _forget_dot()
 
 
 st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
@@ -81,7 +103,8 @@ a, b = st.columns([1, 2])
 a.segmented_control("Quick picks", D.DEMO, key="seg", format_func=lambda d: f"Customer {d}", on_change=_from_seg)
 b.selectbox("Find a customer", _menu_ids, key="customer_pick", format_func=lambda i: _menu_labels.get(i, i), on_change=_from_pick)
 st.markdown("<div class='o-lbl' style='text-transform:none;letter-spacing:0;margin:6px 0 0'>Scroll the list or type to search. "
-            "Highest risk is first. The walk-through and the deal below follow this customer.</div>", unsafe_allow_html=True)
+            "Highest risk is first. A chart dot, a table row, the walk-through, and the deal below all follow this customer.</div>",
+            unsafe_allow_html=True)
 acc = st.session_state["acc"]
 # the walk-through: decisions/options from the offers team's files (ledger/outreach fallbacks), today's candidates for eligibility
 opts = D.offer_options(df, acc)

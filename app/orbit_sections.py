@@ -3,9 +3,9 @@
 API (all data is passed in; this module never reads repo files except its own fonts in orbit_assets/):
     load_css()                                   inject fonts + page CSS once per run
     orbit_frame(merged, outreach=None, ...)      add flagged / messaged / channel / reason columns
-    render_hero(df)                              act 1: every customer in 3D + funnel headline
+    render_hero(df)                              act 1: churn risk vs monthly bill, clickable dots + funnel headline
     render_customer(df, account_id, ...)         act 2: six-step walk-through for one account
-    render_dashboard(df, economics)              act 3: hairline stat grid, two charts, riskiest-ten (returns clicked id)
+    render_dashboard(df, economics)              act 3: hairline stat grid, risk bands, who hears from us, riskiest-ten
     render_considered(df_considerations)         act 4: what we considered (renders nothing for None)
 """
 from __future__ import annotations
@@ -220,44 +220,48 @@ def orbit_frame(merged: pd.DataFrame, outreach: pd.DataFrame | None = None, rece
 
 # ============================================================== act 1 — hero
 @st.cache_resource(show_spinner=False, max_entries=4)
-def _hero_fig(_df: pd.DataFrame, sig: str) -> go.Figure:
+def _hero_fig(_df: pd.DataFrame, sig: str, log: bool = False) -> go.Figure:
+    """Churn risk (x) vs the customer's monthly bill (y). One dot per account. customdata[0] is the account id."""
     h = _df
-    x = h.p_churn_90d * 100
-    y = (h.get("last_bill_cents", pd.Series(0, index=h.index)).fillna(0) / 100)
-    z = h.get("tenure_months", pd.Series(0, index=h.index)).fillna(0)
+    risk = h.p_churn_90d * 100
+    # Log axis can't plot 0. The floor is only the dot's position; the hover text keeps the real risk.
+    x = risk.clip(lower=0.05) if log else risk
+    y = h.get("last_bill_cents", pd.Series(0, index=h.index)).fillna(0) / 100
     how = h.channel.map(CHANNEL_LABEL).fillna("no message")
-    cd = np.stack([[cid(a) for a in h.account_id], how], axis=1)
-    tip = ("Customer %{customdata[0]}<br>90-day churn risk %{x:.2f}%<br>monthly bill $%{y:,.0f}"
-           "<br>%{z:.0f} months with us<br>message: %{customdata[1]}<extra></extra>")
+    ids = h.account_id.astype(str).tolist()
+    cd = np.stack([ids, [cid(a) for a in ids], [pct(v) for v in risk], [f"${v:,.0f}/mo" for v in y], how.astype(str).tolist()], axis=1)
+    tip = ("Customer %{customdata[1]}<br>Churn risk %{customdata[2]}<br>Monthly bill %{customdata[3]}"
+           "<br>%{customdata[4]}<extra></extra>")
     fig = go.Figure()
-    for mask, size, col in ((~h.flagged, 2.2, DOT), (h.flagged, 3.4, MAG)):
-        fig.add_trace(go.Scatter3d(x=x[mask], y=y[mask], z=z[mask], mode="markers", marker=dict(size=size, color=col, line=dict(width=0)),
-                                   customdata=cd[mask.values], hovertemplate=tip, showlegend=False))
-    ann = []
-    demo = [a for a in (f"{PERSONA_PREFIX}{d}" for d in ("38", "04", "21", "24")) if a in set(h.account_id)]
-    offs = [(-70, -70), (-40, -140), (-120, 40), (90, 60)]
-    picks = [(a, f"CUSTOMER {cid(a)}", offs[i]) for i, a in enumerate(demo)]
-    reg = h[~h.is_demo]
-    if len(reg):
-        picks.append((reg.iloc[0].account_id, f"RISKIEST · {cid(reg.iloc[0].account_id)}", (110, 10)))
-    for acc, title, (ax, ay) in picks:
-        i = h.index[h.account_id == acc][0]
-        ann.append(dict(x=math.log10(max(x[i], 0.05)), y=y[i], z=z[i], text=f"<b>{title}</b><br>{pct(x[i])} risk · ${y[i]:,.0f}/mo",
-                        showarrow=True, arrowhead=0, arrowwidth=1, arrowcolor=INK, ax=ax, ay=ay,
-                        font=dict(family="SM", size=10, color=INK), bgcolor=BG, bordercolor=INK, borderwidth=1, borderpad=4))
+    for mask, size, col in ((~h.flagged, 7, DOT), (h.flagged, 9, MAG)):
+        m = mask.to_numpy()
+        fig.add_trace(go.Scatter(x=x[mask], y=y[mask], mode="markers",
+                                 marker=dict(size=size, color=col, opacity=0.85, line=dict(width=0)),
+                                 customdata=cd[m], hovertemplate=tip, showlegend=False))
+    title = "Churn risk (log scale)" if log else "Churn risk"
     fig.update_layout(
-        paper_bgcolor=BG, plot_bgcolor=BG, margin=dict(l=0, r=0, t=0, b=0), height=760, uirevision="orbit-hero",
-        font=dict(family="SG", color=INK), hoverlabel=dict(bgcolor="#fff", bordercolor=INK, font=dict(family="SM", size=11, color=INK)),
-        scene=dict(xaxis=_axes("90-DAY CHURN RISK (LOG)", type="log", tickvals=[0.3, 1, 3, 10, 30, 70],
-                               ticktext=["0.3%", "1%", "3%", "10%", "30%", "70%"]),
-                   yaxis=_axes("MONTHLY BILL $"), zaxis=_axes("MONTHS WITH US"),
-                   aspectmode="manual", aspectratio=dict(x=1.6, y=1.1, z=0.8),
-                   camera=dict(eye=dict(x=1.45, y=-1.35, z=0.6), center=dict(x=0, y=0, z=-0.15)), annotations=ann))
+        paper_bgcolor=BG, plot_bgcolor=BG, height=560, margin=dict(l=64, r=16, t=12, b=56),
+        font=dict(family="SM", size=12, color=INK), dragmode=False, clickmode="event+select",
+        uirevision=f"orbit-scatter-{int(log)}", showlegend=False,
+        hoverlabel=dict(bgcolor="#fff", bordercolor=INK, font=dict(family="SM", size=12, color=INK)))
+    fig.update_xaxes(title=dict(text=title, font=dict(family="SM", size=13, color=INK)),
+                     ticksuffix="" if log else "%", tickfont=dict(family="SM", size=11, color=MUTED),
+                     fixedrange=True, type="log" if log else "linear",
+                     showgrid=False, linecolor=INK, linewidth=1, zeroline=False,
+                     **({"tickvals": [0.1, 1, 10, 70], "ticktext": ["0.1%", "1%", "10%", "70%"]} if log else {}))
+    fig.update_yaxes(title=dict(text="Monthly bill ($)", font=dict(family="SM", size=13, color=INK)),
+                     tickprefix="$", tickfont=dict(family="SM", size=11, color=MUTED),
+                     fixedrange=True, rangemode="tozero", gridcolor="rgba(17,17,17,0.15)",
+                     linecolor=INK, linewidth=1, zeroline=False)
     return fig
 
 
-def render_hero(df: pd.DataFrame, *, show_money: bool = True) -> None:
-    """show_money: the hero shows no money of ours either way (bills on hover are the customer's own); kept for a uniform API."""
+def render_hero(df: pd.DataFrame, *, show_money: bool = True) -> list:
+    """Clickable risk-vs-bill scatter. Returns the selected plotly points (possibly empty).
+
+    show_money: the hero shows no money of ours either way (bills are the customer's own); kept for a uniform API.
+    Linear is the default axis. 'Log scale' relabels the axis 'Churn risk (log scale)'. The chart does not zoom.
+    """
     scored, flagged = len(df), int(df.flagged.sum())
     messaged, texts = int(df.messaged.sum()), int((df.channel == "text").sum())
     st.markdown(f"<div class='o-strip'><span><b>Churn + upsell board</b> · this week</span><span>{scored:,} customers scored</span>"
@@ -274,10 +278,21 @@ def render_hero(df: pd.DataFrame, *, show_money: bool = True) -> None:
 </div>
 <div class='o-lbl' style='margin-top:12px'>every dot is one customer · magenta = flagged</div></div>""", unsafe_allow_html=True)
     with right:
-        sig = f"{scored}-{flagged}-{messaged}-{float(df.p_churn_90d.sum()):.6f}"
-        st.plotly_chart(_hero_fig(df, sig), width="stretch", theme=None, config=CFG3D, key="orbit_hero")
-        st.markdown("<div class='o-hint'>drag to rotate · hover a point</div>", unsafe_allow_html=True)
+        if "risk_axis" not in st.session_state:
+            st.session_state["risk_axis"] = "Linear"
+        st.segmented_control("Churn risk axis", ["Linear", "Log scale"], key="risk_axis")
+        log = st.session_state.get("risk_axis") == "Log scale"
+        sig = f"{scored}-{flagged}-{messaged}-{float(df.p_churn_90d.sum()):.6f}-{'log' if log else 'lin'}"
+        gen = int(st.session_state.get("_chart_gen", 0))
+        ev = st.plotly_chart(_hero_fig(df, sig, log), width="stretch", theme=None,
+                             config={"displayModeBar": False, "scrollZoom": False, "doubleClick": False},
+                             key=f"orbit_hero_{gen}", on_select="rerun", selection_mode="points")
+        st.markdown("<div class='o-hint'>Click a dot to open that customer. The chart does not zoom.</div>", unsafe_allow_html=True)
     st.markdown("<div class='o-cue'>↓&nbsp;&nbsp;SCROLL · OPEN ONE CUSTOMER</div>", unsafe_allow_html=True)
+    points = []
+    if ev is not None and getattr(ev, "selection", None) is not None:
+        points = list(getattr(ev.selection, "points", None) or [])
+    return points
 
 
 # ============================================================== act 2 — how we pick the deal

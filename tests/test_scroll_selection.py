@@ -52,3 +52,29 @@ def test_point_selection_reads_the_account_id():
     assert D.account_from_point_selection([{"customdata": "ACC-00001"}]) == "ACC-00001"
     assert D.account_from_point_selection([]) is None
     assert D.account_from_point_selection(None) is None
+
+
+def test_scatter_is_fixed_and_plainly_labeled():
+    import orbit_sections as O
+
+    df = pd.DataFrame({
+        "account_id": ["ACC-00001", "ACC-00002"],
+        "p_churn_90d": [0.87, 0.01],
+        "last_bill_cents": [14200, 8000],
+        "flagged": [True, False],
+        "channel": ["text", None],
+        "is_demo": [False, False],
+    })
+    fig = O._hero_fig(df, "t", False)
+    assert fig.layout.xaxis.title.text == "Churn risk"
+    assert fig.layout.xaxis.fixedrange is True
+    assert fig.layout.yaxis.title.text == "Monthly bill ($)"
+    assert fig.layout.yaxis.fixedrange is True
+    assert fig.layout.dragmode is False
+    assert all(trace.type == "scatter" for trace in fig.data)
+    ids = {row[0] for trace in fig.data for row in trace.customdata}
+    assert ids == {"ACC-00001", "ACC-00002"}
+    fig_log = O._hero_fig(df, "t2", True)
+    assert fig_log.layout.xaxis.title.text == "Churn risk (log scale)"
+    assert fig_log.layout.xaxis.type == "log"
+    assert fig_log.layout.xaxis.fixedrange is True
