@@ -266,3 +266,209 @@ Thesis: the carrier tells customers when they're overpaying, says "don't upgrade
 **Recommendation:** set `right_size` acceptance to a **3% base (range 2–5%)** with a **sensitivity of up to 13%**. Apply a timing bump only at contract end or device payoff (Ofcom: +8–15 pp at contract end). No public source supports 45%. Caveat: Ascarza's plans saved money by cutting overage, and Ofgem's are energy, not telecom.
 
 **Synthetic implication (our 5,042 synthetic accounts; all figures synthetic):** 682 accounts are right-size-eligible, worth about **$450/mo at 3%** and about **$1,900/mo at 13%**, against a **$14,830/mo ceiling** if everyone accepted.
+
+## 12. T-Mobile-side value and hidden-value messaging
+David's ask: show what each offer is worth **to T-Mobile** (churn avoided × account value − revenue given up − contact cost), and add a "hidden value" play (remind customers of perks they already pay for). Full notes: `research-notes/notes_hidden_value.md`. Accessed 2026-10-17. Strength: A = filing / peer-reviewed; B = company or analyst statement; C = weak. All engine numbers stay synthetic.
+
+| Claim | Number | Source (date) | Strength | Maps to `harness/offers.py` |
+|---|---|---|---|---|
+| T-Mobile postpaid ARPA; account churn (Q2'26) | $152.91/mo; 0.99%/mo | [TMUS Ex 99.1](https://www.sec.gov/Archives/edgar/data/1283699/000128369926000100/tmus06302026ex991.htm) (2026-07-23) | A | account value inputs |
+| Core Adj. EBITDA ÷ service revenue (Q2'26, **derived**) | $9.537B ÷ $19.0B ≈ **50%** (≈42% of total revenue) | same filing | A inputs / derived | `SERVICE_MARGIN` 0.50 now has an anchor (upper bound: EBITDA is pre-capex) |
+| Account value over our horizon (**derived**) | $152.91 × 0.50 × 24 ≈ **$1.8K**; undiscounted full life (1/0.0099 ≈ 101 mo) ≈ $7.7K | arithmetic | derived | `VALUE_HORIZON_MONTHS` 24 = conservative |
+| Analyst net LTV per wireless customer | ≈$1,900 financed vs ≈$1,516 BYOD | [Recon Analytics](https://www.reconanalytics.com/products/demanded-and-hated/) (2025-26) | B | cross-check: matches the 24-mo figure |
+| Current acquisition / retention $ per sub | **Not disclosed by any US carrier.** Verizon: CoA + CoR down ~35% via micro-segmentation, no $ | [VZ 1Q26 transcript](https://www.verizon.com/about/sites/default/files/2026-06/vz_1q26_transcript_042726rm.pdf) (2026-04-27) | A (statement) | none; old CPGA $300-400 (2004-05, §2) |
+| "5-25x cheaper to retain" | Traced to [HBR, Gallo, 2014-10-29](https://hbr.org/2014/10/the-value-of-keeping-the-right-customers): "depending on which study you believe", **no study named** | — | **C: do not use** | — |
+| Cost of a live support contact vs self-service | **$8.01 vs $0.10** (2019 poll); newer median **$13.50 vs $1.84** | [Gartner 2019-09-25](https://www.gartner.com/en/newsroom/press-releases/2019-09-25-gartner-says-only-9--of-customers-report-solving-thei); [Gartner benchmark abstract](https://www.gartner.com/en/documents/5164231) (~2024) | A- / B | `FIX_FIRST_CALLBACK_COST` $15 = plausible (≈1-2 assisted contacts); `CHECK_IN_COST` $2 = between self-service and live; perk reminder in-app ≈ $0.10-1.84 |
+| ContactBabel $7.16 per inbound call | relayed by secondary sites; not in the free PDF | ContactBabel 2025 guide | C (unverified) | don't cite |
+| Perk-salience RCT in telecom (35k Canadian mobile subs, 12 mo): "perceived value" treatment **no causal effect** on satisfaction; **fewer marketing messages** reduced frustration and, with a discount, raised loyalty | [McKenzie, U. Reading thesis](https://centaur.reading.ac.uk/115294/1/McKenzie_thesis.pdf) (RCT 2019-20) | B- (thesis) | **null**: reminders aren't free; cap frequency |
+| Salience can backfire: "you could save" outreach raised churn 6% → 10% | [Ascarza et al., JMR 2016](https://doi.org/10.1509/jmr.13.0483) | A | **negative**: no price/bill framing in a perk reminder |
+| Non-price "reminder" messages beat price-savings messages on subscription sign-up **and retention** (RCT, retailer) | no effect sizes in abstract | [EMAC 2025](https://proceedings.emac-online.org/pdfs/A2025-126023.pdf) | B- | supports value framing over discounts |
+| Bundled streaming retains better | 59% 12-mo survival (Disney+/Hulu/Max bundle), +4 pts vs Netflix alone, +28 vs components | [Antenna, Mar 2026](https://www.antenna.live/insights/the-power-of-the-pack-bundling-and-retention) | B (selection, not causal) | supports perk *use* as a stickiness signal, not a reminder effect |
+| T-Mobile perk usage | ~40M members ever redeemed Tuesdays (since 2016); 60M people use "benefits on Us" | [T-Mobile newsroom, 2026-06-02](https://www.t-mobile.com/news/un-carrier/t-mobile-tuesdays-turns-10-celebrating-the-weekly-perks-millions-love) | B (cumulative; no active rate) | — |
+| Share of customers unaware of included perks | **No credible current number found** | — | — | don't claim one |
+| T-Mobile stated perk values (retail, not T-Mobile's cost) | Netflix $107/yr (one page variant: $95), Apple TV $119/yr value ($3/mo on More/Beyond), Hulu $143/yr (Beyond); Beyond "built-in benefits worth $650" yr 1; Magenta Status "more than $1,500/yr" | [t-mobile.com/benefits](https://www.t-mobile.com/benefits); [newsroom 2026-08-04](https://www.t-mobile.com/news/un-carrier/eip-flex-36); [Magenta Status 2024-02-07](https://www.t-mobile.com/news/un-carrier/magenta-status) | B (marketing) | message copy (sandbox perk codes stay authoritative) |
+
+**Unsourced constants and suggested replacements:**
+- `SAVE_RATE.perk_reminder` 0.08 / 0.03: **no evidence for 8%**. Use **0.02 on-target (range 0-0.05), 0.01 off-target**, below field retention-offer effects (~5-15% relative, §10) because there's no incentive. Add a sensitivity row at 0 and at −0.01 for volatile-usage / bill-shocked accounts (Ascarza backfire).
+- perk_reminder cost `0.0`: set ≈ **$0.50** (in-app/SMS; Gartner self-service $0.10-1.84). Keep `ANNOYANCE` $2.
+- `SERVICE_MARGIN` 0.50: now **anchored** (TMUS EBITDA/service revenue ≈ 50%), label "upper bound, derived".
+- `CHECK_IN_COST` $2 / `FIX_FIRST_CALLBACK_COST` $15: replace "not benchmarked" with the Gartner band ($8-13.50 per assisted contact). A $2 check-in only holds if it's digital.
+- `STEP_UP_MARGIN` 0.80, `DEVICE_UPGRADE_MARGIN` $80, `HINT_MARGIN` 0.30: still **unsourced** (no carrier discloses incremental margin). Keep labelled synthetic.
+
+**How to show T-Mobile's side:** per offer, print `p_churn × Δsave × $1.8K (24-mo margin) − p_accept × revenue given up − contact cost`, next to the customer's savings. For a perk reminder the cost line is ~$0.50, so even a 1-2% relative save on a high-risk account is positive, but frequency must be capped (McKenzie) and price wording avoided (Ascarza).
+
+**Do not claim:** that perk reminders are proven to cut churn; any "% of customers don't know their perks" figure; "5-25x"; that T-Mobile's perk retail values are its cost.
+
+### 12a. Home Internet (HSI) take rate: anchors for `P_ACCEPT["home_internet_bundle"]` = 0.04
+`harness/offers.py:93` sets 4% with no source. Public anchors below (accessed 2026-10-17). **R** = reported in a filing or by the company; **D** = my arithmetic.
+
+| Anchor | Number | Source (date) | R/D |
+|---|---|---|---|
+| T-Mobile **postpaid** 5G broadband customers, end Q4'25 | 7,602K (total 5G broadband 8,450K; all broadband incl. fiber 9,447K) | [TMUS Q4'25 Ex 99.2](https://www.sec.gov/Archives/edgar/data/1283699/000128369926000007/tmus12312025ex992.htm) (2026-02-11) | R |
+| Postpaid 5G broadband **net** adds by quarter, 2025 | 387 / 427 / 466 / 439K (FY 1,719K) | same | R |
+| T-Mobile stopped publishing broadband customer counts in 2026 releases (account metrics only); Q2'26 says ARPA was helped by "continued adoption of 5G broadband" | — | [TMUS Q2'26 Ex 99.2](https://www.sec.gov/Archives/edgar/data/1283699/000128369926000100/tmus06302026ex992.htm) (2026-07-23) | R |
+| T-Mobile postpaid accounts | Q1'26 34,439K; Q2'26 34,700K; **Q4'25 ≈ 34,222K** (= 34,439 − 217 Q1 net adds, ignores base adjustments) | [TMUS Q2'26 Ex 99.1](https://www.sec.gov/Archives/edgar/data/1283699/000128369926000100/tmus06302026ex991.htm) | R / D |
+| **HSI penetration of postpaid accounts, upper bound** | 7,602 ÷ 34,222 ≈ **22%**. Upper bound: some HSI customers are broadband-only accounts (T-Mobile cites "broadband-only accounts" raising churn) and the overlap with wireless isn't disclosed | arithmetic | D |
+| **Quarterly HSI add rate as share of accounts** | Q4'25: 439 ÷ 34,222 ≈ **1.3%**; 2025 average ≈ 430K/qtr ÷ ~32-34M ≈ **1.3-1.4%** | arithmetic | D (net adds, so gross is higher; includes brand-new non-wireless customers, so the existing-wireless attach is lower) |
+| Eligibility limits | Available to "70 million households"; "eligibility is determined by the home service address… based off network capacity… can also change as more customers join" | [T-Mobile HSI FAQ](https://www.t-mobile.com/home-internet/faq) (accessed 2026-10-17) | R |
+| Capacity model / target | "fallow capacity model"; target 15M 5G broadband customers by end-2030 (was 12M by 2028) | [T-Mobile CMD update](https://www.t-mobile.com/news/business/t-mobile-capital-markets-day-update-feb-2026) (2026-02-11) | R |
+| Waitlist | ">1 million households on a waiting list" at one point | [telecomtrendwatch](https://telecomtrendwatch.com/unpacking-t-mobiles-expansion-strategy-from-network-growth-to-fiber-acquisitions/) | **weak** (blog, undated) |
+| Verizon: broadband customers who also have mobility | **58%** of 17.1M (≈9.9M, D); FWA net adds 193K in 2Q26 (6,208K FWA total) vs 126.6M postpaid connections (≈0.15%/qtr, D) | [VZ 2Q26 transcript](https://www.verizon.com/about/sites/default/files/2026-08/vz_2q2026_transcript_072426rm.pdf); [VZ 2Q26 FOI](https://www.verizon.com/about/sites/default/files/2026-07/vz_2q2026_foi_072426.pdf) (2026-07-24) | R / D |
+| AT&T convergence | **42.5%** of advanced home-internet households also take AT&T postpaid phone; fixed-wireless net adds 279K in 2Q26, AT&T Internet Air 1,951K total | [AT&T 2Q26 Ex 99.1](https://www.sec.gov/Archives/edgar/data/732717/000073271726000294/t-2q2026exhibit991.htm); [Ex 99.2](https://www.sec.gov/Archives/edgar/data/732717/000073271726000294/t-2q2026exhibit992.htm) (2026-07-22) | R |
+| T-Fiber, where launched | "approximately 20% year-one penetration" (of homes passed; fiber, not FWA) | CMD update (above) | R |
+| Take rate of a cross-sell **offer contact** to existing mobile customers | **Not published by any carrier or analyst I found** | — | — |
+
+**Recommendation.** Treat 4% as the **top** of the range, not the base. Use **2% per contact per quarter (range 1-4%)**, applied **only to address-eligible accounts**. If the engine can't check eligibility, scale the rate by an assumed eligible share and label it. Reasoning (D): T-Mobile's whole base adds HSI at only ~1.3% of accounts a quarter (net, unprompted plus all marketing, and including new non-wireless customers). A targeted offer to eligible multi-line accounts with no home internet should beat that, but proactive offer take-up in wireless field data is low single digits (Ascarza 2016: 1.5% for a money-saving plan, §11). The 22% penetration and the 42.5-58% peer convergence figures are **stock** levels built over years. They are not per-contact rates and shouldn't be used as one.
+
+## 13. Keep vs upgrade economics
+Researched 2026-10-17 (PDT). Full notes are in `research-notes/notes_keep_vs_upgrade.md`. **D** marks our arithmetic on the cited inputs. Engine numbers stay synthetic.
+
+### 13a. PRIORITY: the paid-off-phone trade-in nudge (`P_ACCEPT["device_upgrade"]` 0.15, `DEVICE_UPGRADE_MARGIN` $80; both unsourced)
+| Claim | Number | Source (date) | Strength | Maps to `harness/offers.py` |
+|---|---|---|---|---|
+| T-Mobile postpaid device upgrade rate, whole base, per quarter | 2.8 / 2.5 / 2.7 / **3.8** / 2.8 / **2.6%** (Q1'25 to Q2'26). FY25 ≈ 11.8% (D, all devices) | [TMUS Q2'26 Ex 99.2](https://www.sec.gov/Archives/edgar/data/1283699/000128369926000100/tmus06302026ex992.htm) (2026-07-23) | strong | `P_ACCEPT.device_upgrade` |
+| Verizon retail postpaid upgrade rate | **2.6%** 2Q26 (3.6% 2Q25). Equipment revenue −19.7% on "significantly lower upgrade volumes" and less subsidy spending | [VZ 2Q26 Ex 99](https://www.sec.gov/Archives/edgar/data/732712/000073271226000040/a2026q2exhibit99.htm) (2026-07-24) | strong | same |
+| AT&T postpaid phone upgrade rate | 3.5% 1Q26; FY25 15.6% | §5 above (2026-04) | strong | same |
+| Equipment gross margin (equipment sales − cost of equipment) | **T-Mobile −$1,531M (−43%)** Q2'26, −37% Q1'26, −36% Q2'25. **Verizon −$835M (−17%)** 2Q26. **AT&T −$160M (−3%)** 2Q26 (D) | TMUS Ex 99.2; VZ Ex 99; [AT&T 2Q26 Ex 99.2](https://www.sec.gov/Archives/edgar/data/732717/000073271726000294/t-2q2026exhibit992.htm) | strong inputs / D | `DEVICE_UPGRADE_MARGIN` **wrong sign**: devices sell below cost |
+| Upgrading re-locks: new EIP, credits forfeited on early payoff or leaving | policy | [T-Mobile Yearly Upgrade terms](https://www.t-mobile.com/support/plans-features/upgrade-ready-every-year) (accessed 2026-10-17); [Android Authority](https://www.androidauthority.com/t-mobile-bill-credits-policy-goes-live-3454430/) (2024-06-26) | strong / medium | value belongs in `lock_value` (already there), not in margin |
+| Phone age at trade-in | iPhone **4.03 yrs** (Q2'26); all devices 3.81 (Q1'26) | [Assurant Q2'26](https://www.assurant.com/news-insights/news_releases/q2-trade-in-upgrade-data-trends) (2026) | medium-strong | upgrade-moment window |
+| Share of upgrades that include a trade-in | **No public figure found** | — | gap | don't claim one |
+
+**Recommendation (assumptions, labelled).**
+- `DEVICE_UPGRADE_MARGIN`: set to **$0** (sensitivity −$50 / +$80). All three carriers book equipment below cost. The −$50 end is our assumption, because no per-unit loss is disclosed.
+- `P_ACCEPT["device_upgrade"]`: set to **0.03 incremental per contact per quarter (range 0.01–0.06)**. The whole base already upgrades at 2.5–3.8% a quarter with no targeted nudge. Paid-off phones upgrade more, but most of those upgrades would happen anyway, and proactive offer take-up in wireless field data is ~1.5% (Ascarza 2016, §11). At 15%, the take rate is ~4–6× the whole-base rate (D).
+- In the shipped `offer_candidates.csv` (synthetic), 293 accounts are eligible, mean EV is −$20.53, and the action is chosen 0 times. The +$25.4k item comes from a re-run policy driven by these same two constants. Rerun that policy with these values.
+
+### 13b. Other keep-vs-upgrade economics
+| Claim | Number | Source (date) | Strength | Maps to `harness/offers.py` |
+|---|---|---|---|---|
+| Value of a save, CLV practice | CLV = Σ m·r^t/(1+i)^t. Expected-lifetime (1/churn) CLV "generally overestimates" it. Retention rises with tenure because of heterogeneity, so high-risk customers live far shorter than 1/average churn | [Gupta, Lehmann & Stuart, JMR 2004](https://doi.org/10.1509/jmkr.41.1.7.25084); [Gupta et al., JSR 2006](https://www.anderson.ucla.edu/sites/default/files/documents/areas/fac/marketing/JSR2006%280%29.pdf); [Fader & Hardie, JIM 2007](https://faculty.wharton.upenn.edu/wp-content/uploads/2012/04/Fader_hardie_jim_07.pdf) | strong | `VALUE_HORIZON_MONTHS` 24 cap is justified |
+| Account value under alternatives (D; $76.46/mo margin, h 0.99%, 10%/yr discount is our assumption) | flat 24 mo **$1,835** (engine now); survival-weighted 24 mo $1,624; **survival + discount 24 mo $1,478**; 36 mo $2,011; discounted infinite $4.2K; undiscounted 1/h $7.7K | arithmetic on TMUS Q2'26 | D | `value = margin × 24` overstates by ~20% vs $1,478, which matches Recon's $1,516 BYOD (§12) |
+| Bundled/converged customers churn less | AT&T: "lowest churn profile and highest lifetime values" (no %); Verizon ~30% lower (§4c) | [AT&T 3Q25 transcript](https://investors.att.com/~/media/Files/A/ATT-IR-V2/financial-reports/quarterly-earnings/2025/3Q-2025/t-usq-transcript-2025-10-22.pdf) (2025-10-22) | strong statement; **selection-biased** | `SAVE_RATE.home_internet_bundle`; keep any causal cut ≤10–20% (assumption) |
+| T-Mobile 2024 legacy hike (+$2/+$5/line) | Q2'24 phone churn 0.80%, **+3 bp YoY**. FY24 0.86% "best-ever" | [T-Mobile Q2'24 release](https://www.t-mobile.com/news/business/t-mobile-q2-2024-earnings); [Fierce](https://www.fierce-network.com/wireless/t-mobile-raising-prices-some-older-plans) (2024-05/07) | strong number / medium attribution | price-hike churn term `4.0 × bill_increase_pct` (synthetic) |
+| UK mobile price rises: who actually left | aware customers: 59% did nothing, 15% thought about switching, **8% left penalty-free** | [Ofcom quant. summary, mobile](https://www.ofcom.org.uk/siteassets/resources/documents/consultations/category-1-10-weeks/272754-consultation-review-of-inflation-linked-telecoms-price-rises/associated-documents/secondary-documents/inflation-linked-price-rises-summary-of-quantitative-research-findings-mobile?v=330532) (2023) | medium (search summary; PDF blocked; self-report) | bill-increase backfire rule |
+| Stated intent vs behaviour | 62% "would leave" (Uswitch/Opinium survey) vs Ofcom's 8% | [Uswitch](https://www.uswitch.com/media-centre/2023/11/broadband-mobiles-85-percent-users-call-mid-contract-price-hikes-unfair/) (2023-11) | **weak: do not use** | — |
+| Proactive retention field effect (corrected attribution) | pay-TV at a telecom, intent-to-treat: churn **17.2% → ~15.3% (−1.9 pp ≈ 11% relative, D)** | [Godinho de Matos, Ferreira & Belo, Marketing Science 2018](https://doi.org/10.1287/mksc.2018.1099) (**not Ascarza**) | strong | `SAVE_RATE` field range |
+| Field range for relative saves | ≈ **2–11% relative**: Ascarza 2018 ~2–4%, Orange Belgium ~6% (3.6→3.4%), Godinho ~11% (D) | §1, §10 above | strong / D | supports the ~4.5% break-even framing |
+| Retention desk sizes / save rates | no new credible source; still vendor-only | §2, §7 | weak | `SAVE_RATE`, credits |
+
+**Engine implications.** (1) The device-upgrade gain should be ~$0 at accounting level, so value upgrades only through re-lock (`lock_value`) and any plan step-up. (2) A save is worth ~$1.5K (survival-weighted and discounted), not $1.8K. Run a sensitivity at $1.5K and $1.8K. (3) Treat carrier "bundled customers churn X% less" figures as selection, not effect.
+
+**Do not claim:** that devices or upgrades are profitable per sale; any trade-in share of upgrades; that bundling or upgrading *causes* the reported churn gaps; survey "would leave" percentages as churn; that the 11% field save is Ascarza's.
+
+## 14. Outreach channel, timing and rules
+Researched 2026-10-17 (PDT). Full notes: `research-notes/notes_channels.md`. **D** = my arithmetic. Not legal advice. Engine data stays synthetic, and messages are deterministic templates (no LLM).
+
+### 14a. Channel response and cost (`CHECK_IN_COST` $2, `FIX_FIRST_CALLBACK_COST` $15, `SAVE_RATE`, `P_ACCEPT`)
+| Claim | Number | Source (date) | Strength | Maps to `harness/offers.py` |
+|---|---|---|---|---|
+| Outbound retention **call** at a telecom (pay-TV RCT): who actually gets reached | listed likely churners reached **51%** of the time; **34%** got an offer. Effect of being listed (ITT): churn 17.2% → −1.9 pp | [Godinho de Matos, Ferreira & Belo, *Marketing Science* 2018](https://doi.org/10.1287/mksc.2018.1099) ([author PDF](https://ciencia.ucp.pt/ws/portalfiles/portal/98997623/20590148.pdf)) | strong | new call `REACH` ≈ 0.5. The −1.9 pp already includes the unreached half |
+| US adults who don't answer calls from unknown numbers | **80%** (19% answer); n = 10,211, Jul 2020 | [Pew, 2020-12-14](https://www.pewresearch.org/short-reads/2020/12/14/most-americans-dont-answer-cellphone-calls-from-unknown-numbers/) | strong (self-report) | call reach ≤ ~50% is plausible |
+| Head-to-head **SMS vs email vs letter** RCT (Rwanda tax authority, 2016) | "low-cost delivery methods like SMS and emails can be highly effective as compared to letters"; arm-level numbers not verified | [Mascagni, Nell & Monkam, ICTD WP58 (2016-11-07)](https://ictd.ac/publication/ictd-wp58/); [EDCC 70(2)](https://doi.org/10.1086/713929) | strong (abstract) / numbers unverified | direction only. Not telecom |
+| **Text reminders**, 19 nudges, n = 47,306 | **+5%** average relative lift. Best: "reserved for you", and congruent with the messages patients expect (not surprising, casual or interactive) | [Milkman et al., PNAS 2021](https://doi.org/10.1073/pnas.2101165118) | strong | SMS template style |
+| **Text reminders**, 22 nudges, n = 689,693 (Walmart) | **+2.0 pp (6.8%)** average. Best: 2 texts 3 days apart, "waiting for you". Forecasters didn't predict the winner | [Milkman et al., PNAS 2022](https://doi.org/10.1073/pnas.2115126119) | strong | ≤2 touches per offer; A/B test copy |
+| App **push** | median direct open ≈ **3%** (90th pct ~8–11%). Android opt-in fell across all percentiles in 2024 (my reading of chart labels) | [Airship 2025 benchmarks](https://growth.airship.com/rs/313-QPJ-195/images/Airship-2025-Push-Notification-Benchmarks-EN.pdf) | **weak (vendor)** | push reach is gated by opt-in |
+| Email (telecom) / SMS (retail) engagement | email open 32.5%, click 2.8% (Mailchimp); SMS campaign CTR 12.39%, conversion 0.12% (Omnisend) | [Mailchimp](https://mailchimp.com/resources/email-marketing-benchmarks/); [Omnisend 2026](https://www.omnisend.com/blog/sms-marketing-benchmarks/) | **weak (vendor; opens inflated by Apple Mail privacy)** | none. Don't use these to set save rates |
+| Regulator: providers mostly used email for end-of-contract notices; **no systematic engagement difference** by timing, method or content | qualitative | Ofcom 2021 review (§8 #13). PDF behind Cloudflare; from search summaries | medium/weak (not read line by line) | channel may matter less than the offer and its timing |
+| **SMS cost**, third-party platform, to a T-Mobile number | $0.0083 + $0.0045 carrier fee = **$0.0128 per segment** (D) | [Twilio US pricing, "current as of October 2026"](https://www.twilio.com/en-us/sms/pricing/us) | medium (list price) | upper bound. T-Mobile's internal cost to text its own subscribers isn't public |
+| **Email** / **push** cost | $0.10 per 1,000 emails; FCM push no cost | [Amazon SES](https://aws.amazon.com/ses/pricing/); [Firebase](https://firebase.google.com/products/cloud-messaging) (accessed 2026-10-17) | medium | ≈ $0 |
+| Agent contact | $8.01–13.50 per live contact (Gartner, §12). With 51% reach, ~1.96 listed per reached customer (D) | §12; Godinho (above) | medium / D | `FIX_FIRST_CALLBACK_COST` $15 holds |
+
+**Read.** No peer-reviewed telecom study compares SMS, email, push and calls on the *same* retention offer. The only measured telecom channel is the call (51% reach, −1.9 pp ITT). Text-reminder RCTs outside telecom show small gains (~5–7% relative). Sending costs ≤ $0.03 for digital, so a digital contact really costs its annoyance/backfire risk (`ANNOYANCE`), not postage. A `CHECK_IN_COST` of $2 is too high for SMS/app and too low for an agent.
+
+### 14b. Timing (does churn spike at contract or promo end?)
+| Claim | Number | Source (date) | Strength | Maps to |
+|---|---|---|---|---|
+| Churn spike right after a 24-month term (German DSL ISP, ~80k cohort, 36 mo) | month-25 churn **> 7× the 36-month average**; months 25–36 **+60.8%**; months 1–24 −30.4%. Less-satisfied customers leave more at term end | [Becker, Spann & Schulze, *Marketing Letters* 26(4), 2015](https://doi.org/10.1007/s11002-014-9293-2) (author version read) | strong (broadband, Europe) | payoff/term-end trigger; act **before** the end month |
+| Same study: incentive contracts attract defaulters | involuntary share of churn 48.1% vs 13.2% | same | strong | big credits can attract the wrong customers |
+| Churn jumps after a 3-month intro promo ends (7 services at one telecom) | subscribers "kept the service for the duration of the promotional period, and then discarded it soon after" | [Schweidel, Fader & Bradlow, *J. Marketing* 72(1), 2008](https://doi.org/10.1509/jmkg.72.1.082) ([PDF](https://faculty.wharton.upenn.edu/wp-content/uploads/2007/08/Cohortretention.pdf)) | strong | promo-end trigger (`bill_shock_price_lock`) |
+| US payoff-month churn; UK 10–40-day notice window; just-in-time alerts beat early warnings | see §4d, §10 | AT&T CFO; Ofcom GC C1; FCA OP40 | strong | send window 10–40 days before payoff/promo end |
+| Bill-date timing for retention offers | **no public evidence found** | — | gap | don't claim a bill-date effect |
+
+### 14c. Rules the engine must respect (not legal advice)
+1. **CPNI.** Offers within services the customer already buys need no approval (47 CFR 64.2005(a), §4e). Using CPNI to market other *communications-related* services (e.g., Home Internet to a wireless-only account) needs **opt-out or opt-in** approval. Opt-out means written/electronic notice and a **30-day** wait. Everything else needs **opt-in** ([64.2007](https://www.ecfr.gov/current/title-47/chapter-I/subchapter-B/part-64/subpart-U/section-64.2007), [64.2008](https://www.law.cornell.edu/cfr/text/47/64.2008)). Customers set this in T-Mobile's Privacy Dashboard ([T-Mobile, 2025-06-12](https://www.t-mobile.com/privacy-center/education/phone-privacy)).
+2. **TCPA, texts.** Commercial autodialed texts need **written** consent; informational texts can rely on oral consent ([FCC guide](https://www.fcc.gov/consumers/guides/stop-unwanted-robocalls-and-texts)). **Carrier exception:** a carrier needs no additional consent to text its **own subscribers when they aren't charged** (1992, reaffirmed in [FCC 12-21](https://transition.fcc.gov/Daily_Releases/Daily_Business/2012/db0215/FCC-12-21A1.pdf)). The FCC's 2024 FNPRM proposed narrowing it ([FCC 24-24](https://docs.fcc.gov/public/attachments/FCC-24-24A1.pdf)); that isn't final. Honor opt-outs anyway.
+3. **Opt-outs.** STOP/QUIT/END/REVOKE/OPT OUT/CANCEL/UNSUBSCRIBE are always valid; honor within **10 business days** ([64.1200(a)(10)](https://www.ecfr.gov/on/2026-03-25/title-47/chapter-I/subchapter-B/part-64/subpart-L), since 2025-04-11). **New order FCC 26-67 (released 2026-10-01, not yet effective):** informational opt-outs can be per category, but **a marketing opt-out still ends all marketing** ([Nixon Peabody, 2026-10-07](https://www.nixonpeabody.com/insights/alerts/2026/10/07/fcc-scraps-revoke-all-and-lets-businesses-pick-how-consumers-opt-out)). Keep service messages free of promos so they stay "informational."
+4. **Quiet hours.** Federal: no solicitation before **8 a.m. or after 9 p.m.** in the recipient's local time (64.1200(c)(1)). Plaintiffs apply it to texts ([Benesch](https://www.beneschlaw.com/insight/time-of-day-tcpa-cases-inundate-the-federal-docket/)). Florida and Oklahoma: **8 a.m.–8 p.m.** and **≤3** messages on the same subject per 24 h ([Fla. Stat. 501.616](https://flsenate.gov/Laws/Statutes/2023/501.616)). Engine default: **08:00–20:00 local time**.
+5. **CTIA Messaging Principles (May 2023).** Express written consent for promotional texts; a coupon/CTA can make an informational text promotional. The opt-in confirmation states the program, help contact, how to opt out, **frequency** and fees. Honor STOP plus plain-language opt-outs, then send one confirmation and nothing more ([CTIA PDF](https://api.ctia.org/wp-content/uploads/2023/05/230523-CTIA-Messaging-Principles-and-Best-Practices-FINAL.pdf)). The document has **no quiet-hours rule**.
+
+**Q&A answer (one line):** "The engine only offers changes to services the customer already has, skips anyone who opted out of marketing, sends between 8 a.m. and 8 p.m. their local time with STOP on every text, honors opt-outs within 10 business days, and never uses port-out or location data." (Not legal advice.)
+
+### 14d. Framing
+| Claim | Number | Source | Strength |
+|---|---|---|---|
+| Name in the email subject (randomized, millions, 3 firms, including retention emails) | open **+20%** (9.05→10.80%), leads **+31%**, unsubscribes **−17%** | [Sahni, Wheeler & Chintagunta, *Marketing Science* 37(2), 2018](https://doi.org/10.1287/mksc.2017.1066) | strong |
+| Loss vs gain framing (meta-analysis, 165 effects, N = 50,780) | **no overall difference** (r = .016); prevention slightly favors gain (r ≈ .03–.05) | [O'Keefe & Jensen 2006](https://doi.org/10.1080/23808985.2006.11679054); [2007](https://doi.org/10.1080/10810730701615198) | strong (not telecom) |
+| Ownership wording ("reserved / waiting for you") was the best text | above | Milkman 2021/2022 | strong (health) |
+| Making overpaying salient backfired | churn 6% → 10% | Ascarza 2016 (§1) | strong |
+| "You're saving $X" receipts in telecom/subscription retention | **no public field evidence found** | — | gap |
+
+**Engine implications.** (1) Per-channel cost: sms $0.02 (≤2 segments, list-price upper bound), email ~$0, app $0, call $8–13.50, with `ANNOYANCE` carrying the real cost. (2) Call `REACH` 0.5. App reach = push opt-in (unknown; sensitivity 0.3–0.7). (3) Gates with no $: marketing opt-out, CPNI approval for cross-category offers (Home Internet), 08:00–20:00 local, ≤1 marketing message per account per 24 h, ≤2 touches per offer. (4) Schedule term-end/payoff offers 10–40 days **before** the date. (5) Template copy: name + their own numbers, a normal account-message tone, "already yours" wording. No loss framing, and no overpaying salience for volatile/declining-usage accounts.
+
+**Do not claim:** that SMS beats email (or any channel ranking) for telecom retention; vendor open/click rates as outcomes; a bill-date timing effect; that savings receipts are proven; that the 8–9 p.m. rule definitely applies to a carrier's own texts, or that the carrier exception definitely exempts them (both unsettled); that FCC 26-67 is already in force; Becker's 7× as a US wireless figure (it's European DSL).
+
+## 15. Family plans and multi-line accounts
+Researched 2026-10-17 (PDT). Full notes: `research-notes/notes_family.md`. **D** = my arithmetic on the cited inputs. Engine data stays synthetic. Builds on §4c (converged churn, Verizon 2.95 connections/account, T-Mobile's selection-bias remark) without repeating it.
+
+### 15a. Churn by number of lines
+| Claim | Number | Source (date) | Strength | Maps to |
+|---|---|---|---|---|
+| Single- vs multi-line churn | **No US carrier publishes it** | TMUS / VZ / AT&T filings and transcripts checked | gap | don't quote a gap |
+| Share of T-Mobile postpaid **phone lines** on multi-line accounts | **"over 90%"** (CFO); CEO: multi-line accounts are "the thing that's most correlated with CLV" | [TMUS Q4'25 call transcript](https://www.fool.com/earnings/call-transcripts/2026/02/11/t-mobile-tmus-q4-2025-earnings-call-transcript/) (2026-02-11) | medium | account-level scoring (already done) |
+| Whole-account vs single-line loss | CEO: a whole account leaving "truly hurts CLV"; someone dropping an idle line "doesn't cause any value loss" | same | medium | value = account, not line |
+| T-Mobile 2025 account vs phone churn | account 0.94 / 0.92 / 0.97 / 1.04%; phone 0.91 / 0.90 / 0.89 / 1.02%. Mixed with partial-line drops and broadband-only accounts, so **no line-count gap can be backed out** (D) | [TMUS Q4'25 Ex 99.2](https://www.sec.gov/Archives/edgar/data/1283699/000128369926000007/tmus12312025ex992.htm); [Q2'26 Ex 99.2](https://www.sec.gov/Archives/edgar/data/1283699/000128369926000100/tmus06302026ex992.htm) | strong inputs / D | context |
+| "Multiple-line accounts generally have lower churn" (no number). Sievert: most single-line phone customers "tend to buy prepaid" | qualitative | [Fierce Wireless](https://www.fierce-network.com/wireless/carriers-sharpen-focus-family-plans-as-single-line-users-look-to-prepaid) (2017-01-17) | weak (old) / medium (exec quote) | selection warning |
+| Verizon tracks ARPA by line-count cohort; has "historically under-indexed" in 1-2-line accounts | no churn number | [VZ at Citi TMT](https://www.verizon.com/about/sites/default/files/2026-09/vz-citi_transcript_2026-09-09.pdf) (2026-09-09) | medium | — |
+| **Our sandbox (synthetic, D)** | 40% of 5,042 accounts single-line → ~17% of lines on single-line accounts vs T-Mobile < 10%. `labels.py` gives each extra line −0.15 log-odds (~14% lower odds, exp(−0.15) ≈ 0.86): **an assumption in our data, not a finding** | read-only `lines` table; `harness/labels.py` | D | reweight sensitivity; no circular claims |
+
+### 15b. Value of adding a line
+| Claim | Number | Source (date) | Strength | Maps to |
+|---|---|---|---|---|
+| T-Mobile list price, no AutoPay (Broadband Facts) | More 2.0 **$90 / 150 / 185 / 220 / 255** (1-5 lines); Beyond 2.0 **$105 / 180 / 230 / 280 / 330**; Essentials 2.0 $65 / 100 / 120 / 140 / 160; Essentials 4 Line Offer $120 for 4. **Early termination fee $0** | [t-mobile.com/cell-phone-plans](https://www.t-mobile.com/cell-phone-plans); [Broadband Facts (military page)](https://www.t-mobile.com/cell-phone-plans/military-discount-plans) (accessed 2026-10-17) | strong | sandbox `plans` **match exactly** (checked read-only) |
+| Marginal line (D) | More: 2nd +$60, 3rd-5th **+$35**; Beyond +$75, then **+$50**; Essentials +$35, then +$20. More per-line price: $90 → $51 at 5 lines | arithmetic | D | add-a-line value |
+| ARPA trend and drivers | $146.22 → **$152.91** (Q1'25 → Q2'26); +2% YoY "primarily" from fee revenue **and "an increase in customers per account"**, partly offset by fiber/UScellular accounts and promotions | [TMUS Q2'26 Ex 99.1](https://www.sec.gov/Archives/edgar/data/1283699/000128369926000100/tmus06302026ex991.htm), Ex 99.2 (2026-07-23) | strong | context |
+| Lines per account (D) | Q4'25: 85,594K phones ÷ 34,240K accounts = **2.50 phones/account**; 3.40 connections/account (Q4'24: 2.56 / 3.37). Phone ARPU $50.71 vs ARPA $150.17 | TMUS Q4'25 Ex 99.2 (2026-02-11) | strong inputs / D | calibration |
+| Value of one added line (D) | $35 × 0.50 × 19.34 (survival + discount, 24 mo; §13b) ≈ **$338** (More); $50 Beyond line ≈ **$484**. Before promos: 8 of 11 sandbox device credits need a new line ($301-$1,200 over 24-36 mo), which can make the line net negative over 24 months | arithmetic; read-only `promotions` | D | new add-a-line action, if built |
+
+### 15c. Does a line lower churn, or are multi-line customers different?
+| Claim | Number | Source (date) | Strength |
+|---|---|---|---|
+| Causal "add a line → lower churn" estimate | **none public** | — | gap |
+| Households coordinate carrier choice: other members' choice outweighs total network size | econometric (UK) | [Birke & Swann, *J. Evol. Econ.* 16(1):65-84](https://ideas.repec.org/a/spr/joevec/v16y2006i1p65-84.html) (2006) | strong (on-net pricing era) |
+| Churn is contagious: a defecting contact → **+80% defection hazard** (1M cellular customers, with controls) | +80% | [Nitzan & Libai, *J. Marketing* 75(6):24-38](https://doi.org/10.1509/jm.10.0209) (2011-11) | strong (observational; call network, not households) |
+| Retention spillover: randomized campaign (~6,000 prepaid mobile customers); untargeted connections churned less; their effect = **28% of the targets'** (multiplier 1.28) | 1.28 | [Ascarza, Ebbes, Netzer & Danielson, *JMR* 54(3)](https://doi.org/10.1509/jmr.15.0442) ([PDF](https://evaascarza.com/papers/ascarza_ebbes_netzer_danielson_17.pdf)) (2017) | strong (RCT) |
+| Selection: financing picks "the young, multi-line, high-income postpaid household" (financing share 37% under $50K → nearly half over $100K) | survey, ~337K interviews | [Recon Analytics, "Demanded and Hated"](https://www.reconanalytics.com/demanded-and-hated/) (2026-07-25) | medium |
+| T-Mobile's own selection-bias caution; cross-buying follows loyalty | qualitative | §4c; §5 (Reinartz 2008) | medium / medium-strong |
+
+**Read:** the stickiness mechanism is real (coordination, contagion), but the observed multi-line gap is confounded by who picks family plans. Treat it as correlation. Don't give an add-a-line offer a churn cut unless it's a labelled assumption.
+
+### 15d. Family-plan risks
+| Claim | Number | Source (date) | Strength |
+|---|---|---|---|
+| Account holder leaves → every line goes | qualitative | 15a; §1 #6 | medium/strong |
+| A departing member can keep their number at T-Mobile (**Change of Responsibility**) | line active 90 days; new owner 18+, credit check/deposit possible; **service promotions don't transfer**; add-a-line promos break if the line count no longer qualifies; EIP moves once | [T-Mobile Support](https://www.t-mobile.com/support/account/transfer-account-or-line-ownership) (accessed 2026-10-17) | strong |
+| T-Mobile's product for the kid going solo: **Student Perks, $30/mo** single line | $30 | [T-Mobile newsroom](https://www.t-mobile.com/news/un-carrier/eip-flex-36) (2026-08-04) | strong (price) |
+| When kids leave | 57% of 18-24s live in a parental home (dorms count) vs **16%** of 25-34s | [Census CB24-TPS-110](https://www.census.gov/newsroom/press-releases/2024/families-and-living-arrangements.html) (2024-11-12) | strong |
+| Divorce base rate | 2.4 per 1,000 population (672,502; provisional 2023, 45 states + DC) | [CDC/NCHS FastStats](https://www.cdc.gov/nchs/fastats/marriage-divorce.htm) (reviewed 2025-03-17) | strong |
+| Partial-line churn rate | **no public number** (T-Mobile stopped reporting line churn in 2026) | — | gap |
+
+**Read:** the risky moment is a line departure: promos tied to line count can break, and contagion raises the others' risk. Our engine has no line-departure signal. The customer-friendly play is "keep them at T-Mobile on their own line," never a hard save.
+
+### 15e. Phone upgrade vs plan upgrade (lock-in only)
+David's question: an upgraded **phone** buys lock-in; an upgraded **plan** buys margin.
+| Claim | Number | Source (date) | Strength |
+|---|---|---|---|
+| No contract: ETF $0; the 5-year price guarantee is a price promise, not a lock | $0 | 15b Broadband Facts | strong |
+| Phone lock = device plan + monthly promo credits lost on leaving; EIP now 24 or **36** months (EIP Standard 36 / Flex 36 from 2026-08-06); phones sold below cost (−43%, §13a) | 24/36 mo | [newsroom 2026-08-04](https://www.t-mobile.com/news/un-carrier/eip-flex-36); §4d; §13a | strong |
+| Churn while paying vs not | financing **~0.7%/mo** while the balance runs; BYOD **~1.4%/mo**; financed blended **0.95%**; ~$1,450 device cost per subsidized customer over life; net LTV ~$1,900 vs $1,516 | Recon Analytics (2026-07-25) | medium (selection-biased) |
+| Term-end spike (DSL) and payoff cliff (US exec remarks) | month 25 > 7× average | §14b (Becker 2015); §1 #7 | strong (not US wireless) / strong exec |
+| Upward plan switchers churn less (Chinese operator; observational) | direction | [Jin, *JRCS* 66 (2022)](https://ideas.repec.org/a/eee/joreco/v66y2022ics0969698922000078.html) | medium (selection) |
+
+**Lock-in ledger (D; $76.46/mo margin, 0.99%/mo hazard, 10%/yr discount):**
+- **Phone upgrade.** Halving hazard over the device term (`LOCK_CUT` 0.50) = **+$89 (24 mo) / +$176 (36 mo)** per accepted upgrade. At Recon's 0.7% rate: +$52 / +$90-101. At 3%/mo risk: +$217 / +$386. T-Mobile pays $150-$1,200 in device credits and sells the phone below cost. It pays only on high-risk accounts with small credits.
+- **Plan step-up** (50% margin × 19.34): More→Beyond **+$15/mo (1 line) ≈ $145; +$45 (3 lines) ≈ $435; +$60 (4 lines) ≈ $580**; Essentials→More, 4 lines (+$80) ≈ $774. No device cost, no lock, and affordability risk (§13b).
+- **`LOCK_CUT` anchor:** 0.7 vs 1.4 is 50% below a self-selected BYOD group; vs the financed blended 0.95% it's ≈ **26%** (D). Use 0.25 base, 0.50 upper.
+
+**Engine implications (synthetic).** (1) No add-a-line action exists; the 4 Line Offer appears only as a cheaper-variant / right-size target. If one is built: value = marginal line price × 0.50 × 19.34 − promo credit − contact cost, churn effect **0** base. (2) `STEP_UP_MARGIN` 0.80 → 0.50 base (0.80 sensitivity); replace `delta × margin × 24 × (1 − p)` with the survival-and-discount factor (~19.3 at average risk). (3) `P_ACCEPT` `step_up` 0.25 / `family_upgrade` 0.20 and `SAVE_RATE` `step_up` 0.15 / `family_upgrade` 0.18 are unsourced. Suggest ~0.03 acceptance (0.01-0.06, per §11) and ~0 save rate (§5), labelled. (4) `LOCK_CUT` 0.50 → 0.25. (5) Account value already scales with lines (`margin_mo` uses account service revenue); keep it. (6) Add a simulated line-departure / Change-of-Responsibility trigger → "own line at T-Mobile" offer.
+
+**Do not claim:** any "multi-line churns X% less" figure, or that adding a line *causes* lower churn; Recon's 0.7% vs 1.4% as a causal financing effect; that the price guarantee locks customers in; that phone upgrades profit per sale; "90% of **accounts** are multi-line" (it's phone lines); Compete's 2005 "20% churn cut → +30% NPV"; Nitzan & Libai's +80% as a family-plan or causal number; T-Mobile's "two-thirds of students" marketing line.

@@ -28,23 +28,27 @@ For every customer, it picks one priced action: a better-fitting plan, a fix plu
 **How it's different:** past T-Mobile hackathon winners built sentiment-score screens with LLM-written suggestions for staff. The closest earlier idea, [The Un-Churner](https://devpost.com/software/the-un-churner) (2019), paired a churn score with a plan pop-up and didn't win. Ours makes one priced decision per customer, where doing nothing is allowed. Every offer is checked against real promotion and eligibility rules, a cheaper plan counts as retention, there's no LLM in the product, and it writes the exact text in English or Spanish.
 
 ## How we built it
-We started from the judges' sandbox: 5,000 synthetic accounts with usage, billing, support logs, risk signals, and real plan and promotion rules. Because the sandbox has no churn outcomes, we generated simulated labels and trained a churn score on them. On synthetic data, its riskiest 10% hold 62% of leavers. That shows the pipeline works, not real-world accuracy.
+We started from the judges' sandbox: 5,042 synthetic accounts (5,000 plus 42 test personas) with usage, billing, support logs, risk signals, and real plan and promotion rules. Because the sandbox has no churn outcomes, we generated simulated labels and trained a churn score on them. On synthetic data, its riskiest 10% hold 62% of leavers. That shows the pipeline works, not real-world accuracy.
 
 Every action a customer qualifies for is priced against doing nothing, which is always on the list at $0. An offer has to beat it. Eligibility comes from the sandbox's own tables, plus our guardrails. A simulated upgrade score, built from device age, serves only as a gate for upgrade offers. Texts are built from templates, and every dollar amount is checked against the promotions and plans tables.
 
 ## Challenges we ran into
 - With no real outcomes, we couldn't measure lift, so we label every number simulated and don't claim one.
 - Texts that quote prices have to be right every time.
+- Profit depends on a save rate we can only simulate: retention-only texting breaks even at about 4.8% and is a coin flip at 5%. Measured retention campaigns run from about 2% to 11% relative; this pays off in the stronger ones and loses money in the weakest (simulated).
+- With every account valued the same, the plan pays above about a 5% save rate. If saved customers stay as risky as they were, it barely breaks even, so the first real test is whether saves stick (simulated).
 
 ## Accomplishments that we're proud of
 - Restraint you can check: most accounts get no text at all.
+- **The next version pays at realistic save rates (simulated).** In the next version of the engine, we re-ran it assuming a 10% save rate and texted retention offers only where they still pay off, after our do-not-contact rules: 184 accounts. It breaks even at about a 4.8% save rate. Measured retention campaigns run from about 2% to 11% relative ([Ascarza 2018](https://doi.org/10.1509/jmr.16.0163); [Verhelst et al. 2023](https://arxiv.org/abs/2312.07206); [Marketing Science 2018](https://doi.org/10.1287/mksc.2018.1099)), so this pays off in the stronger campaigns and loses money in the weakest. At 10% it comes out ahead in about 4 of 5 resamples, and at 5% it's a coin flip. When an offer isn't worth it, the engine picks doing nothing.
 - One customer moved to a cheaper plan with the same features.
+- **A fairness audit we'd run weekly (simulated).** In our synthetic test, texts reach accounts labeled senior or student about 3 points less often at the same risk. The savings receipt on the bill shows them a cheaper-plan line more often than others, because those matches skew their way. This is the audit we'd run weekly on real data.
 
 ## What we learned
 Contact can backfire, high risk isn't the same as persuadable, and a churn score is only an input. The useful part is choosing the action and explaining it.
 
 ## What's next
 - **A holdout test with real customers** to see whether it keeps them for less.
-- **Uplift-ready:** every decision is logged, and a random holdout group lets us measure the true effect over time. At our 5,000-account scale it could only catch very large effects; a reliable read needs about 12,800 accounts per group (synthetic power estimate).
+- **Uplift-ready:** each decision is written out with the data fields behind it, and adding a random holdout group would let us measure the true effect over time. At our roughly 5,000-account scale it could only catch very large effects; a reliable read needs about 12,800 accounts per group (synthetic power estimate).
 - **Safer plan moves:** the 2016 study's harm was concentrated among customers with volatile or falling usage, so we'd exclude volatile-usage customers from plan moves.
 - Testing the simulated upgrade score against real purchases.
