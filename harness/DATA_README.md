@@ -9,7 +9,8 @@ python harness/features.py   # -> harness/out/features.csv
 python harness/enrichment.py # -> harness/out/enrichment.csv (job change, income, step-up cost; needed by labels.py)
 python harness/labels.py     # -> harness/out/labels.csv (default --recipe tuned; reads features.csv + enrichment.csv + sandbox for toy_p)
 python harness/labels.py --recipe doc   # plan-doc recipe as written; overwrites out/labels.csv, same columns
-python harness/scale_synth.py --n 50000 # -> harness/out/scaled/{features_scaled,labels_scaled}.csv + FIDELITY.md
+python harness/scale_synth.py           # 250k -> harness/out/scaled_250k/ (features/labels/household_scaled.csv + FIDELITY.md)
+python harness/scale_synth.py --n 50000 --legacy-50k --out-dir /tmp/x   # reproduces the original out/scaled 50k CSVs byte-identically
 ```
 Requirements: `pandas>=2`, `numpy>=1.26`, `scikit-learn>=1.4` (tested: pandas 3.0.6, numpy 2.5.4). Both scripts are deterministic: no global RNG, and draws come from a per-account sha256 uniform.
 Sandbox path: `$SANDBOX_DB`, else `<repo>/dubhacks/data/sandbox.db`, else `<repo>/../dubhacks/data/sandbox.db`. It is opened **read-only** (`mode=ro` + `PRAGMA query_only`). Nothing ever writes to it. `harness/out/` is gitignored.
@@ -125,7 +126,7 @@ Both recipes print persona percentiles after each run.
 - Spearman(p_true_90d, toy_p) = 0.879. AUC of p_true_90d against toy_churn = 0.807 (toy_p itself scores 0.827). AUC of p_true_90d against churn_90d = 0.864 (the oracle ceiling for tm-churn).
 - Personas: p_true_90d, then percentile among the 5,000 regular accounts. Expected high: 04 0.173 (97th), 21 0.061 (92nd), 22 0.051 (90th), 27 0.072 (93rd). Expected low: 10 0.004 (2nd), 24 0.005 (11th). Others: 23 0.089 (94th), 25 0.019 (74th), 26 0.006 (13th), 28 0.009 (42nd).
 
-## enrichment.csv: 5,042 rows (account_id + 9 columns). SYNTHETIC per-account values
+## enrichment.csv: 5,042 rows (account_id + 16 columns). SYNTHETIC per-account values
 > **ALL PER-ACCOUNT ENRICHMENT VALUES ARE SYNTHETIC.** Only the cited aggregates (BLS hires rate, ACS national income distribution) and the sandbox plan prices are real. These columns are kept out of features.csv so Model A's inputs don't change.
 
 | column | meaning / source |
@@ -138,6 +139,14 @@ Both recipes print persona percentiles after each run.
 | `next_plan_sku`, `next_plan_price_cents` | REAL sandbox plans table. Ladder: Essentials Saver → Essentials → Experience More → Experience Beyond, keeping Community/Partner/55 variants; Essentials 4-line → More. Price is for the account's line count. Blank on Beyond (top), 19.8% of accounts. |
 | `step_up_cost_cents` | next plan price − current plan list price (≥ 0). Median $30/month. |
 | `step_up_cost_pct_income` | 12 × step-up cost / household income × 100 (affordability). Median 0.52%. |
+| `n_lines` | copy of features.csv `n_lines` |
+| `is_family_plan` | REAL-derived: 2+ phone lines on the account's shared plan and not a business (smb) account. 52.1% of the 5,000. |
+| `likely_kid_flag`, `n_kid_lines` | Derived from REAL sandbox line roles (`lines.member_role` child / teen, and adult-child on family accounts). 30.4% of the 5,000 accounts, all in the family segment. Consistency check against **Census ACS 2020-2024 5-year B11005: 29.5%** of US households have someone under 18 (38,169,316 / 129,227,496), https://api.censusreporter.org/1.0/data/show/acs2024_5yr?table_ids=B11005&geo_ids=01000US (cached in /workspace/tmobile/raw/). Kids without their own line are not visible and are not filled in synthetically. |
+| `kid_age_band` | **SYNTHETIC mapping**: the sandbox has no ages, so child → "0-12", teen → "13-17", adult child → "18-24", and the band is the youngest kid's. Otherwise "none". Real 5,000: none 69.6%, 0-12 21.6%, 13-17 8.8%, 18-24 0% (adult children appear only on personas). |
+| `promo_months_remaining` | **INFERRED** from REAL sandbox tables as of 2026-10-01. The sandbox doesn't record which promo an account took, so a line counts as on a device-credit promo if its device_sku is in that promo's `device_skus` and its plan family qualifies. Remaining = payout_months (36) − device age, if > 0; max across lines. 0 when billing shows promo_expired. > 0 for 19.5% of accounts (mean 6.2 months). |
+| `contract_or_financing_months_remaining` | max(lines.financing_months_remaining, promo_months_remaining). > 0 for 76.6% (mean 15.6). |
+
+The household fields are **not used in any label**. The churn and upgrade columns of labels.csv were checked byte-identical before and after adding them (md5 73206e92…).
 
 ## Upgrade target (`upgrade_90d`): SYNTHETIC
 **ALL UPGRADE LABELS AND RATES ARE SYNTHETIC.** The target is "would accept a plan step-up or device upgrade within 90 days". It is independent of `--recipe`: the churn-risk term always uses the tuned churn hazard. labels.py reads `out/enrichment.csv` for the affordability terms (run enrichment.py first).
@@ -169,5 +178,11 @@ Results (synthetic, 5,000 regular accounts): mean p_upgrade_90d 6.00%; upgrade_9
 Persona upgrade percentiles after adding affordability (before, in parentheses): 25 **97.1** (95.8) · 28 **96.7** (93.8) · 22 **7.5** (3.3) · 27 **1.2** (3.9) · 24 **52.6** (50.7, still about the median: a premium non-top plan with a cheap $15/month step-up to Beyond; pushing it lower would take persona-specific hacks) · 04 8.8 · 10 56.2 · 21 66.5 · 23 36.3 · 26 42.4.
 Judgement calls: churn-risk penalty applies only above average risk; tenure 0.10 per year; student 0.70; device age counts only after 12 months; affordability −0.5 per point of income; log income +0.3; premium non-top −0.4.
 
-## Scaled synthetic dataset (out/scaled/): SYNTHETIC
+## Scaled synthetic datasets (out/scaled/ = 50k, out/scaled_250k/ = 250k): SYNTHETIC
+- `python harness/scale_synth.py` (default `--n 250000`) writes to `out/scaled_250k/`: `features_scaled.csv` (features.csv columns + enrichment columns + household columns), `labels_scaled.csv`, `household_scaled.csv` and `FIDELITY.md` (includes TSTR by size: 5k / 50k / 250k, 3 seeds each, plus household-field fidelity).
+- **The 50k set in `out/scaled/` is unchanged** (features_scaled md5 f5227b23…, labels_scaled 88e5dd44…). It is reproducible byte-identically with `--n 50000 --legacy-50k --out-dir <dir>`. Its household fields are in a separate `out/scaled/household_scaled.csv` (legacy mode). **Known flaw in the 50k set:** the plain copula breaks the sandbox's segment/line-count structure (for example about 36% of synthetic singles have 2+ lines; the real data has none).
+- **250k (default mode) fixes this:** n_lines keeps the copula rank within each segment but takes its values from the real segment-conditional distribution. 2.97% of rows still have a (segment, n_lines) pair not seen in the real data, from plan min/max-line clipping.
+- Household fields: promo months come from a second, conditional Gaussian-copula stage with a separate RNG stream (conditioned on n_lines, segment, BYOD count, financing months, device age, promo_expired, plan tier), with no promo on all-BYOD or promo-expired accounts. Kid fields are drawn from the real empirical joint given (family segment, n_lines). Fallback for line counts unseen among real families: n_lines − 2 kids. is_family_plan and contract_or_financing are derived.
+- 250k results (synthetic): mean monthly churn hazard 0.990%, p_90d 2.86%, upgrade 6.00%. Train-on-synthetic AUC on the real 5k: churn 0.820 / 0.860 / 0.863 and upgrade 0.778 / 0.799 / 0.801 at 5k / 50k / 250k rows (oracle 0.864 / 0.808). More rows mostly add stability; churn was already at the ceiling.
+
 `scale_synth.py` writes **N synthetic accounts generated from the sandbox's distributions** (default N = 50,000, seed 2026, ids SYN-000001…). The method is a Gaussian copula: empirical marginals plus a normal-score rank-correlation matrix fitted to the 5,000 regular accounts (features + the sampled enrichment columns), with logical constraints enforced and the remaining columns derived from the sandbox plans table. Labels use the same labels.py recipe (tuned churn + upgrade), with b0s re-solved on the synthetic rows. `features_scaled.csv` has the features.csv columns followed by the enrichment columns; `labels_scaled.csv` has the labels.csv columns. Fidelity (KS, correlation difference, base rates, train-on-synthetic/test-on-real AUC) is in `out/scaled/FIDELITY.md`. out/features.csv and out/labels.csv are never overwritten.

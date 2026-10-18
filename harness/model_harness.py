@@ -459,42 +459,147 @@ def _reference_row(X: pd.DataFrame) -> pd.Series:
     return ref
 
 
-UPGRADE_TEXT = {
-    "data_cap_use": ("Using most or all of the plan's data", "Plenty of data headroom (or unlimited plan)"),
-    "n_lines_over_cap_3m": ("A line went over the plan's data in the last 3 months", "No line over its data cap"),
-    "data_gb_3m_avg": ("Heavy data use ({v:.0f} GB/month household)", "Light data use ({v:.0f} GB/month household)"),
-    "data_growth_pct": ("Data use growing ({v:+.0%} vs prior 3 months)", "Data use flat or shrinking ({v:+.0%})"),
-    "n_lines_usage_up_30pct": ("{v:.0f} line(s) with usage up 30%+", "No lines with fast-growing usage"),
-    "hotspot_gb_3m_avg": ("Uses hotspot ({v:.1f} GB/month)", "Little hotspot use"),
-    "streaming_hours_3m_avg": ("Streams a lot ({v:.0f} h/month)", "Streams little ({v:.0f} h/month)"),
-    "max_device_age_months": ("Oldest phone is {v:.0f} months old", "Phones are fairly new ({v:.0f} months max)"),
-    "n_lines_device_36m_plus": ("{v:.0f} phone(s) 3+ years old", "No phones 3+ years old"),
-    "installment_ended_recent": ("A phone was just paid off", "No phone recently paid off"),
-    "financing_ends_within_3m": ("Phone payments end within 3 months", "Phone payments not ending soon"),
-    "is_unlimited": ("On a capped plan", "Already on an unlimited plan"),
-    "plan_misfit_share": ("Plan does not fit usage", "Plan fits usage"),
-    "promo_expired_recent": ("A promotion expired recently", "No recent promo expiry"),
-    "bill_increase_pct": ("Bill rose recently ({v:.0%})", "Bill is steady"),
-    "tenure_months": ("Tenure {v:.0f} months", "Tenure {v:.0f} months"),
+def _money(v) -> str:
+    return f"${float(v) / 100:,.0f}"
+
+
+def _n(v) -> int:
+    try:
+        return int(round(float(v)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+# Upgrade-target phrases: feature -> f(value, up) -> short customer-card sentence. "up" = this pushes the
+# upgrade likelihood UP (listed under reasons for), else DOWN (reasons against). Value-aware, never raw names.
+_CATEGORY_TEXT = {
+    "segment": {"family": "Family account", "couple": "Couple's account", "single": "Single-person account",
+                "senior": "Senior account", "student": "Student account", "smb": "Small-business account"},
+    "contact_preference": {"app": "Prefers the T-Life app", "sms": "Prefers texts", "email": "Prefers email",
+                           "call": "Prefers phone calls"},
+    "discount_group": {"none": "No special discount", "55_plus": "On a 55+ discount", "community": "On a community discount",
+                       "partner": "On a partner (employer) discount", "student": "On a student discount"},
+    "plan_family": {"essentials": "On an Essentials plan", "experience_more": "On an Experience More plan",
+                    "experience_beyond": "On an Experience Beyond plan"},
+    "plan_tier": {"basic": "On a basic-tier plan", "standard": "On a standard-tier plan", "premium": "On a premium plan"},
+    "language": {"en": "English speaker", "es": "Spanish speaker", "other": "Prefers another language"},
+    "credit_tier": {"prime": "Prime credit", "near_prime": "Near-prime credit", "subprime": "Subprime credit"},
+    "income_band": {},
+    "income_geo_level": {},
+}
+
+UPGRADE_PHRASES: Dict[str, Callable[[float, bool], str]] = {
+    # data use vs cap
+    "data_cap_use": lambda v, up: "Uses most of their data cap each month" if up else "Has plenty of data headroom",
+    "n_lines_over_cap_3m": lambda v, up: ("A line went over its data cap recently" if _n(v) else "No line has hit its data cap"),
+    "plan_misfit_share": lambda v, up: ("Current plan does not match how they use it" if float(v) > 0 else "Current plan matches their usage"),
+    "data_gb_3m_avg": lambda v, up: (f"Heavy data user (about {_n(v)} GB a month)" if up else f"Light data user (about {_n(v)} GB a month)"),
+    "data_growth_pct": lambda v, up: ("Data use is growing fast" if float(v) > 0.1 else ("Data use is flat" if float(v) > -0.1 else "Data use is falling")),
+    "n_lines_usage_up_30pct": lambda v, up: (f"{_plural(_n(v), 'line')} using 30% more data than before" if _n(v) else "No line's usage is growing fast"),
+    "hotspot_gb_3m_avg": lambda v, up: ("Relies on hotspot data" if float(v) >= 1 else "Rarely uses hotspot"),
+    "streaming_hours_3m_avg": lambda v, up: ("Streams a lot of video" if up else "Streams little video"),
+    "voice_min_3m_avg": lambda v, up: ("Talks a lot on the phone" if up else "Makes few calls"),
+    "n_lines_light_on_premium": lambda v, up: ("Pays for a premium plan they barely use" if _n(v) else "Not overpaying for a premium plan"),
+    "is_unlimited": lambda v, up: ("Already on an unlimited plan" if _n(v) else "On a plan with a data cap"),
+    "plan_is_unlimited": lambda v, up: ("Already on an unlimited plan" if _n(v) else "On a plan with a data cap"),
+    "plan_data_cap_gb": lambda v, up: "Plan has a data cap",
+    "plan_price_cents": lambda v, up: (f"Plan costs {_money(v)} a month"),
+    # devices / financing / trade-in
+    "max_device_age_months": lambda v, up: (f"Oldest phone is {_n(v) // 12} years old" if _n(v) >= 24 else
+                                            (f"Oldest phone is {_n(v)} months old" if _n(v) else "Phones are new")),
+    "mean_device_age_months": lambda v, up: ("Phones are getting old" if _n(v) >= 24 else "Phones are fairly new"),
+    "n_lines_device_36m_plus": lambda v, up: (f"{_plural(_n(v), 'phone')} over 3 years old" if _n(v) else "No phones over 3 years old"),
+    "n_tradein_eligible_lines": lambda v, up: (f"{_plural(_n(v), 'phone')} eligible for trade-in" if _n(v) else "No phones eligible for trade-in"),
+    "n_flagship_devices": lambda v, up: (f"Owns {_plural(_n(v), 'flagship phone')}" if _n(v) else "No flagship phones"),
+    "is_byod": lambda v, up: ("Brought their own phone" if _n(v) else "Bought their phone from T-Mobile"),
+    "n_byod_lines": lambda v, up: (f"{_plural(_n(v), 'line')} on their own phone" if _n(v) else "All phones bought from T-Mobile"),
+    "no_financing": lambda v, up: ("No phone payments left" if _n(v) else "Still paying off a phone"),
+    "n_financed_lines": lambda v, up: (f"Paying off {_plural(_n(v), 'phone')}" if _n(v) else "No phones on a payment plan"),
+    "financing_balance_total_cents": lambda v, up: (f"Still owes {_money(v)} on phones" if float(v) > 0 else "Phones fully paid off"),
+    "monthly_installment_total_cents": lambda v, up: (f"Pays {_money(v)} a month for phones" if float(v) > 0 else "No monthly phone payments"),
+    "max_financing_months_remaining": lambda v, up: (f"Phone payments run {_n(v)} more months" if _n(v) else "No phone payments left"),
+    "min_financing_months_left_financed": lambda v, up: (f"Next phone payoff in {_n(v)} months" if _n(v) else "No phone payoff coming up"),
+    "financing_ends_within_3m": lambda v, up: ("Phone will be paid off within 3 months" if _n(v) else "No phone payoff in the next 3 months"),
+    "installment_ended_recent": lambda v, up: ("Just paid off a phone" if _n(v) else "No phone paid off recently"),
+    "new_installment_recent": lambda v, up: ("Just started paying for a new phone" if _n(v) else "No new phone recently"),
+    # bill / affordability
+    "bill_increase_pct": lambda v, up: (("Recent bill jump makes an upgrade unlikely" if not up else "Bill jumped recently")
+                                        if float(v) >= 0.10 else
+                                        ("Bill crept up recently" if float(v) > 0.02 else "Bill has been steady")),
+    "bill_change_3m_pct": lambda v, up: ("Bill rose over the last 3 months" if float(v) > 0.02 else "Bill has not risen lately"),
+    "promo_expired_recent": lambda v, up: ("A promotion just ended" if _n(v) else "No promotion ended recently"),
+    "bill_changes_12m": lambda v, up: (f"Bill changed {_plural(_n(v), 'time')} this year" if _n(v) else "Bill has not changed this year"),
+    "last_bill_cents": lambda v, up: (f"Pays {_money(v)} a month"),
+    "prior_avg_bill_cents": lambda v, up: (f"Usually pays about {_money(v)} a month"),
+    "step_up_cost_pct_income": lambda v, up: ("Next plan up is affordable for their income" if up else "Next plan up would be a stretch on their income"),
+    "step_up_cost_cents": lambda v, up: (f"Next plan up costs {_money(v)} more a month"),
+    "next_plan_price_cents": lambda v, up: (f"Next plan up costs {_money(v)} a month"),
+    "household_income_usd": lambda v, up: ("Higher household income" if up else "Lower household income"),
+    "area_median_income_usd": lambda v, up: ("Lives in a higher-income area" if up else "Lives in a lower-income area"),
+    "recent_job_change": lambda v, up: ("Recently changed jobs" if _n(v) else "No recent job change"),
+    # tenure / account
+    "tenure_months": lambda v, up: (f"Customer for {_n(v) // 12} years" if _n(v) >= 24 else f"Customer for {_n(v)} months"),
+    "tenure_capped60": lambda v, up: ("Customer for 5+ years" if _n(v) >= 60 else
+                                      (f"Customer for {_n(v) // 12} years" if _n(v) >= 24 else f"Customer for {_n(v)} months")),
+    "early_tenure": lambda v, up: ("New customer (under a year)" if _n(v) else "Customer for over a year"),
+    "short_history": lambda v, up: ("Too new for a full billing history" if _n(v) else "Has a full billing history"),
+    "extra_lines": lambda v, up: (f"{_plural(_n(v) + 1, 'line')} on the account" if _n(v) else "Single-line account"),
+    "n_lines": lambda v, up: (f"{_plural(_n(v), 'line')} on the account" if _n(v) > 1 else "Single-line account"),
+    "no_autopay": lambda v, up: ("Not on AutoPay" if _n(v) else "On AutoPay"),
+    "autopay": lambda v, up: ("On AutoPay" if _n(v) else "Not on AutoPay"),
+    "has_home_internet": lambda v, up: ("Has T-Mobile Home Internet" if _n(v) else "No Home Internet"),
+    "has_streaming_addon": lambda v, up: ("Has a streaming add-on" if _n(v) else "No streaming add-on"),
+    "n_account_addons": lambda v, up: (f"Has {_plural(_n(v), 'add-on')}" if _n(v) else "No add-ons"),
+    "n_line_addons": lambda v, up: (f"Has {_plural(_n(v), 'line add-on')}" if _n(v) else "No line add-ons"),
+    "n_protection_addons": lambda v, up: (f"Has device protection on {_plural(_n(v), 'phone')}" if _n(v) else "No device protection"),
+    "n_connected_lines": lambda v, up: (f"Has {_plural(_n(v), 'connected device')}" if _n(v) else "No connected devices"),
+    # engagement / service experience
+    "app_sessions_30d": lambda v, up: (f"Active in the T-Life app ({_n(v)} visits a month)" if _n(v) >= 8 else "Rarely opens the T-Life app"),
+    "low_app_use": lambda v, up: ("Rarely opens the T-Life app" if _n(v) else "Uses the T-Life app regularly"),
+    "competitor_research_score": lambda v, up: ("Shopping other carriers" if float(v) >= 0.4 else "Not shopping other carriers"),
+    "port_out_inquiry": lambda v, up: ("Asked about switching carriers" if _n(v) else "Has not asked about switching"),
+    "cancel_inquiries_270d": lambda v, up: ("Asked about cancelling" if _n(v) else "Never asked about cancelling"),
+    "cancellation_inquiry_contacts_90d": lambda v, up: ("Asked about cancelling recently" if _n(v) else "No recent cancellation questions"),
+    "unresolved_90d": lambda v, up: (f"{_plural(_n(v), 'unresolved support issue')} lately" if _n(v) else "No unresolved support issues"),
+    "unresolved_270d": lambda v, up: ("Has had unresolved support issues" if _n(v) else "Support issues get resolved"),
+    "negative_contacts_90d": lambda v, up: ("Recent unhappy support calls" if _n(v) else "No unhappy support calls"),
+    "troubled_4plus": lambda v, up: ("Many recent support problems" if _n(v) else "No pile-up of support problems"),
+    "neg_sentiment": lambda v, up: ("Unhappy tone in support contacts" if float(v) > 0 else "No unhappy support contacts"),
+    "avg_sentiment": lambda v, up: ("Positive support experiences" if float(v) > 0 else "Mixed or negative support experiences"),
+    "avg_sentiment_90d": lambda v, up: ("Recent support went well" if float(v) > 0 else "Recent support went poorly"),
+    "min_sentiment_270d": lambda v, up: ("Had at least one angry support call" if float(v) < -0.5 else "No angry support calls"),
+    "support_90d": lambda v, up: (f"{_plural(_n(v), 'support contact')} in 90 days" if _n(v) else "No recent support contacts"),
+    "support_270d": lambda v, up: (f"{_plural(_n(v), 'support contact')} this year" if _n(v) else "No support contacts this year"),
+    "days_since_last_contact": lambda v, up: ("Contacted support recently" if _n(v) < 30 else "No recent support contact"),
+    "billing_contacts_90d": lambda v, up: ("Recent billing questions" if _n(v) else "No billing questions"),
+    "network_contacts_90d": lambda v, up: ("Recent network complaints" if _n(v) else "No network complaints"),
+    "device_contacts_90d": lambda v, up: ("Recent device problems" if _n(v) else "No device problems"),
+    "plan_change_contacts_90d": lambda v, up: ("Asked about changing plans" if _n(v) else "Has not asked about changing plans"),
 }
 
 
-def _upgrade_sentence(g: str, row: pd.Series, up: bool, cat: Optional[str] = None) -> str:
-    """Neutral wording for the upgrade target (churn_features.phrase() is churn-worded)."""
+def _upgrade_sentence(g: str, row, up: bool, cat: Optional[str] = None) -> str:
+    """Short customer-card sentence for the upgrade target. Never returns raw column names or underscores."""
+    if cat is not None or g in _CATEGORY_TEXT:
+        table = _CATEGORY_TEXT.get(g, {})
+        if cat in table:
+            return table[cat]
+        if cat and cat != "none":
+            return cat.replace("_", " ").capitalize()
+        return "Other account details"
     v = row.get(g, np.nan) if hasattr(row, "get") else np.nan
-    if g in UPGRADE_TEXT:
-        tpl = UPGRADE_TEXT[g][0 if up else 1]
+    f = UPGRADE_PHRASES.get(g)
+    if f is not None:
         try:
-            return tpl.format(v=float(v)) if "{v" in tpl else tpl
+            vv = 0.0 if v is None or (isinstance(v, float) and v != v) else v
+            return f(float(vv), up)
         except (TypeError, ValueError):
-            return tpl.split("(")[0].strip()
-    name = g.replace("_", " ")
-    if cat is not None:
-        return f"{name.capitalize()}: {cat.replace('_', ' ')} ({'more' if up else 'less'} likely to upgrade)"
-    try:
-        return f"{name.capitalize()} = {float(v):g} ({'more' if up else 'less'} likely to upgrade)"
-    except (TypeError, ValueError):
-        return f"{name.capitalize()} ({'more' if up else 'less'} likely to upgrade)"
+            pass
+    return "Other account details" if up else "Other account details"
 
 
 def contributions_to_reasons(contrib: pd.DataFrame, X: pd.DataFrame, k: int = 3, eps: float = 1e-6,
@@ -514,8 +619,12 @@ def contributions_to_reasons(contrib: pd.DataFrame, X: pd.DataFrame, k: int = 3,
         if target == "upgrade":
             cat = None
             if g in cats:
-                on = [c for c in cats[g] if xr.get(c, 0) > 0.5]
-                cat = on[0].split("=", 1)[1] if on else "none"
+                rv = row.get(g) if hasattr(row, "get") else None
+                if isinstance(rv, str):          # raw category (covers levels prepare() dropped)
+                    cat = rv
+                else:
+                    on = [c for c in cats[g] if xr.get(c, 0) > 0.5]
+                    cat = on[0].split("=", 1)[1] if on else "none"
             return _upgrade_sentence(g, row, risk, cat)
         if g in REASONS and (cf is None or g not in cf._FEATURE_GROUP):
             d = row.to_dict()
@@ -538,13 +647,24 @@ def contributions_to_reasons(contrib: pd.DataFrame, X: pd.DataFrame, k: int = 3,
     for aid, r in contrib.iterrows():
         row, xr = raw.loc[aid], X.loc[aid]
         s_ = r.sort_values()
-        risk = [g for g, v in s_[::-1].items() if v > eps][:k]
-        stay = [g for g, v in s_.items() if v < -eps][:k]
+        def pick(groups, up):
+            seen, out_ = set(), []
+            for g_ in groups:
+                t_ = text(g_, row, xr, up)
+                if t_ and t_ not in seen:
+                    seen.add(t_)
+                    out_.append(t_)
+                if len(out_) == k:
+                    break
+            return out_ + [""] * (k - len(out_))
+
+        risk = pick([g for g, v in s_[::-1].items() if v > eps], True)
+        stay = pick([g for g, v in s_.items() if v < -eps], False)
         rec = {"account_id": aid}
         for i in range(k):
-            rec[f"risk_reason_{i + 1}"] = text(risk[i], row, xr, True) if i < len(risk) else ""
+            rec[f"risk_reason_{i + 1}"] = risk[i]
         for i in range(k):
-            rec[f"stay_reason_{i + 1}"] = text(stay[i], row, xr, False) if i < len(stay) else ""
+            rec[f"stay_reason_{i + 1}"] = stay[i]
         rows.append(rec)
     cols = ["account_id"] + [f"risk_reason_{i + 1}" for i in range(k)] + [f"stay_reason_{i + 1}" for i in range(k)]
     return pd.DataFrame(rows, columns=cols)

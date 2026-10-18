@@ -4,8 +4,11 @@
 > simulation. **Circularity caveat:** the hidden true effects are built from our save-rate assumptions and the
 > sandbox promo rules, so this validates the method end to end, not real-world lift. No real offer outcomes exist.
 >
-> **PROVISIONAL: small test split, ranking not reliable.** The dollar figures in policy_eval.csv and the policy
-> ranking can change with a larger trial. David is deciding whether to grow it (see "Scaling the trial").
+> **Simulated 50k trial** (default since Sat 10/17 ~7:25 PM PDT, approved by David): 50,000 simulated accounts
+> resampled with jitter from the 5,042 sandbox accounts, a 35k/15k train/test split, and 20 re-randomized
+> cohorts. The targeted policies (Model B, Model C, oracle) beat offer-to-everyone, the 3+ calls rule and random
+> beyond noise. **Model B, Model C and the oracle do not separate on net value:** paired 95% CIs across
+> replicates cross 0 (`policy_pairwise.csv`). Don't claim an order among them.
 
 ## Run
 ```bash
@@ -14,15 +17,18 @@ python harness/uplift.py              # rebuilds offers.csv, offer_candidates.cs
 TM_TRIAL_REPLICATES=1 python harness/uplift.py   # a single trial cohort (underpowered; see caveats)
 ```
 
-## Scaling the trial (knobs; defaults unchanged)
-- `TM_TRIAL_N=<n>`: grows the simulated population to n accounts by resampling real sandbox accounts with jitter:
+## Scaling the trial (knobs)
+Default: `python harness/uplift.py` is the same as `TM_TRIAL_N=50000 TM_TRIAL_REPLICATES=20 python harness/uplift.py`.
+- `TM_TRIAL_N=<n>` (default **50000**; `0` = only the 5,042 real accounts): grows the simulated population to n
+  accounts by resampling real sandbox accounts with jitter:
   `p_churn × lognormal(0, 0.15)` and continuous features `× (1 + N(0, 0.05))`. Clones keep the original's
-  eligibility, drivers and Model B terms, get ids like `ACC-00001~1`, and appear in uplift.csv. The default is
-  0 (off), which means the 5,042 real accounts.
+  eligibility, drivers and Model B terms, get ids like `ACC-00001~1`, and appear only in the trial outputs
+  (uplift.csv, which has 143,975 rows for 50,000 accounts, and policy_eval*). **offers.csv and
+  offer_candidates.csv always hold the 5,042 real accounts**; offers.py writes them before the expansion.
 - `TM_TRIAL_REPLICATES=<k>`: the number of independent re-randomized cohorts (default 20).
 - Example: `TM_TRIAL_N=50000 TM_TRIAL_REPLICATES=20 python harness/uplift.py`. Runtime grows roughly linearly.
   Deck copies in `model_c_artifacts/` are only written when the output dir is the default `harness/out/`.
-A run takes about 40 s. If `out/churn_scores.csv` changes during the run, the script rebuilds once more.
+A run takes about 50 s at the default 50k accounts × 20 cohorts. If `out/churn_scores.csv` changes during the run, the script rebuilds once more.
 `out/offers_pipeline_run.json` records the churn_scores mtime used.
 **Dependency:** the PNGs need `matplotlib`, which is not in the shared `requirements.txt` (that file isn't owned by
 this lane). Add `matplotlib>=3.8` there or use `/workspace/tmobile/harness/.venv`. Without it the script still
@@ -33,7 +39,8 @@ writes every CSV and skips the PNGs.
    credit + fix. Eligibility comes from Model B's sandbox promo rules.
 2. **Randomized trial.** `assign_arms` picks one eligible arm per account uniformly at random, so propensity =
    1 / number of eligible arms. The trial runs `TRIAL_REPLICATES` = 20 times: independent re-randomized cohorts of
-   the same 5,042 accounts, with fresh assignments and outcome draws. Estimates are reported per test split.
+   the same simulated population (default 50,000 accounts; see `TM_TRIAL_N`), with fresh assignments and outcome
+   draws. Estimates are reported per test split, with 95% CIs from the spread across cohorts.
 3. **Hidden truth** (`true_effects`, deliberately not Model B's EV formula). Each arm saves a share of would-be
    churners. The share depends on:
    - problem match (network, unresolved, billing or bill shock, usage or life event, device, overpay)
@@ -66,16 +73,21 @@ writes every CSV and skips the PNGs.
    `Σ [1(A=do nothing)·churn/e − 1(A=arm)·churn/e]`, with the same ranking valued on the hidden truth in extra
    columns. AUUC is the mean gap between each curve and its random baseline (`uplift_auuc.csv`).
 
-## Reading the results (PROVISIONAL)
-- **Model B vs the oracle.** Doubly robust puts Model B slightly *above* the oracle on net value without upsell
-  (+$24.3k vs +$23.6k). That is estimator noise. On the hidden true effects the oracle wins ($21.8k vs $19.2k),
-  as it must by construction. The test split is too small to separate policies this close.
-- **Why Model C has the lowest Qini.** Its T-learner recovers effects that are weak and small (Spearman 0.38
-  between uplift_hat and true_uplift on test rows). It also picks arms by *net value*
-  (uplift × value − cost − annoyance), not by saves, so the arms it names save fewer churners and its
-  saves-based Qini curve tops out lower than the other models'. Model A and Model B rank by risk or EV and name
-  Model B's best arm, which is closer to the truth because the truth is built from similar assumptions
-  (the circularity caveat).
+## Reading the results (simulated 50k trial; 15k test accounts; Model B vs Model C vs oracle within noise)
+- **DR agrees with the truth.** Net value without upsell, DR vs true: Model B $179k vs $180k, Model C $176k vs
+  $166k, oracle $201k vs $210k.
+- **Tiers separate.** Paired over the 20 cohorts, Model B beats offer-to-everyone by +$336k (95% CI
+  [+$313k, +$358k], 20/20 cohorts) and beats the 3+ calls rule by +$173k ([+$136k, +$210k], 19/20). Every
+  targeted policy's CI sits far above random (−$263k).
+- **The top tier does not separate.** Model B − oracle = −$22k (CI [−$46k, +$2k]); Model B − Model C = +$4k
+  (CI [−$24k, +$32k]). On the hidden truth the oracle is best ($210k vs B $180k vs C $166k), but the estimator
+  can't confirm that at this size. Model C saves fewer churners than the oracle beyond noise (−18.5, CI
+  [−29, −8]).
+- **Model C (T-learner).** With 50k accounts it recovers the effects much better: Pearson 0.85 and Spearman 0.60
+  with true_uplift (it was 0.63 / 0.38 at 5k). Its Qini share rises to 0.80 of the oracle (Model B 0.73,
+  Model A 0.82). It has the lowest cost per save among the learned policies ($351 vs Model B $417), but it
+  contacts fewer customers and optimizes net value rather than saves, so it saves fewer churners than Model B.
+- At 5,042 accounts (`TM_TRIAL_N=0`) none of this separated; that run was PROVISIONAL.
 
 ## Schemas
 **`out/uplift.csv`** has one row per account × eligible action, in this column order:
@@ -88,7 +100,10 @@ pick_uplift, pick_ev, synthetic`
 **`out/policy_eval.csv`** columns: `policy, n_test_accounts, trial_replicates, n_contacted, offer_cost_usd,`
 `churners_saved_{ipw,dr}, net_value_no_upsell_{ipw,dr}_usd, net_value_with_upsell_{ipw,dr}_usd,
 cost_per_save_{ipw,dr}_usd, true_churners_saved, true_net_value_{no,with}_upsell_usd, true_cost_per_save_usd,
-data_note`. Net value is 24-month margin minus offer cost, versus do nothing, with annoyance excluded.
+{churners_saved,net_no_upsell,net_with_upsell}_dr_{ci_low,ci_high,rep_sd}, data_note`. Net value is 24-month
+margin minus offer cost, versus do nothing, with annoyance excluded. The CIs are mean ± 1.96·SD/√K across the K
+cohorts. `out/policy_eval_replicates.csv` holds the per-cohort estimates, and `out/policy_pairwise.csv` holds paired
+A − B differences with CIs, a `separates` flag and the number of cohorts A wins.
 
 **`out/uplift_curve.csv`** columns: `policy_or_model, frac_targeted, cum_incremental_saves, random_baseline`, then
 the extras `cum_true_incremental_saves, true_random_baseline, data_note`.
@@ -109,6 +124,10 @@ fit_t_learner(X, trial, train_ids) -> dict[arm -> model info]
 predict_stay(models, X, arm) -> ndarray
 make_policies(long, offers, facts) -> dict[name -> Series(account_id -> arm)]
 ope(policy, test, long_test, reps) -> dict          # IPW (self-normalized) + DR
+replicate_spread(policies, test, long_test, reps) -> DataFrame   # per-cohort estimates
+spread_summary(rs, reps) -> DataFrame                            # 95% CI per policy
+pairwise_diffs(rs, pairs, reps) -> DataFrame                     # paired A - B with CI
+expand_population(n_target, offers, details, features, facts, seed)  # TM_TRIAL_N
 policy_table(policies, test, long_test, reps) -> DataFrame
 qini_curves(test, long_test, offers, facts, reps) -> DataFrame
 auuc_table(curve) -> DataFrame

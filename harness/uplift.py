@@ -53,15 +53,20 @@ TRIAL_REPLICATES = 20      # K independent re-randomized cohorts of the same 5,0
                            # (~28 churners in the test split vs ~12 true saves); env TM_TRIAL_REPLICATES overrides.
 RANDOM_POLICY_SEED = 99
 TRIAL_REPLICATES = int(os.environ.get("TM_TRIAL_REPLICATES", TRIAL_REPLICATES))
-# ---- TRIAL SIZE KNOB (default OFF = the 5,042 real sandbox accounts). TM_TRIAL_N=<n> grows the simulated
+# ---- TRIAL SIZE KNOB. Default 50,000 simulated accounts (approved by David, Sat 10/17 ~7:25 PM PDT);
+# TM_TRIAL_N=0 uses only the 5,042 real sandbox accounts. TM_TRIAL_N=<n> grows the simulated
 # population to n accounts by resampling real accounts with jitter (p_churn x lognormal(0, 0.15), continuous
 # features x (1 + N(0, 0.05))); clones keep the original's eligibility, drivers and Model B terms and get ids
-# like "ACC-00001~1". Combine with TM_TRIAL_REPLICATES for more cohorts. Defaults unchanged.
-TRIAL_N = int(os.environ.get("TM_TRIAL_N", 0))
+# like "ACC-00001~1". Clones exist only inside the trial (uplift.csv, policy_eval*): offers.csv and
+# offer_candidates.csv are written by offers.py before expansion and always hold the 5,042 real accounts.
+TRIAL_N = int(os.environ.get("TM_TRIAL_N", 50000))
 TRIAL_N_SEED = 4242
 TRIAL_N_P_JITTER_SD = 0.15
 TRIAL_N_FEATURE_JITTER_SD = 0.05
-PROVISIONAL_NOTE = "PROVISIONAL: small test split, ranking not reliable"
+PROVISIONAL_NOTE = ("Simulated 50k trial (35k train / 15k test accounts x 20 re-randomized cohorts): targeted "
+                    "policies (Model B, Model C, oracle) separate from offer-to-everyone, the 3+ calls rule and "
+                    "random beyond noise; Model B vs Model C vs oracle do NOT separate on net value (paired "
+                    "95% CIs cross 0, see policy_pairwise.csv)")
 MIN_ARM_TRAIN = 40         # fewer treated train rows (or one outcome class) -> fallback model for that arm
 LOGREG_C = 0.3
 CURVE_POINTS = 101
@@ -234,27 +239,30 @@ def terms(details: dict, a: str, arm: str) -> tuple[float, float, float, float]:
 
 # ------------------------------------------------------------------ policies
 def make_policies(long: pd.DataFrame, offers: pd.DataFrame, facts: pd.DataFrame) -> dict[str, pd.Series]:
-    """Policy name -> Series(account_id -> arm code). All picks are eligible arms."""
-    ids = sorted(long["account_id"].unique())
+    """Policy name -> Series(account_id -> arm code). All picks are eligible arms. (Vectorized for 50k+.)"""
+    ids = pd.Index(sorted(long["account_id"].unique()))
     rng = np.random.default_rng(RANDOM_POLICY_SEED)
-    elig = long.groupby("account_id")["action_code"].apply(list)
-    sup = facts.set_index("account_id")["support_90d"]
     evs = offers.set_index("account_id")
-    best_offer = {}
-    for a in ids:
-        cand = [(k, evs.loc[a, f"ev_{k}"]) for k in elig[a] if k != "do_nothing"]
-        best_offer[a] = max(cand, key=lambda t: t[1])[0] if cand else "do_nothing"
+    sup = facts.set_index("account_id")["support_90d"].reindex(ids)
+    offers_only = long[long.action_code != "do_nothing"]
+    best_offer = offers_only.sort_values(["account_id", "ev_b"], ascending=[True, False]) \
+        .drop_duplicates("account_id").set_index("account_id")["action_code"].reindex(ids).fillna("do_nothing")
+    # random eligible arm: random key per (account, arm), take the max
+    rnd = long[["account_id", "action_code"]].assign(k=rng.random(len(long)))
+    random_pick = rnd.sort_values(["account_id", "k"]).drop_duplicates("account_id", keep="last") \
+        .set_index("account_id")["action_code"].reindex(ids)
+    has_cc = set(long.loc[long.action_code == "care_credit", "account_id"])
+    calls = pd.Series(np.where((sup.values >= 3) & ids.isin(list(has_cc)), "care_credit", "do_nothing"), index=ids)
     pick_up = long[long["pick_uplift"]].set_index("account_id")["action_code"]
-    tru = long.copy()
-    tru["true_net"] = tru["true_uplift"] * tru["value"] + tru["gain"] - tru["cost"] - tru["annoyance"]
-    oracle = tru.sort_values("true_net", ascending=False).drop_duplicates("account_id") \
-        .set_index("account_id").apply(lambda r: r["action_code"] if r["true_net"] > 0 else "do_nothing", axis=1)
+    tru = long.assign(true_net=long["true_uplift"] * long["value"] + long["gain"] - long["cost"] - long["annoyance"])
+    top = tru.sort_values(["account_id", "true_net"], ascending=[True, False]).drop_duplicates("account_id") \
+        .set_index("account_id")
+    oracle = pd.Series(np.where(top["true_net"] > 0, top["action_code"], "do_nothing"), index=top.index)
     return {
         "do nothing": pd.Series("do_nothing", index=ids),
-        "random (eligible arm)": pd.Series({a: elig[a][rng.integers(len(elig[a]))] for a in ids}),
-        "3+ calls rule -> $25 care credit": pd.Series(
-            {a: "care_credit" if sup[a] >= 3 and "care_credit" in elig[a] else "do_nothing" for a in ids}),
-        "offer to everyone (best eligible offer)": pd.Series(best_offer),
+        "random (eligible arm)": random_pick,
+        "3+ calls rule -> $25 care credit": calls,
+        "offer to everyone (best eligible offer)": best_offer,
         "Model B EV chooser": evs["action_code"].reindex(ids),
         "Model C uplift policy": pick_up.reindex(ids),
         "oracle (true effects; reference only)": oracle.reindex(ids),
@@ -269,21 +277,19 @@ def ope(policy: pd.Series, test: pd.DataFrame, long_test: pd.DataFrame, reps: in
     value/cost/gain. long_test: account x eligible arm with p_stay_hat, cost, gain, true_uplift.
     Rewards: stay (0/1); value_net = stay x value - cost; value_net_up = value_net + stay x upsell gain.
     """
-    L = long_test.set_index(["account_id", "action_code"])
-    pi = policy.dropna()
-    sel = L.loc[list(zip(pi.index, pi.values))].reset_index()          # one row per test account
-    t = test.copy()
-    t["pi"] = t["account_id"].map(policy)
-    w = (t["arm"] == t["pi"]).astype(float) / t["propensity"]
-    y = t["outcome_stay_90d"].astype(float)
-    r = y * t["value"] - t["cost"]
-    r_up = r + y * t["gain"]
-    obs = L.loc[list(zip(t["account_id"], t["arm"]))].reset_index(drop=True)
-    sp = sel.set_index("account_id")
-    mu_pi = sp.loc[t["account_id"]].reset_index(drop=True)
-    w, y, r, r_up = w.values, y.values, r.values, r_up.values
+    keep = ["account_id", "action_code", "p_stay_hat", "value", "cost", "gain", "true_uplift", "p_churn"]
+    pi = policy.dropna().rename("action_code").rename_axis("account_id").reset_index()
+    sel = pi.merge(long_test[keep], on=["account_id", "action_code"], how="left")   # one row per test account
+    t = test.merge(pi.rename(columns={"action_code": "pi"}), on="account_id", how="left")
+    t = t.merge(long_test[["account_id", "action_code", "p_stay_hat"]].rename(
+        columns={"action_code": "arm", "p_stay_hat": "mu_obs"}), on=["account_id", "arm"], how="left")
+    t = t.merge(sel[["account_id", "p_stay_hat", "value", "cost", "gain"]].rename(
+        columns={"p_stay_hat": "mu_pi", "value": "v_pi", "cost": "c_pi", "gain": "g_pi"}), on="account_id", how="left")
+    w = ((t["arm"] == t["pi"]).astype(float) / t["propensity"]).values
+    y = t["outcome_stay_90d"].astype(float).values
+    r = y * t["value"].values - t["cost"].values
+    r_up = r + y * t["gain"].values
     n_acc = len(sel)
-    n_rows = len(t)
 
     def hajek(v):
         return float(n_acc * (w * v).sum() / w.sum())
@@ -291,22 +297,69 @@ def ope(policy: pd.Series, test: pd.DataFrame, long_test: pd.DataFrame, reps: in
     def dr(mu_pi_v, mu_obs_v, v):
         return float((mu_pi_v + w * (v - mu_obs_v)).sum() / reps)
 
-    m_pi_y, m_obs_y = mu_pi["p_stay_hat"].values, obs["p_stay_hat"].values
-    m_pi_r = m_pi_y * mu_pi["value"].values - mu_pi["cost"].values
-    m_obs_r = m_obs_y * obs["value"].values - obs["cost"].values
-    m_pi_ru = m_pi_r + m_pi_y * mu_pi["gain"].values
-    m_obs_ru = m_obs_r + m_obs_y * obs["gain"].values
+    m_pi_y, m_obs_y = t["mu_pi"].values, t["mu_obs"].values
+    m_pi_r = m_pi_y * t["v_pi"].values - t["c_pi"].values
+    m_obs_r = m_obs_y * t["value"].values - t["cost"].values
+    m_pi_ru = m_pi_r + m_pi_y * t["g_pi"].values
+    m_obs_ru = m_obs_r + m_obs_y * t["gain"].values
     return {
         "stay_ipw": hajek(y), "stay_dr": dr(m_pi_y, m_obs_y, y),
         "net_ipw": hajek(r), "net_dr": dr(m_pi_r, m_obs_r, r),
         "netup_ipw": hajek(r_up), "netup_dr": dr(m_pi_ru, m_obs_ru, r_up),
-        "n_contacted": int((pi != "do_nothing").sum()), "offer_cost": float(sel["cost"].sum()),
+        "n_contacted": int((sel["action_code"] != "do_nothing").sum()), "offer_cost": float(sel["cost"].sum()),
         "true_saves": float(sel["true_uplift"].sum()),
         "true_net": float((sel["true_uplift"] * sel["value"] - sel["cost"]).sum()),
         "true_netup": float((sel["true_uplift"] * sel["value"] - sel["cost"]
                              + (1 - sel["p_churn"] + sel["true_uplift"]) * sel["gain"]).sum()),
-        "n": n_acc, "n_trial_rows": n_rows,
+        "n": n_acc, "n_trial_rows": len(t),
     }
+
+
+def replicate_spread(policies: dict, test: pd.DataFrame, long_test: pd.DataFrame, reps: int) -> pd.DataFrame:
+    """Per-replicate DR/IPW estimates (each replicate = one full re-randomized trial), minus do nothing.
+    Returns long table: replicate, policy, churners_saved_dr, net_no_upsell_dr, net_with_upsell_dr (+ ipw)."""
+    rows = []
+    for rep in range(reps):
+        tr = test[test["rep"] == rep]
+        res = {k: ope(v, tr, long_test, 1) for k, v in policies.items()}
+        base = res["do nothing"]
+        for k, r in res.items():
+            rows.append({"replicate": rep, "policy": k,
+                         "churners_saved_dr": r["stay_dr"] - base["stay_dr"],
+                         "net_no_upsell_dr": r["net_dr"] - base["net_dr"],
+                         "net_with_upsell_dr": r["netup_dr"] - base["netup_dr"],
+                         "churners_saved_ipw": r["stay_ipw"] - base["stay_ipw"],
+                         "net_no_upsell_ipw": r["net_ipw"] - base["net_ipw"]})
+    return pd.DataFrame(rows)
+
+
+def spread_summary(rs: pd.DataFrame, reps: int) -> pd.DataFrame:
+    """95% CI of the pooled (mean over replicates) estimate: mean +/- 1.96 x SD / sqrt(K)."""
+    out = []
+    for pol, g in rs.groupby("policy", sort=False):
+        row = {"policy": pol}
+        for c in ["churners_saved_dr", "net_no_upsell_dr", "net_with_upsell_dr"]:
+            m, sd = g[c].mean(), g[c].std(ddof=1)
+            half = 1.96 * sd / np.sqrt(reps)
+            row[f"{c}_ci_low"], row[f"{c}_ci_high"], row[f"{c}_rep_sd"] = round(m - half, 2), round(m + half, 2), round(sd, 2)
+        out.append(row)
+    return pd.DataFrame(out)
+
+
+def pairwise_diffs(rs: pd.DataFrame, pairs: list[tuple[str, str]], reps: int) -> pd.DataFrame:
+    """Paired per-replicate differences A - B with 95% CI (same replicate = same randomization)."""
+    out = []
+    for a, b in pairs:
+        A = rs[rs.policy == a].set_index("replicate")
+        B = rs[rs.policy == b].set_index("replicate")
+        for c in ["churners_saved_dr", "net_no_upsell_dr", "net_with_upsell_dr"]:
+            d = A[c] - B[c]
+            half = 1.96 * d.std(ddof=1) / np.sqrt(reps)
+            out.append({"comparison": f"{a} minus {b}", "metric": c, "mean_diff": round(d.mean(), 2),
+                        "ci_low": round(d.mean() - half, 2), "ci_high": round(d.mean() + half, 2),
+                        "separates": bool(d.mean() - half > 0 or d.mean() + half < 0),
+                        "replicates_A_wins": int((d > 0).sum())})
+    return pd.DataFrame(out)
 
 
 def policy_table(policies: dict, test: pd.DataFrame, long_test: pd.DataFrame, reps: int) -> pd.DataFrame:
@@ -376,7 +429,9 @@ def qini_curves(test: pd.DataFrame, long_test: pd.DataFrame, offers: pd.DataFram
              - ((tt["arm"] == tt["rec"]) & tt["rec"].notna()).astype(float)) \
             * (1 - tt["outcome_stay_90d"]) / tt["propensity"]
         contrib = c.groupby(tt["account_id"]).sum().reindex(order).fillna(0) / reps
-        tru = np.array([true_map.get((a, r), 0.0) if isinstance(r, str) else 0.0 for a, r in rec_o.items()])
+        tru = pd.DataFrame({"account_id": rec_o.index, "action_code": rec_o.values}).merge(
+            lt[["account_id", "action_code", "true_uplift"]], on=["account_id", "action_code"], how="left")[
+            "true_uplift"].fillna(0.0).values
         cs = np.concatenate([[0.0], contrib.cumsum().values])
         ct = np.concatenate([[0.0], np.cumsum(tru)])
         n = len(order)
@@ -405,10 +460,11 @@ def auuc_table(curve: pd.DataFrame) -> pd.DataFrame:
 
 
 # ------------------------------------------------------------------ charts
-FOOTNOTE = ("SYNTHETIC: simulated customers and a simulated randomized trial (test split). Circularity caveat: the "
+FOOTNOTE = ("SYNTHETIC: simulated customers (50k resampled from the 5,042 sandbox accounts) and a simulated randomized trial. Circularity caveat: the "
             "hidden 'true' effects are built from our own\nsave-rate assumptions and sandbox promo rules, so this "
             "validates the method end to end, not real-world lift. No real offer outcomes exist.\n"
-            "PROVISIONAL: small test split; policy ranking and dollar figures are not reliable yet.")
+            "Simulated 50k trial (15k test accounts x 20 cohorts): targeted policies beat blanket offers and the "
+            "3+ calls rule beyond noise; Model B vs Model C vs oracle are within noise on net value.")
 
 
 def charts(curve: pd.DataFrame, pe: pd.DataFrame) -> list[str]:
@@ -536,7 +592,9 @@ def run_once() -> dict:
     # long table: account x eligible arm
     long = truth.rename(columns={"arm": "action_code"})
     stay_hat = {arm: pd.Series(predict_stay(models, X, arm), index=X.index) for arm in ARMS}
-    long["p_stay_hat"] = [stay_hat[a2][a1] for a1, a2 in zip(long.account_id, long.action_code)]
+    sh = pd.DataFrame(stay_hat).rename_axis("account_id").reset_index().melt(
+        id_vars="account_id", var_name="action_code", value_name="p_stay_hat")
+    long = long.merge(sh, on=["account_id", "action_code"], how="left")
     long["p_stay_dn_hat"] = long["account_id"].map(stay_hat["do_nothing"])
     long["uplift_hat"] = np.where(long.action_code == "do_nothing", 0.0, long.p_stay_hat - long.p_stay_dn_hat)
     tv = [terms(details, a, k) for a, k in zip(long.account_id, long.action_code)]
@@ -544,7 +602,11 @@ def run_once() -> dict:
     long["net_value_hat"] = np.where(long.action_code == "do_nothing", 0.0,
                                      long.uplift_hat * long.value + long.gain - long.cost - long.annoyance)
     evs = offers.set_index("account_id")
-    long["ev_b"] = [0.0 if k == "do_nothing" else evs.loc[a, f"ev_{k}"] for a, k in zip(long.account_id, long.action_code)]
+    evcols = {f"ev_{k}": k for k in ARMS if k != "do_nothing"}
+    evl = evs[list(evcols)].rename(columns=evcols).rename_axis("account_id").reset_index().melt(
+        id_vars="account_id", var_name="action_code", value_name="ev_b")
+    long = long.merge(evl, on=["account_id", "action_code"], how="left")
+    long["ev_b"] = long["ev_b"].where(long.action_code != "do_nothing", 0.0).fillna(0.0)
     best_up = long.sort_values(["net_value_hat"], ascending=False).drop_duplicates("account_id").set_index("account_id")
     pick = best_up.apply(lambda r: r["action_code"] if r["net_value_hat"] > 0 else "do_nothing", axis=1)
     long["pick_uplift"] = long.action_code == long.account_id.map(pick)
@@ -571,8 +633,20 @@ def run_once() -> dict:
         .merge(long[["account_id", "action_code", "value", "cost", "gain"]]
                .rename(columns={"action_code": "arm"}), on=["account_id", "arm"], how="left")
     policies = make_policies(long, offers, facts)
-    pe = policy_table({k: v.reindex(test_ids) for k, v in policies.items()}, test, lt, TRIAL_REPLICATES)
+    pols = {k: v.reindex(test_ids) for k, v in policies.items()}
+    pe = policy_table(pols, test, lt, TRIAL_REPLICATES)
+    rs = replicate_spread(pols, test, lt, TRIAL_REPLICATES)
+    ss = spread_summary(rs, TRIAL_REPLICATES)
+    pe = pe.merge(ss, on="policy", how="left")
+    pe = pe[[c for c in pe.columns if c != "data_note"] + ["data_note"]]
     pe.to_csv(OUT / "policy_eval.csv", index=False)
+    rs.to_csv(OUT / "policy_eval_replicates.csv", index=False)
+    diffs = pairwise_diffs(rs, [("Model B EV chooser", "oracle (true effects; reference only)"),
+                                ("Model B EV chooser", "Model C uplift policy"),
+                                ("Model C uplift policy", "oracle (true effects; reference only)"),
+                                ("Model B EV chooser", "offer to everyone (best eligible offer)"),
+                                ("Model B EV chooser", "3+ calls rule -> $25 care credit")], TRIAL_REPLICATES)
+    diffs.to_csv(OUT / "policy_pairwise.csv", index=False)
     curve = qini_curves(test, lt, offers, facts, TRIAL_REPLICATES)
     curve.to_csv(OUT / "uplift_curve.csv", index=False)
     auuc = auuc_table(curve)
@@ -583,7 +657,8 @@ def run_once() -> dict:
     write_artifacts = OUT.resolve() == (HERE / "out").resolve()
     if write_artifacts:
         ARTIFACT_DIR.mkdir(exist_ok=True)
-    for src in ([] if not write_artifacts else [OUT / "policy_eval.csv", OUT / "uplift_curve.csv", OUT / "uplift_auuc.csv"] + [Path(x) for x in pngs]):
+    for src in ([] if not write_artifacts else [OUT / "policy_eval.csv", OUT / "uplift_curve.csv", OUT / "uplift_auuc.csv",
+                                                  OUT / "policy_pairwise.csv"] + [Path(x) for x in pngs]):
         shutil.copy2(src, ARTIFACT_DIR / src.name)
 
     lt_c = lt[lt.action_code != "do_nothing"]

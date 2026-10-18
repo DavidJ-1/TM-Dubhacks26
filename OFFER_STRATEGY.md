@@ -1,0 +1,278 @@
+# Offer strategy and prompt fit
+
+> **All customers and numbers here are synthetic or simulated.** Accounts, plans and promotions come from the judge
+> sandbox (`mageshkumarj/dubhacks`, every row `data_source = 'stub'`, as of 2026-10-01). Save, accept and lock-in rates
+> are our assumptions. Any income/job enrichment is **simulated**. No real T-Mobile customer data. Public T-Mobile facts
+> were read on 2026-10-17 and promos change; details and links are in the research files below.
+
+Revised Sat 10/17/2026 (PDT) by the offer-strategy lane. Inputs: brief (`strategy/tmobile-brief-summary.md`), plan doc,
+`LANES.md`, `sandbox.db` (read-only), `harness/out/*.csv`, and the research files:
+
+| File | What it covers |
+|---|---|
+| [docs/research/plans_pricelock.md](docs/research/plans_pricelock.md) | 2.0 plan prices, 5-Year Price Guarantee terms, legacy plans, better-fitting-plan rules |
+| [docs/research/devices_tradein.md](docs/research/devices_tradein.md) | EIP 36, device promos, trade-in decay vs `tradein_curves`, Timekeeper rules |
+| [docs/research/family_bundles_perks.md](docs/research/family_bundles_perks.md) | kid/teen lines, watch lines, Home Internet, perks, student, 55+, SMB, retention credits |
+| [docs/research/prompt_fit_audit.md](docs/research/prompt_fit_audit.md) | skeptical-judge audit: persona results, rubric scorecard, 10 critical flaws |
+
+---
+
+## 1. The prompt and how we fit it
+
+Brief: "Reimagining Recommendations in Wireless Commerce." Goal (verbatim): "a recommendation that makes sense for this
+customer, in this situation, at this time." Rules/heuristics allowed; complex ML not required.
+
+| Direction (brief, verbatim core) | Fit | What answers it | Honest gap (see §2) |
+|---|---|---|---|
+| **3 Next Best Moment (primary):** "churn-risk score (model or rules) -> ranked actions accounting for cost: better-fitting plan, proactive credit, relevant perk, check-in. Inputs: tenure, support interactions, plan fit vs usage, billing changes, synthetic competitor-interest proxies. Convincing = different problems -> different actions; discount not automatic; restraint." | Mostly | Model A `p_churn_90d` + reasons; Model B EV over every action (`offer_candidates.csv`); fix-first for network, credit for billing pain, do nothing for happy customers | Right-size never wins; no perk or check-in action; competitor/port-out raise the score but drive no action; UI shows winner + runner-up only |
+| **4 Timekeeper:** "upgrade now vs wait ... transparent now-vs-later cost comparison + trade-in value chart; honest 'wait'." | Weak | `um_device_paid_off`, `um_payoff_soon`, `um_old_device`; sandbox `tradein_curves` | No now-vs-wait output yet (spec §6g; tm-ui building the chart) |
+| **5 Household Mix:** "2-5 line household ... lowest-cost best-fit config, savings vs current mismatched setup." | Weak | right-size search, kid lines from `lines.member_role` | Savings actions never chosen; 55+/partner variant switch missing. Sandbox has 0 mixed-plan accounts, so "mix" = one plan + add-ons per account |
+| **1 Cart Whisperer / 2 Matchmaker** | Not claimed | – | Don't claim them |
+
+Rubric (suggested): customer value 30, use of signals 25, explainability & trust 20, feasibility & demo 25. Brief framing
+we must honor: financing/trade-in drive affordability and timing; households and small businesses; internet/streaming/
+protection change bundle value; retain before cancellation; students budget-sensitive; trust alongside price.
+
+## 2. Prompt-fit audit response
+
+The audit ([prompt_fit_audit.md](docs/research/prompt_fit_audit.md)) ran every sandbox persona through `offers.csv`. Root
+cause: every benefit is `p_churn × save_rate × value`, so at ~2.7% mean 90-day risk, saving the customer money or
+upgrading a phone can mathematically never win (right-size 0/219 chosen, device upgrade 0/1,467).
+
+### 2a. Scorecard (auditor's estimate, not a judge score)
+
+| Rubric row | Weight | Now | After fixes | Biggest movers |
+|---|---|---|---|---|
+| Customer value | 30 | 17 | 24 | customer-benefit actions (right-size, variant switch, watch-line fix, 4-Line), check-in for persona 21, fix 05/38/40 |
+| Use of signals | 25 | 18 | 21 | competitor/port-out drive `check_in`; household block on card; drop income/job from decisions |
+| Explainability & trust | 20 | 13 | 17 | customer-facing "why" incl. do nothing/wait; ranked table with cost; validator blocklist |
+| Feasibility & demo | 25 | 15 | 21 | one app, one engine, `make demo`; one churn number; Model C off the 3-minute path |
+| **Total** | 100 | **≈63** | **≈83** | |
+
+### 2b. Critical flaws (audit ranking) → owner and status
+
+| # | Flaw | Owner | Status (Sat ~8 PM) |
+|---|---|---|---|
+| 1 | No action that saves the customer money or says "upgrade now"; persona 38 (55+) gets an upsell instead of $40/mo savings; 05 and 40 get nothing | tm-offers | **Open.** Spec: §6d customer-first actions + upsell block |
+| 2 | Persona 21 (quiet, port-out, competitor 0.85) gets do nothing | tm-offers | **Open.** Spec: §6d `check_in` |
+| 3 | Clean clone runs the old `console_app.py` / `engine.py`; `out/` is gitignored, so the app falls back to mocks | coordinator + tm-ui | Open |
+| 4 | Insights says 14.6% churn while cards average ~2.7% | tm-ui | Open; pick 0.99%/mo calibration (LANES) |
+| 5 | Inferred details leak into texts (persona 28 "finishing school"); income/job enrichment is a trust risk | tm-offers (validator) + **David** (§6c) | **Open / pending David.** Blocklist spec §6f |
+| 6 | Ranked set + cost not shown; no what-if | tm-ui | Open |
+| 7 | Timekeeper claimed but absent | tm-ui (chart) + tm-offers (`out/line_tradein.csv`) | tm-ui in progress; spec §6g |
+| 8 | Model C / learning curves eat demo time | David + tm-ui | Open (keep in README as "how we'd measure lift") |
+| 9 | Do-nothing reason is internal math ("costs more than it saves") | tm-offers | Open. `why_this_offer` must be customer-facing |
+| 10 | Persona 22 win is fragile (EV $5.41 vs $0.11) | tm-offers | Open. Spec: §6d `bill_shock_relief` + golden tests |
+
+### 2c. Persona golden tests (fail CI if they drift)
+
+| Persona | Situation (sandbox title) | Expected action |
+|---|---|---|
+| 04 | Bill jumped, keeps calling support | fix-first + $25 care credit |
+| 05 | 3 lines on Beyond, barely used | right-size (Beyond → More or lower, saves money; state what they give up) |
+| 21 | 6-yr customer gone quiet, port-out inquiry | `check_in` (no $; loyalty $5/mo allowed, tenure 70); never mention shopping |
+| 22 | Promo ended, bill +22%, unresolved billing contacts | bill-shock relief: explain + $25 care credit, no upsell |
+| 23 | Repeated coverage complaints | fix-first, no discount |
+| 24 | 9 contacts, all resolved, happy | do nothing |
+| 25 | 5 months in, over the 50 GB plan | step-up to More |
+| 27 | Locked in by financing, unhappy | fix-first, no discount |
+| 28 | Student, 40 months on Saver | plan-led step-up; text must not mention school |
+| 38 | 55+ couple on standard More | variant switch to More 55+ (saves $40/mo); never step-up |
+| 40 | Partner-eligible family on standard Beyond | variant switch to Beyond Partner (saves $50/mo) |
+
+## 3. Sandbox catalog (read-only)
+
+**Plans (11; `line_prices`, totals for 1/2/3/4/5 lines).** They match real 2.0 *pre-AutoPay* list prices even though
+`prices_include_autopay=1`, so never write "with AutoPay" in copy.
+
+| sku | 1/2/3/4/5 | guarantee | notes |
+|---|---|---|---|
+| `ESSENTIALS-SAVER` | 55/90 | none | max 2 lines, 50 GB |
+| `ESSENTIALS` | 65/100/120/140/160 | none | 50 GB |
+| `ESSENTIALS-4LINE` | –/–/–/120/150 | none | min 4 lines, limited time |
+| `MORE` | 90/150/185/220/255 | 5 yr | "upgrade-ready every three years" (no early upgrade) |
+| `MORE-PARTNER` / `-COMMUNITY` | 75/110/135/160/185 | 5 yr | likely Military / First Responder (price match; inferred) |
+| `MORE-55` | 75/110 | 5 yr | 55_plus, max 2 |
+| `BEYOND` | 105/180/230/280/330 | 5 yr | early upgrade; $5 connected line |
+| `BEYOND-PARTNER` / `-COMMUNITY` | 90/140/180/220/260 | 5 yr | as above |
+| `BEYOND-55` | 90/140 | 5 yr | 55_plus, max 2 |
+
+**Promotions usable for existing customers (no new line / port-in):** `CARE-CREDIT` $25 once (tenure ≥ 6, ≥ 3 contacts/90 d,
+**stub**), `LOYALTY-CREDIT` $5/mo (tenure ≥ 36, **stub**), `OLD-PHONE-UPGRADE` $150/24 mo (trade-in, age ≥ 36 mo, stub),
+`TRADEIN-ANY` $200/36 mo, `S26FE` $800/36 mo (trade-in), `IPHONE18PRO` $1,000/36 mo (Beyond, trade-in), `FLIP8` $1,200 and
+`PIXEL11PROXL` $1,000 (trade-in, More/Beyond), `STUDENT` $20/line, `BUNDLE-HINT` $15/mo, `HINT-CARD` $200, `WATCH-LINE`
+$300/36 mo (connected line), `FREE-SELECT` $300.99/36 mo (new line, prime), `ACC-BUNDLE` 25% off.
+**Excluded from retention (switcher / port-in):** `FAMILY-PAYOFF` (= Family Freedom), `BYOD-CARD` (≈ Keep & Switch),
+`KEEP-YOUR-PHONE`, `IPHONE17`, `IPHONE17E`, `RAZRPLUS`, `GROUP-NEW-PHONE`. Real Family Freedom / Keep & Switch became
+new-accounts-only on 2026-07-09.
+
+**Add-ons:** Protection T1–T6 $7/9/13/16/19/26 (prices match P360); Home Internet $50/60/70; watch line $10 / Plus $15;
+connected line (Beyond) $5; streaming $3.
+
+**Signals (real fields):** tenure, segment, `discount_group`, credit tier, language, contact preference; `lines.member_role`
+(child 1,544 / teen 1,538 lines in 1,526 accounts), financing balance and months left, device purchase date, BYOD;
+`billing_history.change_reason`; support topic/resolved/sentiment; competitor score, port-out inquiry, app sessions;
+`tradein_curves` (0-60 mo). **Not in sandbox:** guarantee start dates, promo end dates (only inferred), ages, income,
+job, geography, mixed plans per account. Existing EIPs are 24-month; promos pay over 36.
+
+## 4. Real T-Mobile offers → sandbox (summary; full tables with links in research files)
+
+| Real offer | Sandbox match | Use |
+|---|---|---|
+| Experience More / Beyond 2.0, Essentials, Saver, 4-Line Offer ([plans](https://www.t-mobile.com/cell-phone-plans)) | plan skus, prices match | better-fitting plan, both directions |
+| 55+, Military, First Responder ([55+](https://www.t-mobile.com/cell-phone-plans/unlimited-55-senior-discount-plans), [military](https://www.t-mobile.com/cell-phone-plans/military-discount-plans)) | `*-55`, `*-PARTNER`, `*-COMMUNITY` (last two inferred) | variant switch (customer savings) |
+| 5-Year Price Guarantee: talk/text/data price only; no restart on adding lines or switching between Experience plans; Essentials not covered ([FAQ](https://www.t-mobile.com/cell-phone-plans/price-lock-faqs)) | `plans.price_guarantee_years=5` (More/Beyond); no promo row | state as a **fact** about More/Beyond; never a new lock, never "your bill won't change" |
+| No contracts, $0 ETF; lock-in = device financing + bill credits forfeited if you leave or pay off early ([promo terms](https://www.t-mobile.com/offers/promotional-offer-details)) | `payout_months` 24/36; `financing_months_remaining` | the only lock-in we count |
+| Early Upgrade on Beyond only (6+ mo, 50% paid); More 2.0 dropped early upgrade ([TmoNews](https://www.tmonews.com/2026/08/t-mobiles-new-2-0-plans-are-live-but-your-upgrade-just-got-slower/)) | `plans.upgrade_note` | family upgrade strongest on Beyond |
+| Trade-in any condition $200; iPhone 18 Pro up to $1,000 over 36 credits | `TRADEIN-ANY`, `IPHONE18PRO` (flat, no tiers) | upgrade / family upgrade |
+| Watch & tablet lines $5 on Beyond; SyncUP KIDS Watch (needs own line) | `ADD-LINE-CONNECTED-BEYOND` $5, `ADD-LINE-WATCH` $10, `WATCH-LINE` $300 | watch-line fix (66 accts); kid aged 0-12 |
+| 5G Home Internet $50/60/70, $15 off with a voice line ([HINT](https://www.t-mobile.com/home-internet/plans)) | `ADD-HINT-*`, `BUNDLE-HINT` $15 | bundle |
+| Protection 360 $7–26 ([notice](https://mytmoclaim.com/media/53uhgd5s/ms98691-1025.pdf)) | `ADD-PROT-T1..T6` (deductibles differ) | only with a new financed phone |
+| Netflix / Hulu / Apple TV perks, Tuesdays, Magenta Status | generic `plans.perks` codes; no $ | `perk_reminder` with no $ and no brand names |
+| Retention credits (unofficial forum reports) | `LOYALTY-CREDIT`, `CARE-CREDIT` (stubs) | plausibility only |
+| **No sandbox equivalent:** Better Value plan, Go5G family, 3rd Line Free, Essentials 55+/Military, FamilyMode, EIP Flex, BOGO, Experience for Business | – | doc only, never in texts |
+
+## 5. Recommendation story and examples
+
+Model A flags risk and reasons → account facts decide the segment (lines, kid lines, device age/payoff, promo end,
+discount group, usage vs plan, support, competitor/port-out) → Model B EV over all actions, **do nothing = $0** →
+message quotes only sandbox amounts.
+
+**"We know, but we don't say."** Texts reference only what a customer expects their carrier to know: plan, bill, lines,
+phone age/payoff, usage vs cap, their own support contacts. Inferences (job, income, kid ages, "graduating",
+competitor research, port-out) never appear. Kid lines may shape the offer, but the text says "your 4 lines", not "your kids".
+
+| Account (synthetic) | Facts | Action | Sample text (en) |
+|---|---|---|---|
+| `ACC-03170` | 4 lines Essentials, 2 kid lines, ~45 of 50 GB used, primary phone from 2022 paid off | **family upgrade** to More (+$80/mo) + `TRADEIN-ANY` $200 on the paid-off phone; lock 36 mo (credits) | "Hi there. Your 4 lines are close to your 50 GB limit. Experience More gives every line unlimited premium data for $80/month more, and its talk, text and data price is guaranteed for 5 years. Trade in a phone and get $200 off a new one over 36 months. Reply YES for details. Reply STOP to opt out." |
+| `ACC-PERSONA-38` | 55+ couple on standard More | **variant switch** to More 55+, saves $40/mo, same features | "Hi there. Your 2 lines qualify for Experience More w/ 55+ Savings: same plan features for $110/month instead of $150. Reply YES and we'll move you. Reply STOP to opt out." |
+| `ACC-PERSONA-22` | More, bill +22% after promo ended, unresolved billing contacts | **bill-shock relief**: explain + $25 care credit, no upsell | "Hi there. Your bill went up because a promo credit ended. Your Experience More talk, text and data price itself hasn't changed. We'd like to add a one-time $25 credit. Reply YES to accept. Reply STOP to opt out." |
+| `ACC-PERSONA-21` | 70 months, 1 line, app use near zero (port-out not mentioned) | **check-in** + loyalty $5/mo | "Hi there. Thanks for nearly 6 years with us. As a thank-you we can add $5/month off your bill. Anything about your plan we can make better? Reply YES for the credit or tell us. Reply STOP to opt out." |
+| `ACC-PERSONA-24` | 9 contacts, all resolved, heavy app use | **do nothing** | (none). Why: "Everything is working for them, so we won't bother them." |
+
+## 6. Proposals for tm-offers (drop-in spec)
+
+Same text: `handoff/tm-offers-proposals.txt`. All rates synthetic.
+
+### 6a. `offers.csv` columns (for tm-ui)
+`segment`, `why_this_offer` (one customer-facing sentence; operator math goes in `reason`), `lock_in_months`,
+`message_en`, `message_es`, `promo_skus` (`;`-list), and **`drivers`**: `;`-list of `group:signal`, groups:
+- `commerce:` plans, promos, devices, financing, trade-in (e.g. `commerce:device_paid_off`, `commerce:cheaper_variant_eligible`)
+- `customer:` account and household facts (e.g. `customer:kid_line` from real `member_role` child/teen, `customer:tenure_70m`, `customer:discount_group_55_plus`)
+- `live:` timely context (e.g. `live:bill_shock_promo_expired`, `live:port_out_inquiry`, `live:near_data_cap`, `live:unresolved_support`)
+- `enrichment(simulated):` only simulated items (e.g. `enrichment(simulated):job_change_90d`, `enrichment(simulated):kid_age_band_0-12`). Kid lines are real; only finer age bands are simulated.
+
+### 6b. Lock-in (device financing and promo credits only)
+No contracts and $0 ETF. The 5-Year Price Guarantee does **not** restart on adding lines or switching More↔Beyond, so it
+adds **no** lock-in. Lock-in exists only when the action starts new promo credits (`payout_months` 24/36) or new financing.
+```
+L          = max(payout_months of promos in the action, new financing term) ; 0 otherwise
+h          = 1 − (1 − p_churn_90d)^(1/3)
+lock_value = p_accept × [ (1 − h·(1 − LOCK_CUT))^L − (1 − h)^L ] × monthly_margin × VALUE_HORIZON_MONTHS
+LOCK_CUT   = 0.50 (forfeit credits + remaining EIP due; synthetic)
+net_tradein = max(0, tradein_value(device, age) − financing_balance)   # promo credit counted separately
+```
+Only count trade-in for a line with `financing_balance_cents = 0` or a Beyond Early Upgrade path (the sandbox marks
+6,575 financed lines as `tradein_eligible`; real T-Mobile requires payoff).
+
+### 6c. Income / job enrichment: **PENDING DAVID**
+- **Option A, drop (recommended by the audit):** decisions use account facts only; income/job appear only as a
+  "future: consented data" slide. `ENRICHMENT_IN_DECISIONS: false`.
+- **Option B, keep as simulated steering:** `ENRICHMENT_IN_DECISIONS: true` multiplies `p_accept` (job_change ×1.5,
+  income ≥ $100k ×1.3) and caps `step_up_cost_pct_income` at 1.5%; tagged `enrichment(simulated):`; never in text.
+- Either way, every rule below works with the flag off. The flip is one config line.
+
+### 6d. Rules (YAML-ish)
+```yaml
+config:
+  ENRICHMENT_IN_DECISIONS: false     # PENDING DAVID (6c)
+  CUSTOMER_BENEFIT_WEIGHT: 0.5       # $ of customer savings counted as trust/retention value (synthetic)
+  MIN_SAVINGS_USD: 10                # customer-first actions need >= $10/mo savings
+  MARGIN_FLOOR_USD: 0
+  CONTACT_COOLDOWN_DAYS: 30
+
+# EV for customer-first actions (fixes audit flaw 1):
+#   EV = p_churn×save_rate×value + CUSTOMER_BENEFIT_WEIGHT × savings×12 × p_accept − lost_margin×12×p_accept×(1−CUSTOMER_BENEFIT_WEIGHT) − annoyance
+#   plus rule: if a same-coverage cheaper variant is eligible, recommend it (restraint = no upsell, not hiding savings)
+
+do_nothing: {EV: 0, why: "Your plan fits how you use it and nothing is wrong, so we won't bother you."}
+
+variant_switch:        # 55+/partner/community; same features, keeps guarantee
+  maps_to: plans with plans.eligibility == accounts.discount_group, same family, line limits ok
+  eligible: discount_group in (55_plus, partner, community) AND current variant == standard AND savings >= MIN_SAVINGS_USD
+  personas: 38 (More -> More-55, $40), 40 (Beyond -> Beyond-Partner, $50)
+  p_accept 0.70 ; lock_in 0 ; drivers: customer:discount_group_*, commerce:cheaper_variant_eligible
+
+right_size_down:       # 1,363 Beyond lines avg < 15 GB and < 2 GB hotspot
+  eligible: all lines peak <= 70% of target cap, no connected lines, savings >= MIN_SAVINGS_USD
+  text must name what they give up (hotspot, perks; guarantee lost if moving to Essentials)
+  persona: 05 ; p_accept 0.45
+
+right_size_up:         # 229 Essentials lines avg > 50 GB (deprioritized) -> More
+  = existing step_up; blocked by guardrails below
+
+watch_line_fix:        # 66 Beyond accounts paying $10/$15 watch line when ADD-LINE-CONNECTED-BEYOND is $5
+  savings $5-10/watch/mo ; p_accept 0.8 ; cost = lost revenue × (1 − CUSTOMER_BENEFIT_WEIGHT)
+
+essentials_4line:      # 188 accounts with 4+ lines on standard Essentials -> ESSENTIALS-4LINE, saves $20 at 4 lines
+
+check_in:              # brief's "check-in"; fixes persona 21 (flaw 2)
+  eligible: (port_out_inquiry==1 OR competitor_research_score>=0.6 OR app_sessions_30d drop) AND unresolved_90d==0
+  offer: no $, or LOYALTY-CREDIT $5/mo if tenure>=36 ; cost $2 + credit ; save on/off 0.12/0.04 ; never mention shopping
+
+bill_shock_relief:     # promo_expired / bill jump; fixes flaw 10
+  maps_to: CARE-CREDIT $25 (+ LOYALTY-CREDIT if tenure>=36); on More/Beyond may state the guarantee as a fact
+  essentials: no guaranteed plan within $10/mo (+$25..95), so no "lock" pitch; ESSENTIALS-4LINE if 4+ lines
+  save on/off 0.30/0.08 ; lock_in 0
+
+family_upgrade:        # better plan + new phones; NOT a discount; account facts only
+  eligible: is_family_plan AND customer:kid_line AND plan_family in (essentials, experience_more)
+            AND >=1 line with financing_balance==0 and (age>=36 mo OR installment_ended recent OR promo ended)
+            AND NOT bill_shock_recent AND unresolved_90d==0
+  target: BEYOND if connected lines / hotspot / iPhone promo wanted (early upgrade, $5 watch lines); else MORE
+  promos: best of TRADEIN-ANY $200 / OLD-PHONE-UPGRADE $150 per traded phone (one per device); IPHONE18PRO only on Beyond;
+          FREE-SELECT only when adding a line; WATCH-LINE for a child line (kid band 0-12 simulated)
+  p_accept 0.20 ; lock_in_months = promo payout (24/36) ; guarantee may be stated as a fact, not a lock
+
+perk_reminder:  plans.perks on More/Beyond; no $ and no brand names; cost 0 ; p_churn >= 0.05
+home_internet_bundle: no HINT add-on, n_lines>=2, BUNDLE-HINT $15/mo ; not after bill shock
+fix_first, care_credit, loyalty_credit, device_upgrade: unchanged
+
+guardrails:
+  - no bill/goodwill credit when p_churn_90d < 0.05; purchase-attached trade-in credits allowed
+  - block any upsell when a cheaper eligible variant exists (persona 38)
+  - block upsell when top driver is shopping/port-out (37 + 9 step-ups today) or within 90 d of bill shock or with unresolved contacts
+  - exclude port-in/switcher promos from retention
+  - one device promo per device; EV must beat do nothing by MARGIN_FLOOR_USD
+```
+
+### 6e. Templates (validated amounts only; es mirrors en, usted)
+- family_upgrade: "Hi there. {usage_fact}. {plan} gives every line unlimited premium data for ${delta}/month more, and its talk, text and data price is guaranteed for {years} years. Trade in a phone and get ${credit} off a new one over {months} months. Reply YES for details. Reply STOP to opt out." / "Hola. {usage_fact_es}. {plan} le da datos premium ilimitados en cada línea por ${delta} más al mes, y su precio de llamadas, textos y datos está garantizado por {years} años. Entregue un teléfono y reciba ${credit} de descuento en uno nuevo en {months} meses. Responda SÍ para más detalles. Responda STOP para no recibir mensajes."
+- variant_switch: "Hi there. Your {n} lines qualify for {variant_plan}: same plan features for ${new}/month instead of ${old}. Reply YES and we'll move you. Reply STOP to opt out."
+- bill_shock_relief: "Hi there. Your bill went up because a promo credit ended. Your {plan} price itself hasn't changed. We'd like to add a one-time $25 credit. Reply YES to accept. Reply STOP to opt out."
+- check_in: "Hi there. Thanks for {years} years with us. {optional: As a thank-you we can add $5/month off your bill.} Anything about your plan we can make better? Reply STOP to opt out."
+
+### 6f. Validator additions
+Every $ and every "N years" must come from `plans` / `promotions` / `addons`. Blocklist (case-insensitive, en + es
+equivalents): `school, graduat, job, promot, income, kid, child, competitor, switch, port, with AutoPay`.
+Match `port` and `job` as whole words or prefixes (`\bport`), otherwise "support" and "report" in fix-first texts
+fail. "promo credit" passes (`promo` ≠ `promot`); "promotion" fails, as intended.
+
+### 6g. Timekeeper now-vs-wait (tm-offers writes `out/line_tradein.csv`; tm-ui draws the chart)
+Columns: `account_id, line_id, device_sku, age_months, financing_balance_cents, financing_months_remaining,
+monthly_installment_cents, tradein_value_now_cents, tradein_value_at_payoff_cents` (from `tradein_curves`),
+`net_tradein_now_cents = max(0, value_now − balance)`, `best_promo_sku, promo_value_cents, cost_now_cents, cost_wait_cents,
+decision` (`upgrade_now` / `wait_until_payoff` / `keep`), `wait_until` (date), `delta_cents`.
+Rule: say **wait** when the device is < 24 months old, still financed, no trade-in promo is eligible, and the value drop
+before payoff is smaller than the installments left. A flat $200 any-condition credit beats the curve for old phones.
+
+## 7. Key uncertainties
+- Brief is David's rewrite; the rubric is "suggested". Audit scores are estimates.
+- Sandbox prices equal real *pre*-AutoPay prices despite `prices_include_autopay=1`.
+- Partner = Military and community = First Responder is an inference from price matches.
+- More 2.0 upgrade cadence is "three years" on 2.0 labels and "two years" on older page copy; we use 2.0.
+- Guarantee start dates aren't in the sandbox; the July 2026 legacy migration makes "guarantee" pitches sensitive, so we state exactly what is covered.
+- Retention credit sizes are anecdotal; sandbox loyalty/care credits are stubs.
+- Kid age bands, income and job are simulated; kid lines themselves are real sandbox roles.
+- Device promos rotate monthly; some prices come from third-party mirrors because t-mobile.com loads them with JavaScript.
+- None of the §6 rules is built yet; counts (66, 188, 229, 1,363) come from the research files.

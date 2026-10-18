@@ -283,3 +283,38 @@ def test_tlearner_interface():
     arms = np.where(t == 1, "care", "do nothing")
     U = mh.TLearner().fit(X, np.where(rng.random(2000) < 0.5, arms, "fix"), y).predict_uplift(X)
     assert isinstance(U, pd.DataFrame)
+
+
+# ---------------------------------------------------------------- plain-English upgrade reasons
+def _bad_reason(text, colnames):
+    if "_" in text or "=" in text:
+        return True
+    words = set(text.replace("(", " ").replace(")", " ").replace(",", " ").split())
+    return bool(words & {c for c in colnames if c.islower()})
+
+
+def test_upgrade_phrases_cover_all_and_are_clean():
+    cols = set(mh.UPGRADE_PHRASES) | set(mh.ENRICHMENT_COLS)
+    for g, f in mh.UPGRADE_PHRASES.items():
+        for v in (0.0, 1.0, 3.0, 0.5, 45.0):
+            for up in (True, False):
+                t = f(v, up)
+                assert t and not _bad_reason(t, cols), (g, v, up, t)
+    for g, table in mh._CATEGORY_TEXT.items():
+        for cat in list(table) + ["some_new_level", "none"]:
+            t = mh._upgrade_sentence(g, {}, True, cat)
+            assert not _bad_reason(t, cols), (g, cat, t)
+    assert mh._upgrade_sentence("totally_unknown_feature", {"totally_unknown_feature": 3}, True) == "Other account details"
+
+
+@pytest.mark.skipif(not (REAL / "labels.csv").exists(), reason="out/ data not built")
+def test_upgrade_reasons_on_real_data_have_no_raw_names():
+    X, y, meta = mh.load_data(target="upgrade")
+    raw_cols = set(pd.read_csv(REAL / "features.csv", nrows=0).columns) | set(X.columns)
+    m = mh.fit_full("logreg", target="upgrade")
+    ex = m.explain(X.iloc[:400], k=3)
+    texts = pd.concat([ex[c] for c in ex.columns if c != "account_id"])
+    texts = texts[texts != ""]
+    assert len(texts) > 0
+    bad = [t for t in texts.unique() if _bad_reason(t, raw_cols)]
+    assert not bad, bad[:10]
