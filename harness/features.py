@@ -3,7 +3,9 @@
 Source: judge sandbox (mageshkumarj/dubhacks) data/sandbox.db, opened READ-ONLY (mode=ro).
 All sandbox data is synthetic (stub data, as_of 2026-10-01). Money in cents.
 Deterministic: no randomness. Run from repo root: python harness/features.py
-Sandbox path: $SANDBOX_DB, else <repo>/dubhacks/data/sandbox.db, else <repo>/../dubhacks/data/sandbox.db
+Sandbox path: $DUBHACKS_DB (same as the top-level README/Makefile), else legacy $SANDBOX_DB, else
+<repo>/vendor/dubhacks/data/sandbox.db (where `make setup` clones it), else <repo>/dubhacks/data/sandbox.db,
+else <repo>/../dubhacks/data/sandbox.db
 """
 from __future__ import annotations
 
@@ -18,13 +20,22 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 
 
+DB_CANDIDATES = (
+    REPO / "vendor" / "dubhacks" / "data" / "sandbox.db",  # `make setup` clones the judge sandbox here
+    REPO / "dubhacks" / "data" / "sandbox.db",
+    REPO.parent / "dubhacks" / "data" / "sandbox.db",
+)
+
+
 def find_db() -> Path:
-    if os.environ.get("SANDBOX_DB"):
-        return Path(os.environ["SANDBOX_DB"]).resolve()
-    for cand in (REPO / "dubhacks" / "data" / "sandbox.db", REPO.parent / "dubhacks" / "data" / "sandbox.db"):
+    # DUBHACKS_DB is the project-wide name (top-level README + Makefile); SANDBOX_DB still works as a fallback.
+    for var in ("DUBHACKS_DB", "SANDBOX_DB"):
+        if os.environ.get(var):
+            return Path(os.environ[var]).resolve()
+    for cand in DB_CANDIDATES:
         if cand.exists():
             return cand.resolve()
-    raise FileNotFoundError("sandbox.db not found; set SANDBOX_DB")
+    raise FileNotFoundError("sandbox.db not found; run `make setup` or set DUBHACKS_DB=/path/to/sandbox.db")
 
 
 OUT = HERE / "out" / "features.csv"

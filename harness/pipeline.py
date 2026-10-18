@@ -189,7 +189,15 @@ def _segments(ids: pd.Index, seg: Optional[pd.Series]) -> dict:
 def _plan_names() -> dict:
     """SKU -> plan name from the judge sandbox's plans table (opened read-only); {} if unavailable."""
     import sqlite3
-    for db in (Path("/workspace/tmobile/dubhacks/data/sandbox.db"), REPO.parent / "dubhacks" / "data" / "sandbox.db"):
+    try:
+        from harness.features import find_db
+    except ImportError:  # run as a script from harness/
+        from features import find_db  # type: ignore
+    try:
+        dbs = [find_db()]
+    except FileNotFoundError:
+        dbs = []
+    for db in dbs:
         if db.exists():
             try:
                 con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
