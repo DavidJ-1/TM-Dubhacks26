@@ -11,13 +11,19 @@ sys.path.insert(0, str(ROOT / "harness"))
 import pipeline  # noqa: E402
 
 IDS = ["stages", "trace"]
-KEYS = {"synthetic", "caveat", "generated_at", "data_source", "label", "segment_key", "stages", "trace"}
+KEYS = {"synthetic", "caveat", "generated_at", "data_source", "label", "segment_key", "excluded_personas",
+        "stages", "trace"}
 
 
 def _fixture(tmp: Path):
     ids = [f"ACC-{i:03d}" for i in range(20)] + ["ACC-PERSONA-22"]
-    pd.DataFrame({"account_id": ids, "language": ["es" if i % 4 == 0 else "en" for i in range(21)],
-                  "tenure_months": 12, "plan_sku": "X", "n_lines": 1}).to_csv(tmp / "features.csv", index=False)
+    pd.DataFrame({"account_id": ids, "is_persona": [0] * 20 + [1],
+                  "language": ["es" if i % 4 == 0 else "en" for i in range(21)], "tenure_months": 12,
+                  "plan_sku": "TMO-STUB-PLAN-MORE", "plan_family": "experience_more", "n_lines": 1,
+                  "unresolved_90d": 2, "promo_expired_recent": 1, "bill_change_3m_pct": 0.2}
+                 ).to_csv(tmp / "features.csv", index=False)
+    pd.DataFrame({"account_id": ids, "is_family_plan": [i % 2 for i in range(21)]}).to_csv(tmp / "enrichment.csv",
+                                                                                          index=False)
     pd.DataFrame({"account_id": ids, "p_churn_90d": [i / 21 for i in range(21)],
                   "risk_rank": list(range(21, 0, -1)), "risk_reason_1": "r", "stay_reason_1": "s"}
                  ).to_csv(tmp / "churn_scores.csv", index=False)
@@ -38,7 +44,13 @@ def _check_schema(d):
             assert s.get("note")
     st = {s["id"]: s for s in d["stages"]}
     assert "by_action" in st["offered"] and "by_language" in st["messaged"]
-    assert {"account_id", "signals", "score", "offer", "message"} <= set(d["trace"])
+    assert {"account_id", "signals", "all_signals", "score", "offer", "message"} <= set(d["trace"])
+    t = d["trace"]
+    assert len(t["signals"]) <= 8 and len(t["all_signals"]) >= len(t["signals"])
+    for sig in t["all_signals"]:
+        assert set(sig) == {"name", "value", "source"} and sig["source"] in {"commerce", "customer", "live"}
+        txt = f"{sig['name']} {sig['value']}"
+        assert "_" not in txt and "STUB" not in txt and "TMO-" not in txt, txt
 
 
 def test_fixture_invariant_and_schema(tmp_path):
@@ -52,15 +64,34 @@ def test_fixture_invariant_and_schema(tmp_path):
     assert "do nothing" not in st["offered"]["by_action"]
     bl = st["messaged"]["by_language"]
     assert bl["en"] + bl["es"] == st["messaged"]["count"] <= st["offered"]["count"]
-    # top 10% (ceil(2.1)=3 accounts) or upgrade moment (i % 3 == 0) -> flagged
-    assert st["flagged"]["count"] == len({18, 19, 20} | {i for i in range(21) if i % 3 == 0})
+    # persona (index 20) excluded; top 10% of 20 regular (ranked by p: 19, 18) or upgrade moment (i % 3 == 0)
+    assert d["excluded_personas"] == 1 and st["accounts"]["count"] == 20 and st["scored"]["count"] == 20
+    assert st["flagged"]["count"] == len({18, 19} | {i for i in range(20) if i % 3 == 0})
     t = d["trace"]
     assert t["account_id"] == "ACC-PERSONA-22" and t["offer"]["chosen"] == "do nothing"
-    assert t["message"]["text"] is None            # do nothing -> no message
+    assert t["message"]["text"] is None            # do nothing -> no message; persona still traceable
+    assert t["score"]["p_churn_90d"] == pytest.approx(20 / 21) and t["signals"]
+    assert t["message"]["source"].startswith("app/messages.py")
+    assert st["messaged"]["message_source"].startswith("app/messages.py")
     t = pipeline.summarize(tmp_path, features_path=tmp_path / "features.csv", trace_id="ACC-001")["trace"]
     assert t["offer"]["chosen"] == "$25 care credit" and t["message"]["language"] == "en" and t["message"]["text"]
     es = pipeline.summarize(tmp_path, features_path=tmp_path / "features.csv", trace_id="ACC-001", lang="es")
     assert es["trace"]["message"]["language"] == "es"
+
+
+def test_family_plan_segment_and_fallback(tmp_path):
+    _fixture(tmp_path)
+    d = pipeline.summarize(tmp_path, features_path=tmp_path / "features.csv", segment_key="family_plan")
+    st = {s["id"]: s for s in d["stages"]}
+    assert st["accounts"]["by_segment"] == {"family_plan": 10, "not_family_plan": 10}
+    (tmp_path / "enrichment.csv").write_text("account_id,other\nACC-000,1\n")
+    old = pipeline.OUT
+    pipeline.OUT = tmp_path            # no fallback to the canonical out/ file either
+    try:
+        d = pipeline.summarize(tmp_path, features_path=tmp_path / "features.csv", segment_key="family_plan")
+    finally:
+        pipeline.OUT = old
+    assert d["stages"][0]["by_segment"] == {} and "family_plan" in d["stages"][0]["segment_note"]
 
 
 def test_missing_offers_gives_null_with_note(tmp_path):
@@ -69,7 +100,7 @@ def test_missing_offers_gives_null_with_note(tmp_path):
     d = pipeline.summarize(tmp_path, features_path=tmp_path / "features.csv")
     _check_schema(d)
     st = {s["id"]: s for s in d["stages"]}
-    assert st["scored"]["count"] == 21
+    assert st["scored"]["count"] == 20
     for k in ("flagged", "offered", "wait", "messaged"):
         assert st[k]["count"] is None and st[k]["note"]
 
@@ -87,6 +118,6 @@ def test_real_outputs(tmp_path):
     _check_schema(json.loads((tmp_path / "p.json").read_text()))
     st = {s["id"]: s for s in d["stages"]}
     assert st["offered"]["count"] + st["wait"]["count"] == st["flagged"]["count"]
-    assert st["accounts"]["count"] == st["scored"]["count"]
+    assert st["accounts"]["count"] == st["scored"]["count"] == 5000 and d["excluded_personas"] == 42
     srcs = {s["source"] for s in d["trace"]["signals"]}
     assert srcs <= {"commerce", "customer", "live"}
