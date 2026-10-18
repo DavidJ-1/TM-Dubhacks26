@@ -1,0 +1,19 @@
+save_scale,strategy,expected_saves,cost_per_save_usd,net_value_usd,data_note
+1.0,1. Do nothing,0.0,,0.0,SYNTHETIC/SIMULATED
+1.0,2. Discount everyone,35.03,3597.92,-75835.3,SYNTHETIC/SIMULATED
+1.0,3. 3+ support calls rule,28.29,1295.33,12272.62,SYNTHETIC/SIMULATED
+1.0,4. Top 10% risk score only,23.69,531.96,30245.34,SYNTHETIC/SIMULATED
+1.0,5. Ours (Model A + EV engine),41.77,957.47,38527.6,SYNTHETIC/SIMULATED
+1.0,5b. Ours (incl. engine other value),41.77,957.47,105456.92,SYNTHETIC/SIMULATED
+0.5,1. Do nothing,0.0,,0.0,SYNTHETIC/SIMULATED
+0.5,2. Discount everyone,17.52,7195.84,-108505.65,SYNTHETIC/SIMULATED
+0.5,3. 3+ support calls rule,14.15,2590.66,-14387.69,SYNTHETIC/SIMULATED
+0.5,4. Top 10% risk score only,11.84,1063.91,8066.67,SYNTHETIC/SIMULATED
+0.5,5. Ours (Model A + EV engine),20.88,1914.93,-2893.5,SYNTHETIC/SIMULATED
+0.5,5b. Ours (incl. engine other value),20.88,1914.93,64035.82,SYNTHETIC/SIMULATED
+0.25,1. Do nothing,0.0,,0.0,SYNTHETIC/SIMULATED
+0.25,2. Discount everyone,8.76,14391.69,-124840.82,SYNTHETIC/SIMULATED
+0.25,3. 3+ support calls rule,7.07,5181.32,-27717.84,SYNTHETIC/SIMULATED
+0.25,4. Top 10% risk score only,5.92,2127.82,-3022.66,SYNTHETIC/SIMULATED
+0.25,5. Ours (Model A + EV engine),10.44,3829.86,-23604.05,SYNTHETIC/SIMULATED
+0.25,5b. Ours (incl. engine other value),10.44,3829.86,43325.27,SYNTHETIC/SIMULATED

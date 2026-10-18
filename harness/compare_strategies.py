@@ -35,22 +35,61 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-OUT = Path(os.environ.get("TM_OUT_DIR", HERE / "out"))
+OUT = HERE / "out"   # outputs (git-ignored); inputs come from IN_DIR
 DEMO = ROOT / "demo_data"
 sys.path.insert(0, str(HERE))
 
 NOTE = "SYNTHETIC/SIMULATED"
 
 
+IN_DIR: Path | None = None   # set in main(): --input-dir > TM_OUT_DIR > demo_data/ (if it has offers.csv) > harness/out
+SNAP: dict = {}              # offers/candidates snapshot paths + mtimes actually used
+
+
+def resolve_input_dir(cli: str | None) -> Path:
+    if cli:
+        return Path(cli).resolve()
+    if os.environ.get("TM_OUT_DIR"):
+        return Path(os.environ["TM_OUT_DIR"]).resolve()
+    if (DEMO / "offers.csv").exists():
+        return DEMO
+    return HERE / "out"
+
+
 def find(name: str) -> Path:
-    for d in (OUT, DEMO):
+    if name in SNAP:
+        return SNAP[name]["snapshot"]
+    dirs = [IN_DIR] if IN_DIR is not None else []
+    dirs += [d for d in (OUT, DEMO) if d not in dirs]
+    for d in dirs:
         for n in (name, name + ".gz"):
             if (d / n).exists():
                 return d / n
     raise FileNotFoundError(f"{name} not found in {OUT} or {DEMO}")
 
 
+def snapshot_offers():
+    """Copy offers.csv + offer_candidates.csv(.gz) from IN_DIR to a temp dir, refusing a pair that changed mid-copy,
+    so a concurrent tm-offers rerun can't mix runs. Records path + mtime for COMPARISON.md."""
+    import tempfile
+    tmp = Path(tempfile.mkdtemp(prefix="cmp_snap_"))
+    for name in ("offers.csv", "offer_candidates.csv"):
+        src = next((IN_DIR / n for n in (name, name + ".gz") if (IN_DIR / n).exists()), None)
+        if src is None:
+            raise FileNotFoundError(f"{name}(.gz) not in input dir {IN_DIR}")
+        m0 = src.stat().st_mtime
+        dst = tmp / src.name
+        shutil.copy2(src, dst)
+        if src.stat().st_mtime != m0:
+            raise RuntimeError(f"{src} changed while copying; re-run when tm-offers' write finishes")
+        SNAP[name] = {"source": src, "snapshot": dst, "mtime": m0}
+    a, b = SNAP["offers.csv"]["mtime"], SNAP["offer_candidates.csv"]["mtime"]
+    if abs(a - b) > 600:
+        print(f"WARNING: offers.csv and offer_candidates.csv mtimes differ by {abs(a-b)/60:.0f} min (different runs?)")
+
+
 def load_inputs():
+    snapshot_offers()
     offers = pd.read_csv(find("offers.csv"))
     cands = pd.read_csv(find("offer_candidates.csv"))
     feats = pd.read_csv(find("features.csv"))
@@ -114,7 +153,20 @@ def topk_capture(y, s, frac=0.10, seed=2026) -> float:
     return float(y[order[:k]].sum() / y.sum())
 
 
-def main():
+def main(argv=None):
+    import argparse
+    global IN_DIR
+    ap = argparse.ArgumentParser(description="Strategy comparison (SYNTHETIC)")
+    ap.add_argument("--input-dir", default=None, help="dir with offers.csv + offer_candidates.csv(.gz) and the other "
+                    "inputs (default: TM_OUT_DIR, else demo_data/ if it has offers.csv, else harness/out)")
+    ap.add_argument("--save-scale", type=float, default=1.0, help="multiply ALL save rates (every strategy) by this "
+                    "factor for the main table (default 1.0)")
+    ap.add_argument("--sweep", default="1.0,0.5,0.25", help="save-rate scales for the sensitivity table")
+    args = ap.parse_args(argv)
+    IN_DIR = resolve_input_dir(args.input_dir)
+    scale = args.save_scale
+    sweep = [float(x) for x in args.sweep.split(",") if x.strip()]
+    print(f"input dir: {IN_DIR}")
     import offers as eng_cfg_mod  # only to read CONFIG; same assumptions as the engine
     C = eng_cfg_mod.CONFIG
     offers, cands, feats, labels, oof = load_inputs()
@@ -180,20 +232,39 @@ def main():
                      - (contact & (base.action_code == "care_credit_fix_first")).sum() * C["FIX_FIRST_CALLBACK_COST"],
                      expected_saves_true_p=(ptrue * sr)[contact].sum(),
                      saved_margin_true_p_usd=(ptrue * sr * val)[contact].sum(), other_ev_usd=other))
-    t = pd.DataFrame(rows)
-    t["cost_per_save_usd"] = np.where(t.expected_saves > 0, t.offer_cost_usd / t.expected_saves.replace(0, np.nan), np.nan)
-    t["net_value_usd"] = t.saved_margin_usd - t.offer_cost_usd - t.contact_cost_usd
-    t["net_value_true_p_usd"] = t.saved_margin_true_p_usd - t.offer_cost_usd - t.contact_cost_usd
-    t["cost_per_save_true_p_usd"] = np.where(t.expected_saves_true_p > 0,
-                                             t.offer_cost_usd / t.expected_saves_true_p.replace(0, np.nan), np.nan)
-    t["contacts_to_low_risk_share"] = np.where(t.contacted > 0, t.contacts_to_low_risk / t.contacted.replace(0, np.nan), np.nan)
-    t["data_note"] = NOTE
-    t["churners_reached_share"] = t.churners_reached / max(1, int(base.churn_90d.fillna(0).sum()))
-    cols = ["strategy", "description", "contacted", "contacts_to_low_risk", "contacts_to_low_risk_share", "credit_spend_usd",
-            "churners_reached", "churners_reached_share", "expected_saves", "offer_cost_usd", "cost_per_save_usd",
-            "contact_cost_usd", "saved_margin_usd", "net_value_usd",
-            "expected_saves_true_p", "cost_per_save_true_p_usd", "net_value_true_p_usd", "other_ev_usd", "data_note"]
-    t = t[cols].round(2)
+    o5 = dict(rows[-1]); o5.update(strategy="5b. Ours (incl. engine other value)",
+                                   description="same picks as 5; net value ALSO counts the engine's own upsell margin, "
+                                               "lock-in and customer-benefit credit (other_ev_usd)", include_other=True)
+    rows.append(o5)
+    raw = pd.DataFrame(rows)
+    raw["include_other"] = raw.get("include_other", False)
+    raw["include_other"] = raw["include_other"].fillna(False).astype(bool)
+    n_churn_all = max(1, int(base.churn_90d.fillna(0).sum()))
+
+    def finalize(raw: pd.DataFrame, sc: float) -> pd.DataFrame:
+        """Scale ALL save rates by sc (saves and saved margin are linear in save rate; costs are not)."""
+        t = raw.copy()
+        for c in ("expected_saves", "saved_margin_usd", "expected_saves_true_p", "saved_margin_true_p_usd"):
+            t[c] = t[c] * sc
+        oth = np.where(t.include_other, t.other_ev_usd, 0.0)
+        t["save_scale"] = sc
+        t["cost_per_save_usd"] = t.offer_cost_usd / t.expected_saves.replace(0, np.nan)
+        t["net_value_usd"] = t.saved_margin_usd - t.offer_cost_usd - t.contact_cost_usd + oth
+        t["net_value_true_p_usd"] = t.saved_margin_true_p_usd - t.offer_cost_usd - t.contact_cost_usd + oth
+        t["cost_per_save_true_p_usd"] = t.offer_cost_usd / t.expected_saves_true_p.replace(0, np.nan)
+        t["contacts_to_low_risk_share"] = t.contacts_to_low_risk / t.contacted.replace(0, np.nan)
+        t["churners_reached_share"] = t.churners_reached / n_churn_all
+        t["data_note"] = NOTE
+        cols = ["strategy", "description", "save_scale", "contacted", "contacts_to_low_risk",
+                "contacts_to_low_risk_share", "credit_spend_usd", "churners_reached", "churners_reached_share",
+                "expected_saves", "offer_cost_usd", "cost_per_save_usd", "contact_cost_usd", "saved_margin_usd",
+                "net_value_usd", "expected_saves_true_p", "cost_per_save_true_p_usd", "net_value_true_p_usd",
+                "other_ev_usd", "include_other", "data_note"]
+        return t[cols].round(2)
+
+    t = finalize(raw, scale)
+    sens = pd.concat([finalize(raw, sc) for sc in sweep], ignore_index=True)
+    sens = sens[["save_scale", "strategy", "expected_saves", "cost_per_save_usd", "net_value_usd", "data_note"]]
 
     # ours: contacts by type for the low-risk bucket (most are money-saving moves, not credits)
     ours_low = base[contact & (p < low_risk)].action_code.value_counts()
@@ -219,6 +290,7 @@ def main():
 
     OUT.mkdir(parents=True, exist_ok=True)
     t.to_csv(OUT / "comparison.csv", index=False)
+    sens.round(2).to_csv(OUT / "comparison_sensitivity.csv", index=False)
     lift.to_csv(OUT / "comparison_lift.csv", index=False)
 
     # ---- markdown
@@ -258,11 +330,13 @@ def main():
           f"{low_risk:.0%}. Churners reached = contacted accounts that churned in the simulated labels ({n_churn} total).", "",
           "| strategy | contacted | contacts to low-risk customers (risk < 5%) | credit / discount spend | actual churners reached |",
           "|---|---:|---:|---:|---:|"]
-    for _, x in t.iterrows():
+    for _, x in t[~t.include_other].iterrows():
         md.append(f"| {x.strategy} | {x.contacted:,} | {x.contacts_to_low_risk:,} ({0 if pd.isna(x.contacts_to_low_risk_share) else x.contacts_to_low_risk_share:.0%}) | "
                   f"{money(x.credit_spend_usd)} | {x.churners_reached} ({x.churners_reached_share:.0%}) |")
-    md += ["", "## 2. Simulated value (depends on assumed save rates)", "",
-           f"Assumed save rates (engine CONFIG, illustrative): $25 care credit {sr_txt}. Same for every strategy.", "",
+    md += ["", "## 2. Simulated value (depends on assumed save rates)" + (f" - save rates x{scale:g}" if scale != 1 else ""), "",
+           f"Assumed save rates (engine CONFIG, illustrative): $25 care credit {sr_txt}. Same for every strategy. "
+           "Row 5b uses the same picks as 5 but its net value also counts the engine's own upsell margin, lock-in and "
+           f"customer-benefit credit ({money(ours.other_ev_usd)}), which the baselines don't get; 5 is the like-for-like row.", "",
            "| strategy | expected saves | offer cost | cost per save | net expected value |",
            "|---|---:|---:|---:|---:|"]
     for _, x in t.iterrows():
@@ -273,9 +347,28 @@ def main():
     for _, x in t.iterrows():
         md.append(f"| {x.strategy} | {x.expected_saves_true_p:.1f} | {money(x.cost_per_save_true_p_usd)} | "
                   f"{money(x.net_value_true_p_usd)} |")
-    md += ["", f"Ours also carries {money(ours.other_ev_usd)} of non-retention EV (upsell margin, lock-in value and "
-           "customer-savings trust value) that is **not** included in net value above, to keep the comparison "
-           "like-for-like.", "",
+    # ---- sensitivity: all save rates x scale
+    md += ["", "## 3. Sensitivity: what if every save rate is lower? (all strategies, same factor)", "",
+           "| save-rate scale | " + " | ".join(x.split(". ", 1)[1] for x in t.strategy if not x.startswith("1.")) + " |",
+           "|---|" + "---:|" * (len(t) - 1)]
+    for sc in sweep:
+        S = sens[sens.save_scale == sc].set_index("strategy")
+        md.append(f"| x{sc:g} net value | " + " | ".join(money(S.loc[x, "net_value_usd"]) for x in t.strategy if not x.startswith("1.")) + " |")
+        md.append(f"| x{sc:g} saves | " + " | ".join(f"{S.loc[x, 'expected_saves']:.1f}" for x in t.strategy if not x.startswith("1.") ) + " |")
+    md += ["", "Does Ours beat each baseline? (net value / saves)", ""]
+    sens_lines = []
+    for o in ("5. Ours (Model A + EV engine)", "5b. Ours (incl. engine other value)"):
+        for sc in sweep:
+            S = sens[sens.save_scale == sc].set_index("strategy")
+            bits = []
+            for bname in ("1. Do nothing", "2. Discount everyone", "3. 3+ support calls rule", "4. Top 10% risk score only"):
+                nv = "yes" if S.loc[o, "net_value_usd"] > S.loc[bname, "net_value_usd"] else "NO"
+                sv = "yes" if S.loc[o, "expected_saves"] > S.loc[bname, "expected_saves"] else "NO"
+                bits.append(f"{bname.split('. ',1)[1]}: net {nv}, saves {sv}")
+            line = f"- **{o.split('. ',1)[1]}, save rates x{sc:g}:** " + "; ".join(bits) + "."
+            md.append(line); sens_lines.append(line)
+    md += ["", "Saves and saved margin scale linearly with the save rate; offer and contact costs don't, so lower save "
+           "rates hurt the strategies that spend the most per contact first. Full table: comparison_sensitivity.csv.", "",
            f"Ours' {int(ours.contacts_to_low_risk)} low-risk contacts by action: " +
            ", ".join(f"{k} {v}" for k, v in ours_low.items()) + ". None are credits (the engine blocks credits below 5% risk); "
            "upsells (step_up/family_upgrade/home_internet_bundle) are the ones a judge could question.", "",
@@ -303,7 +396,15 @@ def main():
            "- Partly circular: ours is scored with the same assumptions it optimizes. The truth-check table and "
            "harness/out/policy_eval.csv (simulated 50k randomized trial) are the less-circular views.",
            "- Model A scores are in-sample for the strategy table; lift uses out-of-fold scores.",
-           "", f"Source: offers.csv rows {len(offers):,}; regenerate with `python3 harness/compare_strategies.py`."]
+           "", "## Inputs used", "",
+           f"- Input dir: `{IN_DIR.relative_to(ROOT) if IN_DIR.is_relative_to(ROOT) else IN_DIR}`",
+           f"- offers.csv: `{SNAP['offers.csv']['source'].relative_to(ROOT) if SNAP['offers.csv']['source'].is_relative_to(ROOT) else SNAP['offers.csv']['source']}`, "
+           f"mtime {pd.Timestamp(SNAP['offers.csv']['mtime'], unit='s', tz='UTC').tz_convert('America/Los_Angeles'):%Y-%m-%d %H:%M:%S %Z}, {len(offers):,} rows",
+           f"- offer_candidates: `{SNAP['offer_candidates.csv']['source'].relative_to(ROOT) if SNAP['offer_candidates.csv']['source'].is_relative_to(ROOT) else SNAP['offer_candidates.csv']['source']}`, "
+           f"mtime {pd.Timestamp(SNAP['offer_candidates.csv']['mtime'], unit='s', tz='UTC').tz_convert('America/Los_Angeles'):%Y-%m-%d %H:%M:%S %Z}",
+           "- Both were copied to a private snapshot before reading, so a concurrent tm-offers rerun can't mix runs.",
+           f"- Main-table save-rate scale: x{scale:g}; sweep: {', '.join(f'x{x:g}' for x in sweep)}",
+           "- Regenerate: `python3 harness/compare_strategies.py` (options: --input-dir, --save-scale, --sweep; env TM_OUT_DIR)."]
     pe = OUT / "policy_eval.csv"
     if pe.exists():
         P = pd.read_csv(pe)
@@ -317,11 +418,13 @@ def main():
 
     chart(t, sr_txt)
     DEMO.mkdir(exist_ok=True)
-    for f in ("comparison.csv", "COMPARISON.md", "comparison_lift.csv"):
+    for f in ("comparison.csv", "COMPARISON.md", "comparison_lift.csv", "comparison_sensitivity.csv"):
         shutil.copy(OUT / f, DEMO / f)
     print("\n".join(headline))
     print(t[["strategy", "contacted", "contacts_to_low_risk", "credit_spend_usd", "churners_reached", "expected_saves", "offer_cost_usd", "cost_per_save_usd", "net_value_usd"]].to_string(index=False))
     print(lift.to_string(index=False))
+    print(sens.to_string(index=False))
+    print("\n".join(sens_lines))
     print(f"wrote {OUT/'comparison.csv'}, {OUT/'COMPARISON.md'}, {DEMO/'comparison_chart.png'}. ALL NUMBERS SYNTHETIC.")
 
 
@@ -330,7 +433,8 @@ def chart(t: pd.DataFrame, sr_txt: str):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    d = t[t.contacted > 0].copy()
+    dall = t[t.contacted > 0].copy()
+    d = dall[~dall.include_other].copy()
     labels = [s.split(". ", 1)[1].replace(" (Model A + EV engine)", "") for s in d.strategy]
     y = np.arange(len(d))
     pink, grey, dark = "#E20074", "#9AA0A6", "#555555"
@@ -348,16 +452,21 @@ def chart(t: pd.DataFrame, sr_txt: str):
     a1.set_title("Assumption-free: who gets contacted", fontsize=12, weight="bold")
     a1.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=2, fontsize=8, frameon=False)
     a1.set_xlabel("accounts (log scale)", fontsize=9)
-    v = d.net_value_usd.values
-    cols = [pink if s.startswith("5.") else grey for s in d.strategy]
-    bars = a2.barh(y, v, 0.6, color=cols)
-    a2.invert_yaxis(); a2.axvline(0, color="#333", lw=0.8); a2.set_yticks(y, [""] * len(y))
-    for b, x, cps in zip(bars, v, d.cost_per_save_usd):
+    v = dall.net_value_usd.values
+    y2 = np.arange(len(dall))
+    cols = [pink if s.startswith("5") else grey for s in dall.strategy]
+    bars = a2.barh(y2, v, 0.6, color=cols)
+    if dall.include_other.any():
+        bars[len(dall) - 1].set_hatch("//"); bars[len(dall) - 1].set_alpha(0.55)
+    short = {"2": "Discount everyone", "3": "3+ calls rule", "4": "Score only", "5.": "Ours", "5b": "Ours + engine\nother value"}
+    a2.invert_yaxis(); a2.axvline(0, color="#333", lw=0.8)
+    a2.set_yticks(y2, [next(v_ for k, v_ in short.items() if s_.startswith(k)) for s_ in dall.strategy], fontsize=8)
+    for b, x, cps in zip(bars, v, dall.cost_per_save_usd):
         s = f"-\\${-x:,.0f}" if x < 0 else f"\\${x:,.0f}"
-        a2.text(x, b.get_y() + b.get_height() / 2, f" {s}  (\\${cps:,.0f}/save) ", va="center",
-                ha="left" if x >= 0 else "right", fontsize=9)
+        a2.text(max(x, 0), b.get_y() + b.get_height() / 2, f" {s}  (\\${cps:,.0f}/save) ", va="center",
+                ha="left", fontsize=9)
     lo, hi = min(0, v.min()), max(0, v.max())
-    a2.set_xlim(lo - (hi - lo) * 0.45 * (lo < 0), hi + (hi - lo) * 0.6)
+    a2.set_xlim(lo - (hi - lo) * 0.08 * (lo < 0), hi + (hi - lo) * 0.6)
     a2.set_title("Simulated net value (depends on assumed save rates)", fontsize=12, weight="bold")
     a2.tick_params(axis="x", labelsize=8)
     for ax in (a1, a2):
