@@ -54,31 +54,48 @@ benefit weight), so in full company dollars "ours" is negative. At realized save
 (5-15%), every fixed-pick contact policy loses money against doing nothing.
 
 ## 3. Chart data (`chart_data.py` -> `out/chart_bars.csv`, `out/chart_receipt.csv`, `out/chart_preview.png`)
+All numbers synthetic / simulated.
 - Every policy is picked assuming a 10% save rate and scored at 5% (headline), 10% and 22%.
 - Business net is in **full company dollars**: no half-weighting, upsell margin included, customer savings weighted 0.
-- Customer savings are a separate series. Plan moves are never texted; they go on the receipt as **money back to
-  customers**, and the same dollars appear as a cost on the company side, outside business net.
-- Receipt headline: 488 accounts where the plan-mix optimizer and the offer engine agree exactly ($10,395/month if
-  every account switched; $3,742/year at an assumed 3% switch rate, range 2-13%: $2,495-$16,216). 85 of the 488
-  would lose a price guarantee and the receipt must say so. 194 more accounts are a separate "cheaper, but you'd
-  lose something" line and never count in the headline.
-- Home Internet take rate: 2% per offer contact per quarter, range 1-4%, eligible addresses only (derived). Bars at
-  1%, 2%, 4% and none.
-- Policy values are read from the shared policy-evaluation table; bars not computed there yet are marked pending.
+- Headline bar (bold): **Retention-only, re-picked at 10%**. Subtitle: "Profitable if real save rates are at least
+  about 4.5%. At 10% it wins ~7 in 8; at 5% it's a coin flip."
+- Whiskers are the **realized-outcome bootstrap** (2,000 account resamples that also draw who churns and who is
+  saved), read from the policy table (CI, P(net>0)) and its RESULTS.md section 4 (mean). The expected-value bootstrap
+  CI is kept in `chart_bars.csv` only (`ev_*` columns), not drawn.
+- **Money back to customers** sits on its own small panel ("also a cost to T-Mobile; not in business net"), so it
+  does not stretch the business-net axis. Plan moves are never texted; they go on the receipt.
+- Receipt headline: **403 like-for-like accounts** where the plan-mix optimizer and the offer engine agree exactly
+  and the customer gives up nothing ($4,795/month if every account switched; **$1,726/year at an assumed 3% switch
+  rate**, range 2-13%: $1,151-$7,480). The 85 agreeing accounts whose optimizer reason says "gives up price
+  guarantee" are excluded and moved, with 194 others, to the separate "cheaper, but you'd lose something" line
+  (279 accounts), which never counts in the headline.
+- Profit-ranked incl. upsell is one **Q&A-only** row: its gain rests on the 3.9%/quarter upgrade assumption
+  ($10,946 of the $16,676 at 10% is step-up/family upsell margin). Home Internet is a footnote, not a bar: "never
+  picked at a 1-4% take rate (derived)". The script checks that the 1/2/4% rows pick zero Home Internet and equal the
+  no-Home-Internet row before printing that line.
+- Pending bars are hidden on the chart, kept in `chart_bars.csv` with `status=pending`, and listed in one footnote.
+  Rows decided at their own rate (not picked at 10%) are not used for the 5%/22% columns.
+- Inputs: the shared policy-evaluation table (env `TM_POLICY_BY_SAVE_RATE`); the plan-mix optimizer output
+  `data/household_plan.csv` (env `HOUSEHOLD_PLAN_CSV`; 5,042 rows). That file is a copy of the household plan
+  optimizer's output (`harness/household_optimizer.py`, commit d3adf09, run read-only on the sandbox), originally
+  written to a temp folder at 22:47 PT on 2026-10-17 and copied here so it doesn't vanish
+  (sha256 63eccb2e13f235e367436fe5cd6550d9c061d63176d1a0290836b058905a3933). `data/` is gitignored; this file is
+  force-added.
 
 | Picked at 10%; business net, full $ (synthetic) | scored 5% (headline) | 10% | 22% |
 |---|---|---|---|
 | Shipped engine (picks made at its assumed ~44%) | -$69,434 | -$60,009 | -$37,388 |
 | Top 10% risk, $25 credit to all | -$9,114 | -$4,116 | +$7,880 |
+| Top 10% risk, best fix for each | pending | +$3,640 | pending |
 | Retention-only, picks fixed at 44% | -$10,706 | -$1,540 | +$20,460 |
 | **Retention-only, re-picked at 10% (246 contacts)** | **+$538** | **+$6,211** | +$19,825 |
-| Profit-ranked incl. upsell, Home Internet 1/2/4% | pending | +$16,676 (334) | pending |
+| Retention texts + like-for-like receipt (3% switch) | -$1,233 | +$4,453 | +$18,100 |
+| Profit-ranked incl. upsell (Q&A only; 3.9%/qtr upgrade assumption) | +$11,003 | +$16,676 (334) | +$30,290 |
 | Do nothing | $0 | $0 | $0 |
 
-Retention-only re-picked at 10%: the expected-value bootstrap (2,000 account resamples) gives 95% CI $4,590-$7,871 at
-10% and -$66 to $1,184 at 5% (P > 0 = 0.96). Realized outcomes are much noisier (5%: CI -$5,229 to $9,953, P > 0 =
-0.49). Break-even save rate: 4.5%. **Profitable only if real save rates are at least about 4.5%, and at 5% it is a
-coin flip on realized outcomes.**
+Retention-only re-picked at 10%, realized-outcome bootstrap: at 10% mean +$6,328, 95% CI -$3,375 to +$18,970,
+P(net > 0) = 0.876; at 5% mean +$491, CI -$5,229 to +$9,953, P = 0.487. (Expected-value bootstrap, CSV only: 10% CI
+$4,590-$7,871; 5% CI -$66 to $1,184.) Break-even save rate: 4.5%.
 
 ## Honest weak spots
 - Our customers have no response labels. The data generator's churn does not respond to contact at all, so **every
