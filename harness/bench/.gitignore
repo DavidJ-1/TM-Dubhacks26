@@ -1,0 +1,4 @@
+# The repo-root .gitignore ignores every `out/` directory. Bench outputs (CSV/MD/PNG, all synthetic) are small and
+# are the deliverable tm-ui reads, so re-include this one.
+!out/
+__pycache__/

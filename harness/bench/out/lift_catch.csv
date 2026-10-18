@@ -1,0 +1,29 @@
+synthetic,k_contacted,k_label,targeting,churners_caught,share_of_churners,lift_vs_random,precision
+1,250,top 250,"LR, all prepare() features",58.0000,0.4234,8.4672,0.2320
+1,250,top 250,LR on Model A core-22,63.0000,0.4599,9.1971,0.2520
+1,250,top 250,Ours: Model A OOF (tm-churn),62.0000,0.4526,9.0511,0.2480
+1,250,top 250,3+ contacts rule,17.9549,0.1311,2.6211,0.0718
+1,250,top 250,support_90d count ranking,53.7500,0.3923,7.8467,0.2150
+1,250,top 250,Random,6.8500,0.0500,1.0000,0.0274
+1,250,top 250,Oracle,66.0000,0.4818,9.6350,0.2640
+1,500,top 500,"LR, all prepare() features",74.0000,0.5401,5.4015,0.1480
+1,500,top 500,LR on Model A core-22,79.0000,0.5766,5.7664,0.1580
+1,500,top 500,Ours: Model A OOF (tm-churn),85.0000,0.6204,6.2044,0.1700
+1,500,top 500,3+ contacts rule,35.9097,0.2621,2.6211,0.0718
+1,500,top 500,support_90d count ranking,73.5500,0.5369,5.3686,0.1471
+1,500,top 500,Random,13.7000,0.1000,1.0000,0.0274
+1,500,top 500,Oracle,88.0000,0.6423,6.4234,0.1760
+1,1000,top 1000,"LR, all prepare() features",93.0000,0.6788,3.3942,0.0930
+1,1000,top 1000,LR on Model A core-22,107.0000,0.7810,3.9051,0.1070
+1,1000,top 1000,Ours: Model A OOF (tm-churn),106.0000,0.7737,3.8686,0.1060
+1,1000,top 1000,3+ contacts rule,71.8194,0.5242,2.6211,0.0718
+1,1000,top 1000,support_90d count ranking,94.4486,0.6894,3.4470,0.0944
+1,1000,top 1000,Random,27.4000,0.2000,1.0000,0.0274
+1,1000,top 1000,Oracle,108.0000,0.7883,3.9416,0.1080
+1,1462,rule flags all (1462),"LR, all prepare() features",108.0000,0.7883,2.6960,0.0739
+1,1462,rule flags all (1462),LR on Model A core-22,112.0000,0.8175,2.7959,0.0766
+1,1462,rule flags all (1462),Ours: Model A OOF (tm-churn),112.0000,0.8175,2.7959,0.0766
+1,1462,rule flags all (1462),3+ contacts rule,105.0000,0.7664,2.6211,0.0718
+1,1462,rule flags all (1462),support_90d count ranking,105.0000,0.7664,2.6211,0.0718
+1,1462,rule flags all (1462),Random,40.0588,0.2924,1.0000,0.0274
+1,1462,rule flags all (1462),Oracle,113.0000,0.8248,2.8209,0.0773

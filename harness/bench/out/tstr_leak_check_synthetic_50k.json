@@ -1,0 +1,103 @@
+{
+ "synthetic_extra_columns_dropped": [
+  "recent_job_change",
+  "household_income_usd",
+  "income_band",
+  "area_median_income_usd",
+  "income_geo_level",
+  "next_plan_sku",
+  "next_plan_price_cents",
+  "step_up_cost_cents",
+  "step_up_cost_pct_income"
+ ],
+ "synthetic_cols_matching_label_names": [],
+ "synthetic_cols_matching_leak_regex": [],
+ "id_overlap_real_vs_synthetic": 0,
+ "n_features_after_prepare": 58,
+ "same_rows_vs_oracle": [
+  {
+   "target": "churn_90d",
+   "model": "logreg_unweighted",
+   "train_size": 50000,
+   "n_test_rows": 5000,
+   "n_test_pos": 137,
+   "auc_model": 0.8690048946986858,
+   "auc_oracle_same_rows": 0.8638737915227601,
+   "diff": 0.005131103175925689,
+   "diff_ci95": [
+    -0.0034285593135113925,
+    0.01527702103324525
+   ]
+  },
+  {
+   "target": "churn_90d",
+   "model": "logreg_core22",
+   "train_size": 50000,
+   "n_test_rows": 5000,
+   "n_test_pos": 137,
+   "auc_model": 0.8651683875412581,
+   "auc_oracle_same_rows": 0.8638737915227601,
+   "diff": 0.0012945960184980176,
+   "diff_ci95": [
+    -0.003051550438211437,
+    0.0060647508146573015
+   ]
+  },
+  {
+   "target": "churn_90d",
+   "model": "hgb_sigmoid",
+   "train_size": 50000,
+   "n_test_rows": 5000,
+   "n_test_pos": 137,
+   "auc_model": 0.8622669914789315,
+   "auc_oracle_same_rows": 0.8638737915227601,
+   "diff": -0.0016068000438286267,
+   "diff_ci95": [
+    -0.011676787030324234,
+    0.008072856861959313
+   ]
+  },
+  {
+   "target": "upgrade_90d",
+   "model": "logreg_unweighted",
+   "train_size": 50000,
+   "n_test_rows": 5000,
+   "n_test_pos": 322,
+   "auc_model": 0.7622915775972638,
+   "auc_oracle_same_rows": 0.8076685104586289,
+   "diff": -0.045376932861365016,
+   "diff_ci95": [
+    -0.05962956145987962,
+    -0.031443493596297216
+   ]
+  },
+  {
+   "target": "upgrade_90d",
+   "model": "logreg_core22",
+   "train_size": 50000,
+   "n_test_rows": 5000,
+   "n_test_pos": 322,
+   "auc_model": 0.6785123440234321,
+   "auc_oracle_same_rows": 0.8076685104586289,
+   "diff": -0.12915616643519678,
+   "diff_ci95": [
+    -0.15588197463214887,
+    -0.10257631034922288
+   ]
+  },
+  {
+   "target": "upgrade_90d",
+   "model": "hgb_sigmoid",
+   "train_size": 50000,
+   "n_test_rows": 5000,
+   "n_test_pos": 322,
+   "auc_model": 0.7684018492799651,
+   "auc_oracle_same_rows": 0.8076685104586289,
+   "diff": -0.03926666117866373,
+   "diff_ci95": [
+    -0.05266293725884889,
+    -0.02609927963322435
+   ]
+  }
+ ]
+}
