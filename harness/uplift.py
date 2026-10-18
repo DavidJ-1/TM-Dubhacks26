@@ -437,7 +437,6 @@ def qini_curves(test: pd.DataFrame, long_test: pd.DataFrame, offers: pd.DataFram
         "random": (pd.Series(rng.random(len(ids)), index=ids), b_ev["action_code"]),
         "oracle (true uplift)": (b_true["true_uplift"], b_true["action_code"]),
     }
-    true_map = lt.set_index(["account_id", "action_code"])["true_uplift"]
     fr = np.linspace(0, 1, CURVE_POINTS)
     rows = []
     for name, (score, rec) in specs.items():

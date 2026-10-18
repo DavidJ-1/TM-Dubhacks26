@@ -80,7 +80,7 @@ class ModelA(_Base):
         if self.feature_set == "core":
             core = [c for c in CORE_FEATURES if c in cols]
             cols = core if len(core) >= 5 else cols  # unknown schema -> use everything
-        start, self.dropped_for_sign_ = list(cols), []
+        self.dropped_for_sign_ = []
         for _ in range(5):
             mu, sd = X[cols].mean(), X[cols].std(ddof=0).replace(0, 1)
             Z = (X[cols] - mu) / sd

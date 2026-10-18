@@ -23,7 +23,6 @@ Run:  python harness/offers.py      (from the repo root or from harness/)
 
 from __future__ import annotations
 
-import math
 import os
 import re
 import sys
@@ -812,7 +811,7 @@ def why_this_offer(action: str, row: pd.Series, ev: dict) -> str:
 
 def reason_text(action: str, row: pd.Series, ev: dict, best_other: tuple | None) -> str:
     """Operator line with the math (synthetic)."""
-    d, r = ev["drivers"], ev["res"]
+    r = ev["res"]
     pct = _pct(row)
     if action == "do_nothing":
         if best_other is None:

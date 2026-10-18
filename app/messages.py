@@ -23,8 +23,8 @@ _ALIASES = {
     "step-up plan": "step_up_plan", "step up plan": "step_up_plan", "step_up": "step_up_plan",
     "device upgrade": "device_upgrade", "fix-first callback": "fix_first_callback",
     "fix first callback": "fix_first_callback", "fix_first": "fix_first_callback",
-    # tm-offers action_code values
-    "keep_your_phone": "keep_phone_credit", "right_size": "right_size_plan", "step_up": "step_up_plan",
+    # tm-offers action_code values (aliases above already cover right_size / step_up)
+    "keep_your_phone": "keep_phone_credit",
 }
 
 

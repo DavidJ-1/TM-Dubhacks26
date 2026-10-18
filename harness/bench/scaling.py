@@ -21,7 +21,7 @@ sys.dont_write_bytecode = True
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from sklearn.metrics import average_precision_score, roc_auc_score  # noqa: E402
+from sklearn.metrics import average_precision_score  # noqa: E402
 
 from harness.bench import bench as B  # noqa: E402
 from harness.bench.compare import LogRegCore  # noqa: E402

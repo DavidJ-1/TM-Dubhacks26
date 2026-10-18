@@ -302,7 +302,6 @@ def allowed_amounts(f: pd.Series, action: str, promos: pd.DataFrame, plans: pd.D
 def validate_messages(offers: pd.DataFrame, facts: pd.DataFrame, promos: pd.DataFrame,
                       plans: pd.DataFrame, addons: pd.DataFrame | None = None) -> pd.DataFrame:
     fx = facts.set_index("account_id")
-    guar_years = {int(g) for g in plans["price_guarantee_years"].dropna()}
     rows = []
     for _, o in offers.iterrows():
         f = fx.loc[o["account_id"]]

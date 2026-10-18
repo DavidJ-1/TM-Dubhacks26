@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import re
 
-import numpy as np
 import pandas as pd
 
 RAW_CONTACT_COUNTS = ["support_90d", "support_270d", "device_contacts_90d", "plan_change_contacts_90d",
