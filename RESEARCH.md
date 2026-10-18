@@ -107,12 +107,12 @@ Not used as headline facts: "5-25x cheaper to retain" (unsourced, not telecom-sp
 |---|---|---|---|---|
 | AT&T CFO: churn rise partly from customers "reaching the end of device financing periods" | 0.92%, +14 bp YoY (3Q25) | https://www.phonearena.com/news/hidden-in-its-q3-report-is-news-that-could-lead-to-big-problems-at-at-t_id175350 | 2025-10 | strong (CFO quote, reported) |
 | T-Mobile CEO: 2025 churn "normalized" after 36-month suppression | +7 bp for 2025 | https://www.fool.com/earnings/call-transcripts/2026/02/11/t-mobile-tmus-q4-2025-earnings-call-transcript/ | 2026-02-11 | strong (his interpretation) |
-| Upgrade cycle | Verizon "beyond 42 months"; average US trade-in age 3.81 yrs (Q1'26) | https://www.phonearena.com/news/verizon-cfo-phone-upgrade-42-months_id168233 ; https://www.assurant.com/news-insights/infographics/q1-trade-in-upgrade-data-trends | 2025-03 / 2026 | strong |
+| Upgrade cycle | Verizon CFO: "now around **44 months**", up 2 months YoY (Sep 2026; was "beyond 42" in Mar 2025); average US trade-in age 3.81 yrs (Q1'26) | https://www.verizon.com/about/sites/default/files/2026-09/vz-citi_transcript_2026-09-09.pdf ; https://www.assurant.com/news-insights/infographics/q1-trade-in-upgrade-data-trends | 2026-09-09 / 2026 | strong |
 | Plans: AT&T/Verizon 36 mo; T-Mobile phones 24 mo; early payoff or leaving forfeits remaining promo credits | — | https://www.verizon.com/support/device-deals-faqs/ ; https://www.phonearena.com/news/t-mobile-36-months-installments-eips-tablets-watches_id176095 | n.d. / 2025-11 | strong / medium |
 | Rivals buy out device balances (T-Mobile Keep & Switch, up to $800/line; new accounts only since 2026-07-09) | $800/line | https://www.t-mobile.com/support/new-to-tmobile/keep-and-switch ; https://www.tmonews.com/2026/07/t-mobile-restricts-switcher-promos-as-migration-problems-surface/ | n.d. / 2026-07 | strong / medium |
 | Q4 seasonality (launches, holidays) | T-Mobile Q4'25 phone churn 1.02% vs FY 0.93% | https://www.t-mobile.com/news/business/t-mobile-q4-2025-earnings | 2026-02 | strong |
 
-**Read:** with phones kept 3.5-4 years on 2-3 year plans, customers sit paid-off and credit-free for months. The real lock-in is **remaining promo credits**, not the device balance (rivals buy out balances). That supports `months_to_payoff`, `remaining_promo_credit`, and a pre-payoff offer window. There is **no public data** on how big the payoff churn spike is, so ours is an assumption (relevant to `LOCK_CUT` 0.50 and `FAMILY_UPGRADE_ENDING_MONTHS` 2). The simulation ignores Q4 seasonality; say so.
+**Read:** with phones kept 3.5-4 years (Verizon: ~44 months) on 2-3 year plans, customers sit paid-off and credit-free for months. The real lock-in is **remaining promo credits**, not the device balance (rivals buy out balances). That supports `months_to_payoff`, `remaining_promo_credit`, and a pre-payoff offer window. There is **no public data** on how big the payoff churn spike is, so ours is an assumption (relevant to `LOCK_CUT` 0.50 and `FAMILY_UPGRADE_ENDING_MONTHS` 2). The simulation ignores Q4 seasonality; say so.
 
 ### 4e. Explainability & compliance (not legal advice)
 - **CPNI basics.** Using customer data (CPNI) to market within service categories the customer already buys needs no approval (47 CFR 64.2005(a)). Carriers **may not use CPNI to track customers who call competitors** (64.2005(b)(2)). https://www.law.cornell.edu/cfr/text/47/64.2005 — strong.
@@ -125,7 +125,37 @@ Not used as headline facts: "5-25x cheaper to retain" (unsourced, not telecom-sp
 - **People use algorithms more when they can adjust them.** Dietvorst et al., *Mgmt Sci* 2018, https://doi.org/10.1287/mnsc.2016.2643 — strong. Give agents accept / swap / skip with a logged reason.
 - **Not applicable:** EU AI Act Art. 86 (retention marketing isn't high-risk) and Art. 50 (no chatbot/LLM in our product). https://ai-act-service-desk.ec.europa.eu/en/ai-act/article-86 — strong.
 
-## 5. Recommendations
+## 5. Round 3: US market & retention vs upsell
+*Researched 2026-10-17 (PDT). Full notes: `research-notes/notes_{market,upsell}.md`.*
+
+**Bottom line**
+1. **Saturated market.** 98% of US adults own a cellphone. Industry phone net adds are shrinking toward ~7.9M (2026 forecast), and cable takes about ⅓-½ of them, so incumbent gains mostly come from rivals.
+2. **Base upsell is a small lever.** Big-3 ARPA grows ~2%/yr, much of it from fees and price moves. T-Mobile's premium mix comes mainly from *new* accounts.
+3. **Blunt price or plan pushes cost churn.** Verizon's CEO blames past price hikes for churn, and T-Mobile guided "temporary elevated" churn from its forced plan migration.
+4. **"Buys more → stays longer" is mostly selection.** Cross-buying follows loyalty rather than causing it. Cross-selling high-service customers can lose money, and adding a cross-sell to a service contact erodes its churn benefit.
+5. **So: retention first.** Upsell only where it lowers churn risk (e.g., home-internet bundles; Prince & Greenstein found bundling cut churn even after addressing selection). Default to do-nothing or a light touch for at-risk accounts. Verizon's 2026 "targeted retention" pivot is essentially our EV engine.
+
+| Figure | Number | Source | Date | Strength |
+|---|---|---|---|---|
+| US adult cellphone / smartphone ownership | 98% / 91% | https://www.pewresearch.org/internet/fact-sheet/mobile/ | survey date not captured | strong |
+| Industry postpaid phone net adds trend | ~8.7M (2023 est.) → ~8.4M (2025 fcst) → **~7.9M (2026 fcst)**; "the pool of potential subscribers declines" | https://www.fierce-network.com/wireless/t-mobile-expected-retain-lead-q4-phone-net-adds (2024-01-12); https://telecomreseller.com/2025/07/17/u-s-wireless-industry-connecting-in-2025-with-risks-on-the-rise-in-2026/ (S&P, 2025-07-16) | 2024-25 | medium (analyst definitions differ) |
+| Cable share of industry postpaid phone net adds | **45%** in 2025 Q1-Q3 (Recon); quarterly 33-58% (MoffettNathanson); Q2'26 cable +904K lines vs AT&T + Verizon 616K phones | https://www.lightreading.com/wireless/the-great-convergence-the-state-of-u-s-wireless-competition ; https://www.lightreading.com/5g/us-cable-mobile-net-adds-hold-steady-again-in-q4 (2026-03-24); https://mvnoplanet.com/us-mvno-scorecard-q2-2026/ | 2025-26 | medium (cable lines include non-phones) |
+| T-Mobile ARPA growth drivers | $152.91, +2%, "primarily" from fee revenue (tax-and-fee-exclusive plans) and more customers per account; offset by promotions | https://www.sec.gov/Archives/edgar/data/1283699/000128369926000100/tmus06302026ex992.htm | 2026-07-23 | strong |
+| T-Mobile premium mix | 60%+ of new accounts choose premium plans | https://fiscal.ai/company/NASDAQ_TMUS/investor-relations/Q2-2026/ | 2026-07-23 | medium |
+| Verizon 2025 growth = price, not volume | ARPA +2.0% vs phone connections +0.4% (our arithmetic on filing inputs) | https://www.sec.gov/Archives/edgar/data/732712/000073271226000003/a2025q4exhibit99.htm | 2026-01 | strong inputs / derived |
+| AT&T postpaid upgrade rate (quarterly) | FY 15.6% (2023), 14.0% (2024), 15.6% (2025); 1Q26 3.5%; Q4 peak ~4.6-4.7% | https://investors.att.com/~/media/Files/A/ATT-IR-V2/financial-reports/quarterly-earnings/2026/1Q-2026/T_1Q26_Trending_Schedule.pdf | 2026-04 | strong |
+| Verizon retail postpaid upgrade rate | 2.8 / 3.6 / 3.3 / 4.4% (2025 Q1-Q4); 3.0 / 2.6% (1Q26 / 2Q26); 2Q26 upgrade volumes down ~27% | https://www.verizon.com/about/sites/default/files/2026-07/vz_2q2026_foi_072426.pdf ; https://www.verizon.com/about/sites/default/files/2026-08/vz_2q2026_transcript_072426rm.pdf | 2026-07-24 | strong |
+| Verizon upgrade cycle | ~**44 months** (+2 mo YoY); "not every problem needs four free handsets"; upgrades down >20% while churn fell 5 bp | https://www.verizon.com/about/sites/default/files/2026-09/vz-citi_transcript_2026-09-09.pdf | 2026-09-09 | strong |
+| Reinartz, Thomas & Bascoul, *J. Interactive Mktg* 22(1) | "cross-buying is a consequence and not an antecedent of behavioral loyalty" | https://doi.org/10.1002/dir.20106 | 2008-02 | medium-strong (abstract; not telecom) |
+| Shah, Kumar, Qu & Chen, *J. Marketing* 76(3) | 10-35% of cross-buyers are unprofitable and account for 39-88% of customer losses; heavy service requesters get *more* unprofitable | https://doi.org/10.1509/jm.10.0445 | 2012-05 | strong (abstract; not telecom) |
+| Becker, Spann & Barrot, *J. Service Research* | telecom field experiment: proactive service contact cuts churn; adding a cross-sell raises suspicion of motives and erodes the benefit | https://doi.org/10.1177/1094670519883347 | 2020 (online 2019-11) | medium (abstract; arm-level numbers unverified) |
+| Prince & Greenstein, *JEMS* 23(4) | bundling reduced churn for phone, TV and broadband after addressing selection | https://doi.org/10.1111/jems.12073 | 2014 | medium (summary; cable, not wireless) |
+| Verizon CEO Schulman: retention first | "at least half, if not more than half, of our net adds are going to come from improvements in churn"; "we will not rely on empty across-the-board price increases"; acquisition + retention cost down ~35% (Mar vs end of Q4) via micro-segmentation; "Not every retention is going to be a free handset" | https://www.verizon.com/about/sites/default/files/2026-06/vz_1q26_transcript_042726rm.pdf | 2026-04-27 | medium-strong (company transcript) |
+| Price-lock / loyalty strategies | T-Mobile 5-year price guarantee (2025-04-22); T-Mobile forced legacy migration up to +$6/line (2026-07); Verizon loyalty program: 3% back, no upgrade fees (2026-06-16); Verizon 3-yr price lock closed to new enrollments 2026-06-16 | https://www.t-mobile.com/news/un-carrier/t-mobile-and-metro-unveil-new-plans-with-more-value-and-a-5-year-price-guarantee ; https://www.cnet.com/tech/mobile/t-mobile-customers-on-old-plans-are-being-pushed-to-new-ones-starting-this-week/ ; https://www.verizon.com/about/news/verizon-puts-customers-first ; https://www.droid-life.com/2026/09/05/verizons-3-year-price-lock-guarantee-is-already-gone/ | 2025-26 | strong / medium / strong / weak |
+
+**For the engine:** don't model upsell as causally cutting churn unless it's labelled as an assumption. Penalize or block upsell for high-risk and 3+-support-call accounts. Simulator upgrade base rate: ~3-4.5% of postpaid subscribers per quarter, peaking in Q4.
+
+## 6. Recommendations
 1. **Add a random holdout of 5-10%** of contact-eligible accounts (bigger, 30-50%, for a pilot to learn uplift). Report Qini/uplift curves, not accept rates.
 2. **Sensitivity run:** rerun the strategy comparison with all `SAVE_RATE`s cut to ~0.25× (and 0.5×). Show whether "ours" still beats "discount everyone" and "top-10% risk".
 3. **Raise `ANNOYANCE` on `right_size`/`variant_switch`** (or add a churn penalty for volatile or declining usage) and revisit `SAME_COVERAGE_RULE`.
@@ -134,7 +164,7 @@ Not used as headline facts: "5-25x cheaper to retain" (unsourced, not telecom-sp
 6. **Account-level value and timing:** value saves per account; add `months_to_payoff` / `remaining_promo_credit` features and a pre-payoff offer window (window length is our assumption).
 7. **Uplift-ready logging:** `offer_id`, `assignment_prob`, `holdout_flag`, `reached`, `accepted`, `churned_within_60d`.
 
-## 6. Weak-source / unverified list
+## 7. Weak-source / unverified list
 - T-Mobile Q2'26 phone churn 0.85%: CFO remark on the call, not in the filing.
 - T-Mobile Q1'26 phone churn ~0.94%: our inference from a transcript remark ("+3 bp YoY").
 - Save-desk rates, all vendor or undated: Foundever 70% (https://foundever.com/case-studies/u-s-telecoms-provider-surpasses-its-customer-retention-targets-in-just-five-months/); InfiniteWatch 61→73% and ~$8.20 per save (https://infinitewatch.ai/resources/ai-voice-agents-telecom-retention); Oriserve/Airtel 14% blended (https://oriserve.com/customers/case-studies/airtel); Qualfon 9.5→24.9% (https://www.qualfon.com/resources/case-studies/telecom-customer-retention-160-percent-improvement/); AOL 18→44% (https://krisschaefferassociates.com/aol).
@@ -150,3 +180,8 @@ Not used as headline facts: "5-25x cheaper to retain" (unsourced, not telecom-sp
 - Upgrade-cycle figures from Omdia and Counterpoint (report summaries, paywalled); Verizon 2025 quarterly churn series from a search summary.
 - Explainability: MSI 20-138 (single-firm working paper), SSRN 7574318 and SSRN 3640862 (working papers; the ~15.8 pt figure is unverified). No public number exists for "explanations raise retention-offer uptake".
 - `PORT_OUT_ALWAYS_CONTACT` CPNI risk is our reading of the 2008/2009 rulings, not legal advice.
+- Round 3: industry net-add totals (TD Cowen vs S&P definitions conflict); cable-share figures (MoffettNathanson/Recon via press, partly paywalled); Optimum line count (MVNO Planet).
+- T-Mobile "~30% of base on premium" (analyst summary, not in the transcript text); AT&T 2Q26 upgrade rate 3.2% (Barclays via aggregator).
+- Verizon 3-year price lock ending: confirmed only by Verizon's AI support assistant (Droid Life). T-Mobile "price-hike churn was temporary" is from search summaries.
+- Recon Analytics LTV ($1,900 financed vs $1,516 BYOD) and "half wait until device fails" (paywalled report abstract); churncost.com SAC/retention costs (unknown site, **do not use**); BTIG Comcast $1,260 per gross add (2018).
+- Becker 2020 arm-level churn numbers and Prince & Greenstein details (abstract/summary only); immigration share of growth (TBR, search summary).
