@@ -38,6 +38,7 @@ Every action a customer qualifies for is priced against doing nothing, which is 
 
 ## Accomplishments that we're proud of
 - Restraint you can check: most accounts get no text at all.
+- **It still pays at realistic save rates (simulated).** We re-ran the engine assuming the roughly 10% save rate real retention campaigns report, texting retention offers only where they still pay off: 246 accounts. It's profitable if the real save rate is at least about 4.5%. At 10% it comes out ahead in about 7 of 8 resamples, and at 5% it's a coin flip. Measured campaigns land around 6–11% ([Verhelst et al. 2023](https://arxiv.org/abs/2312.07206); [Ascarza 2018](https://doi.org/10.1509/jmr.16.0163)). When an offer isn't worth it, the engine picks doing nothing.
 - One customer moved to a cheaper plan with the same features.
 
 ## What we learned
