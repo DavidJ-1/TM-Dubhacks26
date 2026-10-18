@@ -1,7 +1,7 @@
 policy_or_model,qini_area_ipw,qini_area_true,share_of_oracle_true
-Model C (T-learner uplift),65.441,57.981,0.804
-Model B (expected value),55.073,52.676,0.73
-Model A (churn risk only),61.967,59.025,0.818
-3+ support calls rule,56.739,54.041,0.749
-random,13.503,15.811,0.219
-oracle (true uplift),76.737,72.14,1.0
+Model C (T-learner uplift),52.595,50.854,0.751
+Model B (expected value),49.561,48.863,0.722
+Model A (churn risk only),57.934,56.874,0.84
+3+ support calls rule,54.049,52.564,0.777
+random,20.234,19.734,0.292
+oracle (true uplift),69.384,67.678,1.0

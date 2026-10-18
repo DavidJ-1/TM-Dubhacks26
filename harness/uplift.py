@@ -80,6 +80,12 @@ TRUE_SAVE = {
     "right_size": {"overpay": 0.35, "billing": 0.15, "none": 0.05},
     "step_up": {"outgrowing": 0.20, "life_event": 0.25, "none": 0.00, "bill_shock_backfire": -0.10},
     "device_upgrade": {"device": 0.25, "free_to_leave": 0.12, "none": 0.03, "bill_shock_backfire": -0.08},
+    "variant_switch": {"overpay": 0.30, "billing": 0.18, "none": 0.08},
+    "family_upgrade": {"match": 0.20, "none": 0.04, "bill_shock_backfire": -0.10},
+    "bill_shock_price_lock": {"bill_shock": 0.33, "billing": 0.18, "none": 0.03},
+    "check_in": {"shopping": 0.10, "quiet": 0.06, "none": 0.01},
+    "perk_reminder": {"streaming": 0.07, "none": 0.01},
+    "home_internet_bundle": {"none": 0.04, "bill_shock_backfire": -0.05},
 }
 COMBO_CARE_SHARE = 0.8         # combined arm: credit adds 80% of its standalone effect (diminishing returns)
 SLEEPING_DOG = 0.004           # contacting a low-risk (<1%) customer with no matching problem lowers P(stay)
@@ -137,6 +143,20 @@ def true_save_share(arm: str, d: dict, tenure: float, value_z: float) -> float:
         s = T[arm]["device"] if d["device_pain"] else T[arm]["free_to_leave"] if d["free_to_leave"] else T[arm]["none"]
         if d["bill_shock_recent"]:
             s += T[arm]["bill_shock_backfire"]
+    elif arm == "variant_switch":
+        s = T[arm]["overpay"] if d["overpay"] else T[arm]["billing"] if d["billing_pain"] else T[arm]["none"]
+    elif arm == "family_upgrade":
+        s = T[arm]["match"] if (d["outgrowing"] or d["device_pain"] or d["free_to_leave"]) else T[arm]["none"]
+        if d["bill_shock_recent"]:
+            s += T[arm]["bill_shock_backfire"]
+    elif arm == "bill_shock_price_lock":
+        s = T[arm]["bill_shock"] if d["bill_shock_recent"] else T[arm]["billing"] if d["billing_pain"] else T[arm]["none"]
+    elif arm == "check_in":
+        s = T[arm]["shopping"] if d["shopping"] else T[arm]["quiet"] if d.get("quiet") else T[arm]["none"]
+    elif arm == "perk_reminder":
+        s = T[arm]["streaming"] if d.get("streaming") else T[arm]["none"]
+    elif arm == "home_internet_bundle":
+        s = T[arm]["none"] + (T[arm]["bill_shock_backfire"] if d["bill_shock_recent"] else 0)
     else:
         raise ValueError(arm)
     return s * (0.8 + 0.4 * min(tenure, 120) / 120)   # longer-tenured customers respond a bit more

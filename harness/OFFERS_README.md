@@ -100,3 +100,47 @@ These are deterministic templates, not LLM output. Each message is under 300 cha
 
 ## Model C
 See `UPLIFT_README.md`. `python harness/uplift.py` is the single command that rebuilds Model B and Model C.
+
+## Batch 4-6 additions (Sat 10/17 ~8:10 PM PDT; all numbers synthetic)
+
+**New actions:** `variant_switch` (55+/partner/community discount variant or Essentials 4-Line Offer: same features,
+cheaper; sandbox `plans.eligibility` == `accounts.discount_group`), `right_size` now = move DOWN only (sandbox misfit
+<5 GB/line, or Beyond with every line <15 GB and <2 GB hotspot, no connected lines, no streaming add-on or Home
+Internet -> More), `family_upgrade` (next plan + PROMO-STUB-TRADEIN-ANY $200/phone over 36 months; real fields only:
+child/teen line roles, n_lines, phones with trade-in value after balance, a real moment), `bill_shock_price_lock`
+(label "bill-shock relief": More/Beyond only, $25 care credit [+ $5/mo loyalty at 36+ mo], the 5-Year Price Guarantee
+stated as a fact, no lock-in), `check_in` (no $; shopping / port-out / quiet app use, nothing open), `perk_reminder`
+(no $, no brand names), `home_internet_bundle` (HINT Basic $50 + PROMO-STUB-BUNDLE-HINT $15).
+
+**Customer-benefit term:** customer-first actions add `CUSTOMER_BENEFIT_WEIGHT x savings x 12 x p_accept` and count
+lost margin x (1 - W) (W = 0.5). `SAME_COVERAGE_RULE`: an eligible same-features variant beats do-nothing, upsells,
+check-ins and cross-sells (problem-solving actions still win).
+
+**Lock-in value** (`lock_value()`): only from new promo-credit payout / financing months. Spec formula multiplied the
+survival gap at month L by 24 months of margin; corrected to the sum of monthly survival gaps over the 24-month
+horizon, cut active only beyond the lock the customer already has (`contract_or_financing_months_remaining`).
+`action_if_lock_not_netted` shows the pick without netting. Model A already uses financing features, so no extra
+switching-cost adjustment to p_churn.
+
+**Guardrails:** no bill credits when p_churn_90d < 5%; upsells blocked within 90 days of bill shock, with an open
+support issue, when a cheaper eligible variant exists, when the top driver is shopping/port-out (port-out inquiry or
+risk >= 5%), or when the increase is > 25% of the current bill (40% if a line is already over its cap). Never income.
+`ENRICHMENT_IN_DECISIONS` is permanently False (tm-strategy A/B): income / job change / kid age band / likely_kid_flag
+appear only in `drivers` as `enrichment(simulated)[not used]`.
+
+**Upgrade gate** (`upgrade_gate.py`): device / family upgrade only for accounts in the top 15% of tm-bench's NO-INCOME
+upgrade model (tier "a features.csv + domain", lr_tuned, trained on synthetic 250k; bench top-15% capture 44%).
+`TM_UPGRADE_GATE=0` drops it. `BILL_SHOCK_RELIEF_OVERRIDE` (default True, OPEN DECISION) is the one switch for the
+care-credit 1-contact relief (`TM_BILL_SHOCK_RELIEF_OVERRIDE=0`).
+
+**Texts:** no "We noticed"; upsells carry "Happy as is? No need to do anything."; downgrades list what you give up;
+guarantee only as "covered by your 5-Year Price Guarantee" on a plan that has it; device credits as bill credits over
+payout months; graduation is never a trigger or in text. Validator blocklist (word-prefix regex, en + es): school,
+graduat, job, promot, income, kid, child, competitor, switch, port, AutoPay, public-only offers, "lock", "guaranteed
+for N years", "we noticed".
+
+**New outputs:** offers.csv adds `segment` (offer segment), `why_this_offer` (customer-facing), `lock_in_months`,
+`drivers`, `promo_skus`, `upgrade_pct`, `upgrade_candidate`, `action_if_lock_not_netted`; offer_candidates.csv adds
+`rank, action_code, save_value, upsell_gain, customer_benefit, lock_value, lock_in_months, promo_skus,
+blocked_or_ineligible_reason`; `out/line_tradein.csv` (per-line now-vs-wait); `out/upgrade_scores.csv`.
+Persona golden tests: `tests/test_persona_golden.py` (42 personas).

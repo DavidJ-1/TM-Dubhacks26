@@ -76,6 +76,7 @@ def load_catalog(conn: sqlite3.Connection) -> dict[str, pd.DataFrame]:
         "promotions": pd.read_sql("SELECT * FROM promotions", conn).set_index("sku", drop=False),
         "devices": pd.read_sql("SELECT * FROM devices", conn),
         "tradein_curves": pd.read_sql("SELECT * FROM tradein_curves", conn),
+        "addons": pd.read_sql("SELECT * FROM addons", conn).set_index("sku", drop=False),
     }
 
 
@@ -107,6 +108,7 @@ def build_account_facts(conn: sqlite3.Connection) -> pd.DataFrame:
                                    & (lines["financing_months_remaining"] == 0))
     lines["old_upgrade_line"] = lines["upgrade_ready_line"] & (lines["device_age_m"] >= OLD_DEVICE_MONTHS)
     lines["payoff_soon"] = lines["financing_months_remaining"].between(1, PAYOFF_SOON_MONTHS)
+    lines["kid_line"] = lines["member_role"].isin(["child", "teen"])          # REAL: lines.member_role
 
     # ---- usage per line: last 3 months vs first 3 months
     usage = usage.sort_values(["line_id", "month"])
@@ -149,6 +151,7 @@ def build_account_facts(conn: sqlite3.Connection) -> pd.DataFrame:
         "any_over_cap": g["over_cap"].any(),
         "any_usage_growth": g["usage_growth"].any(),
         "all_low_use_premium": g["low_use_premium"].all(),
+        "n_kid_lines_role": g["kid_line"].sum(),
     })
     la["plan_price_cents"] = [
         plan_price_cents(*plans.set_index("sku").loc[sku, ["line_prices", "extra_line_cents"]], n)
@@ -235,7 +238,122 @@ FEATURES_MAP = {
     "n_lines_device_36m_plus": "n_lines_device_36m_plus", "n_lines_over_cap_3m": "n_lines_over_cap_3m",
     "n_lines_usage_up_30pct": "n_lines_usage_up_30pct", "n_lines_light_on_premium": "n_lines_light_on_premium",
     "is_persona": "is_persona", "data_growth_pct": "data_growth_pct",
+    "streaming_hours_3m_avg": "streaming_hours_3m_avg", "has_streaming_addon": "has_streaming_addon",
+    "n_connected_lines": "n_connected_lines", "n_tradein_eligible_lines": "n_tradein_eligible_lines",
+    "segment": "segment",
 }
+
+# tm-data household / enrichment columns (6f7927a, harness/out/enrichment.csv for the 5,042 real accounts,
+# out/scaled/household_scaled.csv for scaled data). Names used exactly as published.
+# REAL = derived from the carrier's own sandbox account data (lines, member_role, billing, financing).
+# SIMULATED = per-account synthetic draws; only used in decisions when offers.CONFIG["ENRICHMENT_IN_DECISIONS"].
+ENRICHMENT_REAL_COLS = ["is_family_plan", "n_kid_lines", "promo_months_remaining",
+                        "contract_or_financing_months_remaining", "next_plan_sku", "next_plan_price_cents",
+                        "step_up_cost_cents"]
+ENRICHMENT_SIM_COLS = ["recent_job_change", "household_income_usd", "income_band", "likely_kid_flag",
+                       "kid_age_band", "step_up_cost_pct_income", "area_median_income_usd", "income_geo_level"]
+
+
+def apply_enrichment(facts: pd.DataFrame, path) -> tuple[pd.DataFrame, str]:
+    """Merge tm-data's enrichment.csv by its exact column names. Missing file/columns fall back to sandbox facts
+    (kid lines from lines.member_role child/teen, financing months), never to invented values."""
+    path = Path(path)
+    df = facts.copy()
+    have = []
+    if path.exists():
+        e = pd.read_csv(path)
+        cols = [c for c in ENRICHMENT_REAL_COLS + ENRICHMENT_SIM_COLS if c in e.columns]
+        df = df.drop(columns=[c for c in cols if c in df.columns]).merge(e[["account_id"] + cols],
+                                                                         on="account_id", how="left")
+        have = cols
+    fb = []
+    if "n_kid_lines" not in df or df["n_kid_lines"].isna().all():
+        df["n_kid_lines"] = df["n_kid_lines_role"]; fb.append("n_kid_lines<-lines.member_role")
+    df["n_kid_lines"] = df["n_kid_lines"].fillna(df["n_kid_lines_role"]).astype(int)
+    if "is_family_plan" not in df:
+        df["is_family_plan"] = (df["n_lines"] >= 2).astype(int); fb.append("is_family_plan<-n_lines>=2")
+    if "contract_or_financing_months_remaining" not in df:
+        df["contract_or_financing_months_remaining"] = df["max_financing_months_left"]
+        fb.append("contract_or_financing_months_remaining<-max_financing_months_left")
+    for c, dflt in [("promo_months_remaining", 0), ("likely_kid_flag", 0), ("kid_age_band", "none"),
+                    ("recent_job_change", 0), ("household_income_usd", np.nan), ("income_band", ""),
+                    ("step_up_cost_pct_income", np.nan), ("next_plan_sku", "")]:
+        if c not in df:
+            df[c] = dflt; fb.append(f"{c}=default")
+    df["is_family_plan"] = df["is_family_plan"].fillna(0).astype(int)
+    df["contract_or_financing_months_remaining"] = df["contract_or_financing_months_remaining"].fillna(
+        df["max_financing_months_left"]).fillna(0)
+    note = f"enrichment.csv columns used: {have}" if have else "enrichment.csv not found"
+    return df, note + (f"; fallbacks: {fb}" if fb else "")
+
+
+def build_line_tradein(conn: sqlite3.Connection, promos: pd.DataFrame, plan_family: pd.Series,
+                       wait_min_gain_cents: int = 2500) -> pd.DataFrame:
+    """Per-line now-vs-wait trade-in math (sandbox tradein_curves, lines, promotions). SYNTHETIC numbers.
+
+    net_* = max(0, trade-in value - remaining balance)   (spec 6b: trade-in only counts once the phone is paid off)
+    promo: PROMO-STUB-TRADEIN-ANY ($200, any condition, Essentials/More/Beyond) only on a paid-off phone.
+    decision: wait_until_payoff (still financed: the flat credit + payoff beat the value drop),
+              upgrade_now (paid off and 24+ months old: value only falls from here),
+              keep (paid off but < 24 months: nothing to gain by moving yet).
+    wait_verdict ('wait' / 'upgrade_now'): does net+promo in 6 or 12 months beat net+promo now by >= $25?
+    """
+    today = as_of(conn)
+    lines = pd.read_sql("SELECT line_id, account_id, device_sku, device_purchase_date, financing_balance_cents, "
+                        "financing_months_remaining, monthly_installment_cents, tradein_eligible "
+                        "FROM lines WHERE device_sku IS NOT NULL", conn)
+    curves = pd.read_sql("SELECT * FROM tradein_curves", conn)
+    cmax = curves.groupby("device_sku")["age_months"].max()
+    cv = curves.set_index(["device_sku", "age_months"])["value_cents"]
+    names = pd.read_sql("SELECT sku, name FROM devices", conn).set_index("sku")["name"]
+    anyt = promos.loc["PROMO-STUB-TRADEIN-ANY"]
+    fams = str(anyt["plan_families"]).split(",")
+
+    def val(sku, age):
+        if sku not in cmax.index:
+            return 0
+        return int(cv.get((sku, int(min(max(age, 0), cmax[sku]))), 0))
+
+    rows = []
+    for _, l in lines.iterrows():
+        age = months_between(pd.Timestamp(l["device_purchase_date"]).date(), today)
+        bal, mleft, inst = int(l["financing_balance_cents"]), int(l["financing_months_remaining"]), \
+            int(l["monthly_installment_cents"])
+        promo_ok = bool(l["tradein_eligible"]) and plan_family.get(l["account_id"]) in fams
+        out = {"account_id": l["account_id"], "line_id": l["line_id"], "device_sku": l["device_sku"],
+               "device_name": names.get(l["device_sku"], ""), "age_months": age,
+               "financing_balance_cents": bal, "financing_months_remaining": mleft,
+               "monthly_installment_cents": inst}
+        for tag, k in (("now", 0), ("6m", 6), ("12m", 12)):
+            v = val(l["device_sku"], age + k)
+            b = max(0, bal - inst * k)
+            promo = int(anyt["value_cents"]) if (promo_ok and b == 0) else 0
+            out[f"tradein_value_{tag}_cents"] = v
+            out[f"balance_{tag}_cents"] = b
+            out[f"net_{tag}_cents"] = max(0, v - b)
+            out[f"promo_{tag}_cents"] = promo
+        out["tradein_value_at_payoff_cents"] = val(l["device_sku"], age + mleft)
+        out["net_tradein_now_cents"] = out["net_now_cents"]
+        best_wait = max(out["net_6m_cents"] + out["promo_6m_cents"], out["net_12m_cents"] + out["promo_12m_cents"])
+        now_total = out["net_now_cents"] + out["promo_now_cents"]
+        out["wait_verdict"] = "wait" if best_wait >= now_total + wait_min_gain_cents else "upgrade_now"
+        promo_payoff = int(anyt["value_cents"]) if promo_ok else 0
+        # cost of a new phone's trade-in side: what you give up / get, in cents (lower = better for customer)
+        out["best_promo_sku"] = anyt["sku"] if promo_ok else ""
+        out["promo_value_cents"] = promo_payoff
+        out["cost_now_cents"] = bal - out["tradein_value_now_cents"] - out["promo_now_cents"]
+        out["cost_wait_cents"] = -out["tradein_value_at_payoff_cents"] - promo_payoff
+        out["delta_cents"] = out["cost_now_cents"] - out["cost_wait_cents"]   # > 0: waiting saves this much
+        if bal > 0:
+            dec = "wait_until_payoff" if out["delta_cents"] > 0 else "upgrade_now"
+        else:
+            dec = "upgrade_now" if age >= 24 else "keep"
+        out["decision"] = dec
+        out["wait_until"] = (pd.Timestamp(today) + pd.DateOffset(months=mleft)).strftime("%Y-%m-%d") \
+            if dec == "wait_until_payoff" else ""
+        out["data_note"] = "synthetic/simulated"
+        rows.append(out)
+    return pd.DataFrame(rows)
 
 
 def apply_features_csv(facts: pd.DataFrame, path) -> tuple[pd.DataFrame, str]:
