@@ -1,0 +1,109 @@
+{
+ "synthetic_extra_columns_dropped": [
+  "recent_job_change",
+  "household_income_usd",
+  "income_band",
+  "area_median_income_usd",
+  "income_geo_level",
+  "next_plan_sku",
+  "next_plan_price_cents",
+  "step_up_cost_cents",
+  "step_up_cost_pct_income",
+  "is_family_plan",
+  "likely_kid_flag",
+  "n_kid_lines",
+  "kid_age_band",
+  "promo_months_remaining",
+  "contract_or_financing_months_remaining"
+ ],
+ "synthetic_cols_matching_label_names": [],
+ "synthetic_cols_matching_leak_regex": [],
+ "id_overlap_real_vs_synthetic": 0,
+ "n_features_after_prepare": 58,
+ "same_rows_vs_oracle": [
+  {
+   "target": "churn_90d",
+   "model": "logreg_unweighted",
+   "train_size": 250000,
+   "n_test_rows": 5000,
+   "n_test_pos": 137,
+   "auc_model": 0.8645379755670332,
+   "auc_oracle_same_rows": 0.8638737915227601,
+   "diff": 0.0006641840442730418,
+   "diff_ci95": [
+    -0.003377732348089471,
+    0.0052582925441776625
+   ]
+  },
+  {
+   "target": "churn_90d",
+   "model": "logreg_core22",
+   "train_size": 250000,
+   "n_test_rows": 5000,
+   "n_test_pos": 137,
+   "auc_model": 0.8620973806382471,
+   "auc_oracle_same_rows": 0.8638737915227601,
+   "diff": -0.001776410884512969,
+   "diff_ci95": [
+    -0.004231884286381179,
+    0.0008571726623348952
+   ]
+  },
+  {
+   "target": "churn_90d",
+   "model": "hgb_sigmoid",
+   "train_size": 250000,
+   "n_test_rows": 5000,
+   "n_test_pos": 137,
+   "auc_model": 0.8647331030828647,
+   "auc_oracle_same_rows": 0.8638737915227601,
+   "diff": 0.0008593115601045476,
+   "diff_ci95": [
+    -0.006281773889236658,
+    0.008458064845376314
+   ]
+  },
+  {
+   "target": "upgrade_90d",
+   "model": "logreg_unweighted",
+   "train_size": 250000,
+   "n_test_rows": 5000,
+   "n_test_pos": 322,
+   "auc_model": 0.7653374192400532,
+   "auc_oracle_same_rows": 0.8076685104586289,
+   "diff": -0.0423310912185757,
+   "diff_ci95": [
+    -0.05616853468993232,
+    -0.028573569556454195
+   ]
+  },
+  {
+   "target": "upgrade_90d",
+   "model": "logreg_core22",
+   "train_size": 250000,
+   "n_test_rows": 5000,
+   "n_test_pos": 322,
+   "auc_model": 0.6838399114130104,
+   "auc_oracle_same_rows": 0.8076685104586289,
+   "diff": -0.12382859904561849,
+   "diff_ci95": [
+    -0.1499697025723686,
+    -0.09742999642837229
+   ]
+  },
+  {
+   "target": "upgrade_90d",
+   "model": "hgb_sigmoid",
+   "train_size": 250000,
+   "n_test_rows": 5000,
+   "n_test_pos": 322,
+   "auc_model": 0.7704943716988998,
+   "auc_oracle_same_rows": 0.8076685104586289,
+   "diff": -0.03717413875972908,
+   "diff_ci95": [
+    -0.050410338866479665,
+    -0.02427287833362983
+   ]
+  }
+ ]
+}
