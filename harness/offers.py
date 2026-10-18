@@ -34,6 +34,7 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import offer_detectors as det  # noqa: E402
+import offer_messages as om  # noqa: E402
 
 OUT_DIR = Path(os.environ.get("TM_OUT_DIR", HERE / "out"))
 
@@ -596,11 +597,24 @@ def main() -> pd.DataFrame:
     df["upgrade_moment"] = df[det.UPGRADE_MOMENT_COLS].any(axis=1)
 
     offers, cands = choose(df, cat["promotions"], plans)
+    # deterministic SMS templates for the chosen action (no LLM); see offer_messages.py
+    fx = df.set_index("account_id")
+    for lang in ("en", "es"):
+        offers[f"message_{lang}"] = [
+            om.build_message(fx.loc[a], code, DETAILS[a]["res"], cat["promotions"], plans, lang)
+            for a, code in zip(offers["account_id"], offers["action_code"])]
+    offers["message_status"] = np.where(
+        offers["action_code"] == "keep_your_phone", "suppressed_adapted_promo",
+        np.where(offers["action_code"] == "do_nothing", "no_contact", "ok"))
+    val = om.validate_messages(offers, df, cat["promotions"], plans)
+    val.to_csv(OUT_DIR / "message_validation.csv", index=False)
+    print(f"messages: {int(val.passed.sum())}/{len(val)} accounts pass the sandbox-amount validator "
+          f"({int((offers.message_en != '').sum())} with a message)")
     offers = offers.merge(df[["account_id", "upgrade_moment"] + det.UPGRADE_MOMENT_COLS], on="account_id")
     offers["churn_source"] = "real" if source.startswith("real") else "mock"
     offers["data_note"] = "synthetic/simulated"
     first = ["account_id", "action", "expected_value", "reason", "runner_up_action", "runner_up_ev",
-             "upgrade_moment"] + det.UPGRADE_MOMENT_COLS
+             "upgrade_moment"] + det.UPGRADE_MOMENT_COLS + ["message_en", "message_es"]
     offers = offers[first + [c for c in offers.columns if c not in first]].sort_values("risk_rank")
     offers.to_csv(OUT_DIR / "offers.csv", index=False)
     cands["data_note"] = "synthetic/simulated"

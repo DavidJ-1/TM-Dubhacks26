@@ -82,21 +82,21 @@ life event, and whether the customer is free to leave (no financing).
 No persona is hand-pinned. Every decision comes from the general rules and the config block at the top of
 `offers.py`.
 
-## Model C: uplift score and policy simulation (`harness/uplift.py`)
-**One command rebuilds everything:** `python harness/uplift.py` writes offers.csv, offer_candidates.csv,
-uplift.csv, policy_eval.csv, uplift_curve.csv, uplift_curve.png and policy_value.png, plus
-offers_pipeline_run.json, which records the churn_scores.csv mtime used. If churn_scores.csv changes during the
-run, the script rebuilds once more. PNGs need matplotlib; without it the script skips them and still writes the CSVs.
+## SMS messages (`offer_messages.py`, columns `message_en`, `message_es`, `message_status`)
+These are deterministic templates, not LLM output. Each message is under 300 characters (current maximum: about 250).
+- It names the top risk reason in plain words with real values (for example "your promo ended and your bill
+  went up 22%"), preferring the reason that the chosen action addresses.
+- It offers **only the chosen action**. Every dollar amount comes from the sandbox: care credit $25
+  (`PROMO-STUB-CARE-CREDIT`), loyalty $5/mo (`PROMO-STUB-LOYALTY-CREDIT`), device credits (`OLD-PHONE-UPGRADE` $150 or
+  `TRADEIN-ANY` $200, with their payout months), and plan price differences computed from `plans.line_prices`.
+- do nothing gets a blank message (`no_contact`). Fix-first gets a callback-to-fix note with no discount.
+- **Keep-your-phone is never messaged.** The adapted credit is not a sandbox promo for existing customers, so it
+  gets a blank message with `message_status = suppressed_adapted_promo`. Under `STRICT_PROMO_RULES=True` it is
+  never chosen.
+- Every message is synthetic: no names ("Hi there" / "Hola") and no phone numbers. Spanish uses *usted* throughout.
+- **Validator:** `validate_messages()` re-derives every allowed amount from the sandbox tables and checks for
+  length, phone-number-like text, and dollar amounts in fix-first messages. Results go to
+  `out/message_validation.csv`, and the pass count is printed on every run.
 
-- `uplift_score = p_churn_90d x save_rate(best eligible retention action)`: the expected incremental save from
-  contacting the customer ("persuadable and at risk", not risk alone; see Ascarza 2018 in the plan doc).
-- `policy_eval.csv` compares no outreach, a blanket $25 care credit, the 3+ support calls rule, Model A's top 20%
-  by risk, Model C's top N by uplift, and the Model B EV chooser. It reports simulated incremental saves,
-  retained value, upsell gain, cost, annoyance and net value.
-- `uplift_curve.csv` holds the Qini-style points (`policy_or_model, frac_targeted, cum_incremental_saves,
-  random_baseline`, plus `cum_net_value_usd`).
-
-**Circularity caveat (also printed under both charts):** there are no real offer outcomes. Policies are scored
-with tm-data's synthetic `p_true_90d` labels multiplied by Model B's *own* assumed save rates, costs and
-annoyance, so the simulation partly grades Model B against its own assumptions. It shows how each rule spends
-contacts under those assumptions. It is not measured lift.
+## Model C
+See `UPLIFT_README.md`. `python harness/uplift.py` is the single command that rebuilds Model B and Model C.

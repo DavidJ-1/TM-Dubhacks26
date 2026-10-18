@@ -234,7 +234,7 @@ FEATURES_MAP = {
     "plan_misfit_share": "plan_misfit_share",
     "n_lines_device_36m_plus": "n_lines_device_36m_plus", "n_lines_over_cap_3m": "n_lines_over_cap_3m",
     "n_lines_usage_up_30pct": "n_lines_usage_up_30pct", "n_lines_light_on_premium": "n_lines_light_on_premium",
-    "is_persona": "is_persona",
+    "is_persona": "is_persona", "data_growth_pct": "data_growth_pct",
 }
 
 
