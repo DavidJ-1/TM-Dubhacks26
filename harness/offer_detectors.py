@@ -19,6 +19,8 @@ import pandas as pd
 # --- where the read-only sandbox lives ------------------------------------------------------
 _SANDBOX_CANDIDATES = [
     os.environ.get("TM_SANDBOX_DB"),
+    os.environ.get("DUBHACKS_DB"),
+    str(Path(__file__).resolve().parents[1] / "vendor" / "dubhacks" / "data" / "sandbox.db"),  # repo Makefile
     str(Path(__file__).resolve().parents[2] / "dubhacks" / "data" / "sandbox.db"),  # /workspace/tmobile/dubhacks
     "/workspace/tmobile/dubhacks/data/sandbox.db",
     "/tmp/dubhacks-ro/data/sandbox.db",

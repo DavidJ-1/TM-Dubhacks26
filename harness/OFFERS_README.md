@@ -81,3 +81,22 @@ life event, and whether the customer is free to leave (no financing).
 
 No persona is hand-pinned. Every decision comes from the general rules and the config block at the top of
 `offers.py`.
+
+## Model C: uplift score and policy simulation (`harness/uplift.py`)
+**One command rebuilds everything:** `python harness/uplift.py` writes offers.csv, offer_candidates.csv,
+uplift.csv, policy_eval.csv, uplift_curve.csv, uplift_curve.png and policy_value.png, plus
+offers_pipeline_run.json, which records the churn_scores.csv mtime used. If churn_scores.csv changes during the
+run, the script rebuilds once more. PNGs need matplotlib; without it the script skips them and still writes the CSVs.
+
+- `uplift_score = p_churn_90d x save_rate(best eligible retention action)`: the expected incremental save from
+  contacting the customer ("persuadable and at risk", not risk alone; see Ascarza 2018 in the plan doc).
+- `policy_eval.csv` compares no outreach, a blanket $25 care credit, the 3+ support calls rule, Model A's top 20%
+  by risk, Model C's top N by uplift, and the Model B EV chooser. It reports simulated incremental saves,
+  retained value, upsell gain, cost, annoyance and net value.
+- `uplift_curve.csv` holds the Qini-style points (`policy_or_model, frac_targeted, cum_incremental_saves,
+  random_baseline`, plus `cum_net_value_usd`).
+
+**Circularity caveat (also printed under both charts):** there are no real offer outcomes. Policies are scored
+with tm-data's synthetic `p_true_90d` labels multiplied by Model B's *own* assumed save rates, costs and
+annoyance, so the simulation partly grades Model B against its own assumptions. It shows how each rule spends
+contacts under those assumptions. It is not measured lift.

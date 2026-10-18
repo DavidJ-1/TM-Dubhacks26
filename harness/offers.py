@@ -353,14 +353,20 @@ def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) 
 
     def add(action, eligible, cost, gain=0.0, detail="", why_not=""):
         if not eligible:
+            # "forced" terms let policy simulations (uplift.py) price a blanket offer to ineligible accounts
+            f_ann = C["COMBO_ANNOYANCE"] if action == "care_credit_fix_first" else C["ANNOYANCE"][action]
             res[action] = {"ev": None, "eligible": False, "detail": why_not,
-                           "save_rate": None, "cost": None, "annoyance": None}
+                           "save_rate": None, "cost": None, "annoyance": None,
+                           "forced_save_rate": sr(action), "forced_cost": cost, "forced_annoyance": f_ann,
+                           "forced_gain": gain}
             return
         ann = C["COMBO_ANNOYANCE"] if action == "care_credit_fix_first" else C["ANNOYANCE"][action]
         if action in ("step_up", "device_upgrade") and pain:
             ann += C["UPSELL_AFTER_PAIN_PENALTY"]
         ev = p * sr(action) * value + gain - cost - ann
         res[action] = {"ev": round(ev, 2), "eligible": True, "detail": detail, "save_rate": sr(action),
+                       "forced_save_rate": sr(action), "forced_cost": cost, "forced_annoyance": ann,
+                       "forced_gain": gain,
                        "cost": round(cost, 2), "annoyance": round(ann, 2), "gain": round(gain, 2),
                        "save_value": round(p * sr(action) * value, 2)}
 
@@ -519,10 +525,15 @@ def candidate_reason(a: str, v: dict, chosen: str) -> str:
     return f"Eligible ({v['detail']}): {parts} - cost ${v['cost']:.2f} - annoyance ${v['annoyance']:.2f}; {tail}."
 
 
+DETAILS: dict[str, dict] = {}  # account_id -> evaluate_account() output from the last run (used by uplift.py)
+
+
 def choose(df: pd.DataFrame, promos: pd.DataFrame, plans: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     rows, cands = [], []
+    DETAILS.clear()
     for _, row in df.iterrows():
         ev = evaluate_account(row, promos, plans)
+        DETAILS[row["account_id"]] = ev
         res = ev["res"]
         scored = sorted(((a, v["ev"]) for a, v in res.items() if v["eligible"] and a != "do_nothing"),
                         key=lambda t: (-t[1], ACTIONS.index(t[0])))
