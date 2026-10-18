@@ -11,7 +11,7 @@ tm-offers EV engine (harness/offers.py CONFIG + sandbox promotions table; nothin
 
 Per strategy: contacted, expected saves (sum p_churn x save_rate), offer cost, cost per save,
 net expected value (saved 24-month margin - offer cost - contact/annoyance cost, i.e. the engine's
-own EV terms without upsell/lock/benefit), and unneeded contacts (contacted while p_churn < 5%,
+own EV terms without upsell/lock/benefit), and contacts to low-risk customers (contacted while p_churn < 5%,
 the engine's MIN_CREDIT_P_CHURN guardrail). A "truth check" re-scores saves with the hidden simulated
 p_true_90d from labels.csv instead of the model's own scores.
 Plus churn-model lift from out-of-fold predictions (churn_oof_pred.csv).
@@ -148,13 +148,13 @@ def main():
         k = int(m.sum())
         return dict(strategy=name, description=desc, contacted=k, expected_saves=saves,
                     offer_cost_usd=k * care_cost, contact_cost_usd=k * care_ann, saved_margin_usd=sv,
-                    unneeded_contacts=int((m & (p < low_risk)).sum()),
+                    contacts_to_low_risk=int((m & (p < low_risk)).sum()),
                     churners_reached=int(base.churn_90d.fillna(0)[m].sum()), credit_spend_usd=k * care_cost,
                     expected_saves_true_p=saves_t, saved_margin_true_p_usd=sv_t,
                     other_ev_usd=0.0)
 
     rows = [dict(strategy="1. Do nothing", description="no contact, no cost", contacted=0, expected_saves=0.0,
-                 offer_cost_usd=0.0, contact_cost_usd=0.0, saved_margin_usd=0.0, unneeded_contacts=0,
+                 offer_cost_usd=0.0, contact_cost_usd=0.0, saved_margin_usd=0.0, contacts_to_low_risk=0,
                  churners_reached=0, credit_spend_usd=0.0, expected_saves_true_p=0.0, saved_margin_true_p_usd=0.0, other_ev_usd=0.0)]
     rows.append(credit_strategy("2. Discount everyone", pd.Series(True, index=base.index),
                                 f"${care_cost:.0f} care credit to all {n:,} accounts"))
@@ -174,7 +174,7 @@ def main():
                      expected_saves=(p * sr)[contact].sum(), offer_cost_usd=ch["offer_cost"].fillna(0)[contact].sum(),
                      contact_cost_usd=ch["annoyance"].fillna(0)[contact].sum(),
                      saved_margin_usd=(p * sr * val)[contact].sum(),
-                     unneeded_contacts=int((contact & (p < low_risk)).sum()),
+                     contacts_to_low_risk=int((contact & (p < low_risk)).sum()),
                      churners_reached=int(base.churn_90d.fillna(0)[contact].sum()),
                      credit_spend_usd=ch["offer_cost"].fillna(0)[contact & base.action_code.isin(eng_cfg_mod.CREDIT_ACTIONS)].sum()
                      - (contact & (base.action_code == "care_credit_fix_first")).sum() * C["FIX_FIRST_CALLBACK_COST"],
@@ -186,10 +186,10 @@ def main():
     t["net_value_true_p_usd"] = t.saved_margin_true_p_usd - t.offer_cost_usd - t.contact_cost_usd
     t["cost_per_save_true_p_usd"] = np.where(t.expected_saves_true_p > 0,
                                              t.offer_cost_usd / t.expected_saves_true_p.replace(0, np.nan), np.nan)
-    t["unneeded_share"] = np.where(t.contacted > 0, t.unneeded_contacts / t.contacted.replace(0, np.nan), np.nan)
+    t["contacts_to_low_risk_share"] = np.where(t.contacted > 0, t.contacts_to_low_risk / t.contacted.replace(0, np.nan), np.nan)
     t["data_note"] = NOTE
     t["churners_reached_share"] = t.churners_reached / max(1, int(base.churn_90d.fillna(0).sum()))
-    cols = ["strategy", "description", "contacted", "unneeded_contacts", "unneeded_share", "credit_spend_usd",
+    cols = ["strategy", "description", "contacted", "contacts_to_low_risk", "contacts_to_low_risk_share", "credit_spend_usd",
             "churners_reached", "churners_reached_share", "expected_saves", "offer_cost_usd", "cost_per_save_usd",
             "contact_cost_usd", "saved_margin_usd", "net_value_usd",
             "expected_saves_true_p", "cost_per_save_true_p_usd", "net_value_true_p_usd", "other_ev_usd", "data_note"]
@@ -236,9 +236,9 @@ def main():
     cheaper = 1 - ours.cost_per_save_usd / blanket.cost_per_save_usd
     n_churn = int(base.churn_90d.fillna(0).sum())
     headline = [
-        f"Ours makes {int(ours.unneeded_contacts):,} contacts to low-risk customers (no credits: fix-first callbacks, "
-        f"money-saving plan moves, check-ins and usage-based upsells) vs {int(blanket.unneeded_contacts):,} for discounting everyone and "
-        f"{int(rule.unneeded_contacts):,} for the 3+ calls rule, and spends {money(ours.credit_spend_usd)} on credits vs "
+        f"Ours makes {int(ours.contacts_to_low_risk):,} contacts to low-risk customers (no credits: fix-first callbacks, "
+        f"money-saving plan moves, check-ins and usage-based upsells) vs {int(blanket.contacts_to_low_risk):,} for discounting everyone and "
+        f"{int(rule.contacts_to_low_risk):,} for the 3+ calls rule, and spends {money(ours.credit_spend_usd)} on credits vs "
         f"{money(blanket.credit_spend_usd)} for discounting everyone.",
         f"Ours reaches {int(ours.churners_reached)} of the {n_churn} customers who actually churned in the simulation "
         f"({ours.churners_reached_share:.0%}) with {int(ours.contacted):,} contacts; the 3+ calls rule reaches "
@@ -256,10 +256,10 @@ def main():
           "", f"## 1. Assumption-free metrics ({n:,} synthetic accounts)", "",
           f"These depend only on who each strategy contacts: no assumed save rates. Low risk = Model A risk < "
           f"{low_risk:.0%}. Churners reached = contacted accounts that churned in the simulated labels ({n_churn} total).", "",
-          "| strategy | contacted | unneeded contacts (low risk) | credit / discount spend | actual churners reached |",
+          "| strategy | contacted | contacts to low-risk customers (risk < 5%) | credit / discount spend | actual churners reached |",
           "|---|---:|---:|---:|---:|"]
     for _, x in t.iterrows():
-        md.append(f"| {x.strategy} | {x.contacted:,} | {x.unneeded_contacts:,} ({0 if pd.isna(x.unneeded_share) else x.unneeded_share:.0%}) | "
+        md.append(f"| {x.strategy} | {x.contacted:,} | {x.contacts_to_low_risk:,} ({0 if pd.isna(x.contacts_to_low_risk_share) else x.contacts_to_low_risk_share:.0%}) | "
                   f"{money(x.credit_spend_usd)} | {x.churners_reached} ({x.churners_reached_share:.0%}) |")
     md += ["", "## 2. Simulated value (depends on assumed save rates)", "",
            f"Assumed save rates (engine CONFIG, illustrative): $25 care credit {sr_txt}. Same for every strategy.", "",
@@ -276,9 +276,9 @@ def main():
     md += ["", f"Ours also carries {money(ours.other_ev_usd)} of non-retention EV (upsell margin, lock-in value and "
            "customer-savings trust value) that is **not** included in net value above, to keep the comparison "
            "like-for-like.", "",
-           f"Ours' {int(ours.unneeded_contacts)} low-risk contacts by action: " +
+           f"Ours' {int(ours.contacts_to_low_risk)} low-risk contacts by action: " +
            ", ".join(f"{k} {v}" for k, v in ours_low.items()) + ". None are credits (the engine blocks credits below 5% risk); "
-           "upsells (step_up/family_upgrade/home_internet_bundle) are the ones a judge could call unneeded.", "",
+           "upsells (step_up/family_upgrade/home_internet_bundle) are the ones a judge could question.", "",
            "## Churn model lift (out-of-fold, 5-fold CV)", "",
            f"{n_reg:,} regular accounts, {n_ch} actual churners in 90 days (base rate {n_ch/n_reg:.1%}).", "",
            "| method | AUC | share of churners in top 10% | lift |", "|---|---:|---:|---:|"]
@@ -295,7 +295,7 @@ def main():
            f"bill shock) and ${care_ann:.0f} contact/annoyance cost. Save-rate source: {cc_src}.",
            "- Ours uses the chosen row in offer_candidates.csv (save rate, offer cost, annoyance) for each account.",
            "- Net value = saved margin - offer cost - contact/annoyance cost.",
-           "- Unneeded contact = contacted while Model A risk < 5% (the engine's MIN_CREDIT_P_CHURN).",
+           "- Contact to a low-risk customer = contacted while Model A risk < 5% (the engine's MIN_CREDIT_P_CHURN).",
            "", "## Caveats", "",
            "- We don't claim real lift until a holdout test. Synthetic data; save rates and costs are made-up but consistent across strategies.",
            "- Ours' offer cost includes expected revenue given back on plan moves (right-size/variant) and $15 callbacks; credit spend counts only bill credits.",
@@ -320,8 +320,7 @@ def main():
     for f in ("comparison.csv", "COMPARISON.md", "comparison_lift.csv"):
         shutil.copy(OUT / f, DEMO / f)
     print("\n".join(headline))
-    print(t[["strategy", "contacted", "unneeded_contacts", "credit_spend_usd", "churners_reached", "expected_saves", "offer_cost_usd", "cost_per_save_usd", "net_value_usd",
-             "unneeded_contacts"]].to_string(index=False))
+    print(t[["strategy", "contacted", "contacts_to_low_risk", "credit_spend_usd", "churners_reached", "expected_saves", "offer_cost_usd", "cost_per_save_usd", "net_value_usd"]].to_string(index=False))
     print(lift.to_string(index=False))
     print(f"wrote {OUT/'comparison.csv'}, {OUT/'COMPARISON.md'}, {DEMO/'comparison_chart.png'}. ALL NUMBERS SYNTHETIC.")
 
@@ -338,12 +337,12 @@ def chart(t: pd.DataFrame, sr_txt: str):
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(13, 5.6))
     h = 0.38
     b1 = a1.barh(y - h / 2, d.churners_reached, h, color=pink, label="actual churners reached")
-    b2 = a1.barh(y + h / 2, d.unneeded_contacts, h, color=grey, label="unneeded contacts (risk < 5%)")
-    for bars, vals in ((b1, d.churners_reached), (b2, d.unneeded_contacts)):
+    b2 = a1.barh(y + h / 2, d.contacts_to_low_risk, h, color=grey, label="contacts to low-risk customers (risk < 5%)")
+    for bars, vals in ((b1, d.churners_reached), (b2, d.contacts_to_low_risk)):
         for b, v in zip(bars, vals):
             a1.text(v, b.get_y() + b.get_height() / 2, f" {int(v):,}", va="center", fontsize=9)
     a1.set_xscale("symlog", linthresh=100)
-    a1.set_xlim(0, max(d.unneeded_contacts.max(), d.churners_reached.max()) * 4)
+    a1.set_xlim(0, max(d.contacts_to_low_risk.max(), d.churners_reached.max()) * 4)
     a1.set_yticks(y, [f"{l}\ncredit spend \\${sp:,.0f}" for l, sp in zip(labels, d.credit_spend_usd)], fontsize=9)
     a1.invert_yaxis()
     a1.set_title("Assumption-free: who gets contacted", fontsize=12, weight="bold")
