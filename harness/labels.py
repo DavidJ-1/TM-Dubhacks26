@@ -32,6 +32,8 @@ from features import find_db  # noqa: E402
 
 FEATURES = HERE / "out" / "features.csv"
 OUT = HERE / "out" / "labels.csv"
+ENRICH = HERE / "out" / "enrichment.csv"  # from enrichment.py; needed by the upgrade recipe
+ENRICH_COLS = ["household_income_usd", "area_median_income_usd", "step_up_cost_pct_income"]
 TARGET_MONTHLY = 0.0099
 SEED_LABEL = "tm-churn-2026-label"
 SEED_TOY = "tm-churn-2026-toy"
@@ -159,6 +161,7 @@ UPGRADE_COEFS = [
     ("tier_standard", 0.50, "plan_tier = standard"),
     ("capped_plan", 0.50, "plan has a data cap"),
     ("top_tier", -1.00, "already on experience_beyond (top) family"),
+    ("premium_nontop", -0.40, "already on a premium non-top plan (experience_more family): less headroom"),
     ("over_cap_share", 1.50, "share of lines over plan cap (last 3 months)"),
     ("near_cap", 0.60, "capped plan and avg data per line >= 80% of cap (last 3 months)"),
     ("usage_growth", 0.80, "data_growth_pct clipped to [-0.5, 1.0] (last 3 vs prior 3 months)"),
@@ -170,6 +173,8 @@ UPGRADE_COEFS = [
     ("student", 0.70, "segment or discount_group = student (life-stage step-up, e.g. graduation; doc lists student as an upgrade moment)"),
     ("bill_increase_pct", -4.00, "bill shock: max(0, last / prior avg - 1)"),
     ("promo_expired_recent", -1.00, "bill shock: promo expired in last 3 bill months"),
+    ("stepup_cost_pct_income", -0.50, "affordability: 12 x monthly step-up cost to the next plan up (sandbox plans) / household income x 100, clipped to [0, 10]; 0 on the top plan (enrichment.csv)"),
+    ("log_income_ratio", 0.30, "log(household income / ACS national median $80,734), clipped to [-2, 2] (enrichment.csv; income is synthetic)"),
     ("churn_risk_z", -0.25, "max(0, z-score of logit(tuned monthly churn hazard)): mild negative for above-average risk only; tuned recipe always"),
 ]
 
@@ -180,6 +185,7 @@ def upgrade_terms(f: pd.DataFrame, churn_logit: np.ndarray, regular: np.ndarray)
     t["tier_standard"] = (f["plan_tier"] == "standard").astype(float)
     t["capped_plan"] = f["plan_data_cap_gb"].notna().astype(float)
     t["top_tier"] = (f["plan_family"] == "experience_beyond").astype(float)
+    t["premium_nontop"] = (f["plan_family"] == "experience_more").astype(float)
     t["over_cap_share"] = f["n_lines_over_cap_3m"] / f["n_lines"]
     util = (f["data_gb_3m_avg"] / f["n_lines"]) / f["plan_data_cap_gb"]
     t["near_cap"] = (util >= 0.8).astype(float)  # NaN cap (unlimited) -> False
@@ -192,6 +198,8 @@ def upgrade_terms(f: pd.DataFrame, churn_logit: np.ndarray, regular: np.ndarray)
     t["student"] = ((f["segment"] == "student") | (f["discount_group"] == "student")).astype(float)
     t["bill_increase_pct"] = f["bill_increase_pct"].fillna(0)
     t["promo_expired_recent"] = f["promo_expired_recent"].astype(float)
+    t["stepup_cost_pct_income"] = f["step_up_cost_pct_income"].fillna(0).clip(0, 10)
+    t["log_income_ratio"] = np.log(f["household_income_usd"] / f["area_median_income_usd"]).clip(-2, 2)
     mu, sd = churn_logit[regular].mean(), churn_logit[regular].std()
     t["churn_risk_z"] = ((churn_logit - mu) / sd).clip(min=0)
     return t[[c for c, _, _ in UPGRADE_COEFS]].astype(float)
@@ -252,6 +260,11 @@ def label_frame(f: pd.DataFrame, recipe: str = "tuned", toy_p=None, regular=None
     for k in range(3):
         lab[f"label_driver_{k + 1}"] = [names[i] if contrib[r, i] > 0 else "" for r, i in enumerate(top[:, k])]
     # upgrade target: always uses the TUNED churn hazard so --recipe affects churn columns only
+    if not set(ENRICH_COLS) <= set(f.columns):
+        if not ENRICH.exists():
+            raise FileNotFoundError(f"{ENRICH} missing: run python harness/enrichment.py first")
+        e = pd.read_csv(ENRICH)[["account_id"] + ENRICH_COLS]
+        f = f.merge(e, on="account_id", how="left", validate="1:1")
     _, _, h_tuned = fit(terms(f)[[c for c, _, _ in COEFS_TUNED]], COEFS_TUNED, SHRINK, regular)
     U = upgrade_terms(f, np.log(h_tuned / (1 - h_tuned)), regular)
     wu = np.array([c for _, c, _ in UPGRADE_COEFS])
