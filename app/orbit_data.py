@@ -448,7 +448,8 @@ def engine_inputs() -> pd.DataFrame | None:
 # Primary: the models team's ledger (events.csv: <=3 per account, newest first, plain event_text; timing / wait_until
 # from ledger.csv; its money columns are NOT read). Read in place, else from its commit, else from the judge sandbox
 # opened READ-ONLY (mode=ro URI; never written).
-LEDGER_DIR = Path("/workspace/tmobile/v2-efficacy/experiments/ledger")
+LEDGER_DIR = next((p for p in (ROOT / "experiments/ledger", Path("/workspace/tmobile/v2-efficacy/experiments/ledger"))
+                   if (p / "ledger_summary.json").exists()), ROOT / "experiments/ledger")
 LEDGER_COMMIT = "9e4d402"
 SANDBOX = next((p for p in (ROOT / "vendor/dubhacks/data/sandbox.db", SHARED / "vendor/dubhacks/data/sandbox.db") if p.exists()), None)
 
