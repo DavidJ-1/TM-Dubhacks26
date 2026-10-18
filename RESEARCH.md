@@ -266,3 +266,35 @@ Thesis: the carrier tells customers when they're overpaying, says "don't upgrade
 **Recommendation:** set `right_size` acceptance to a **3% base (range 2–5%)** with a **sensitivity of up to 13%**. Apply a timing bump only at contract end or device payoff (Ofcom: +8–15 pp at contract end). No public source supports 45%. Caveat: Ascarza's plans saved money by cutting overage, and Ofgem's are energy, not telecom.
 
 **Synthetic implication (our 5,042 synthetic accounts; all figures synthetic):** 682 accounts are right-size-eligible, worth about **$450/mo at 3%** and about **$1,900/mo at 13%**, against a **$14,830/mo ceiling** if everyone accepted.
+
+## 12. T-Mobile-side value and hidden-value messaging
+David's ask: show what each offer is worth **to T-Mobile** (churn avoided × account value − revenue given up − contact cost), and add a "hidden value" play (remind customers of perks they already pay for). Full notes: `research-notes/notes_hidden_value.md`. Accessed 2026-10-17. Strength: A = filing / peer-reviewed; B = company or analyst statement; C = weak. All engine numbers stay synthetic.
+
+| Claim | Number | Source (date) | Strength | Maps to `harness/offers.py` |
+|---|---|---|---|---|
+| T-Mobile postpaid ARPA; account churn (Q2'26) | $152.91/mo; 0.99%/mo | [TMUS Ex 99.1](https://www.sec.gov/Archives/edgar/data/1283699/000128369926000100/tmus06302026ex991.htm) (2026-07-23) | A | account value inputs |
+| Core Adj. EBITDA ÷ service revenue (Q2'26, **derived**) | $9.537B ÷ $19.0B ≈ **50%** (≈42% of total revenue) | same filing | A inputs / derived | `SERVICE_MARGIN` 0.50 now has an anchor (upper bound: EBITDA is pre-capex) |
+| Account value over our horizon (**derived**) | $152.91 × 0.50 × 24 ≈ **$1.8K**; undiscounted full life (1/0.0099 ≈ 101 mo) ≈ $7.7K | arithmetic | derived | `VALUE_HORIZON_MONTHS` 24 = conservative |
+| Analyst net LTV per wireless customer | ≈$1,900 financed vs ≈$1,516 BYOD | [Recon Analytics](https://www.reconanalytics.com/products/demanded-and-hated/) (2025-26) | B | cross-check: matches the 24-mo figure |
+| Current acquisition / retention $ per sub | **Not disclosed by any US carrier.** Verizon: CoA + CoR down ~35% via micro-segmentation, no $ | [VZ 1Q26 transcript](https://www.verizon.com/about/sites/default/files/2026-06/vz_1q26_transcript_042726rm.pdf) (2026-04-27) | A (statement) | none; old CPGA $300-400 (2004-05, §2) |
+| "5-25x cheaper to retain" | Traced to [HBR, Gallo, 2014-10-29](https://hbr.org/2014/10/the-value-of-keeping-the-right-customers): "depending on which study you believe", **no study named** | — | **C: do not use** | — |
+| Cost of a live support contact vs self-service | **$8.01 vs $0.10** (2019 poll); newer median **$13.50 vs $1.84** | [Gartner 2019-09-25](https://www.gartner.com/en/newsroom/press-releases/2019-09-25-gartner-says-only-9--of-customers-report-solving-thei); [Gartner benchmark abstract](https://www.gartner.com/en/documents/5164231) (~2024) | A- / B | `FIX_FIRST_CALLBACK_COST` $15 = plausible (≈1-2 assisted contacts); `CHECK_IN_COST` $2 = between self-service and live; perk reminder in-app ≈ $0.10-1.84 |
+| ContactBabel $7.16 per inbound call | relayed by secondary sites; not in the free PDF | ContactBabel 2025 guide | C (unverified) | don't cite |
+| Perk-salience RCT in telecom (35k Canadian mobile subs, 12 mo): "perceived value" treatment **no causal effect** on satisfaction; **fewer marketing messages** reduced frustration and, with a discount, raised loyalty | [McKenzie, U. Reading thesis](https://centaur.reading.ac.uk/115294/1/McKenzie_thesis.pdf) (RCT 2019-20) | B- (thesis) | **null**: reminders aren't free; cap frequency |
+| Salience can backfire: "you could save" outreach raised churn 6% → 10% | [Ascarza et al., JMR 2016](https://doi.org/10.1509/jmr.13.0483) | A | **negative**: no price/bill framing in a perk reminder |
+| Non-price "reminder" messages beat price-savings messages on subscription sign-up **and retention** (RCT, retailer) | no effect sizes in abstract | [EMAC 2025](https://proceedings.emac-online.org/pdfs/A2025-126023.pdf) | B- | supports value framing over discounts |
+| Bundled streaming retains better | 59% 12-mo survival (Disney+/Hulu/Max bundle), +4 pts vs Netflix alone, +28 vs components | [Antenna, Mar 2026](https://www.antenna.live/insights/the-power-of-the-pack-bundling-and-retention) | B (selection, not causal) | supports perk *use* as a stickiness signal, not a reminder effect |
+| T-Mobile perk usage | ~40M members ever redeemed Tuesdays (since 2016); 60M people use "benefits on Us" | [T-Mobile newsroom, 2026-06-02](https://www.t-mobile.com/news/un-carrier/t-mobile-tuesdays-turns-10-celebrating-the-weekly-perks-millions-love) | B (cumulative; no active rate) | — |
+| Share of customers unaware of included perks | **No credible current number found** | — | — | don't claim one |
+| T-Mobile stated perk values (retail, not T-Mobile's cost) | Netflix $107/yr (one page variant: $95), Apple TV $119/yr value ($3/mo on More/Beyond), Hulu $143/yr (Beyond); Beyond "built-in benefits worth $650" yr 1; Magenta Status "more than $1,500/yr" | [t-mobile.com/benefits](https://www.t-mobile.com/benefits); [newsroom 2026-08-04](https://www.t-mobile.com/news/un-carrier/eip-flex-36); [Magenta Status 2024-02-07](https://www.t-mobile.com/news/un-carrier/magenta-status) | B (marketing) | message copy (sandbox perk codes stay authoritative) |
+
+**Unsourced constants and suggested replacements:**
+- `SAVE_RATE.perk_reminder` 0.08 / 0.03: **no evidence for 8%**. Use **0.02 on-target (range 0-0.05), 0.01 off-target**, below field retention-offer effects (~5-15% relative, §10) because there's no incentive. Add a sensitivity row at 0 and at −0.01 for volatile-usage / bill-shocked accounts (Ascarza backfire).
+- perk_reminder cost `0.0`: set ≈ **$0.50** (in-app/SMS; Gartner self-service $0.10-1.84). Keep `ANNOYANCE` $2.
+- `SERVICE_MARGIN` 0.50: now **anchored** (TMUS EBITDA/service revenue ≈ 50%), label "upper bound, derived".
+- `CHECK_IN_COST` $2 / `FIX_FIRST_CALLBACK_COST` $15: replace "not benchmarked" with the Gartner band ($8-13.50 per assisted contact). A $2 check-in only holds if it's digital.
+- `STEP_UP_MARGIN` 0.80, `DEVICE_UPGRADE_MARGIN` $80, `HINT_MARGIN` 0.30: still **unsourced** (no carrier discloses incremental margin). Keep labelled synthetic.
+
+**How to show T-Mobile's side:** per offer, print `p_churn × Δsave × $1.8K (24-mo margin) − p_accept × revenue given up − contact cost`, next to the customer's savings. For a perk reminder the cost line is ~$0.50, so even a 1-2% relative save on a high-risk account is positive, but frequency must be capped (McKenzie) and price wording avoided (Ascarza).
+
+**Do not claim:** that perk reminders are proven to cut churn; any "% of customers don't know their perks" figure; "5-25x"; that T-Mobile's perk retail values are its cost.
