@@ -6,6 +6,7 @@ import pytest
 
 from harness.config import RETENTION_SKUS, db_path
 from harness.engine import build_console
+from harness.messages import outbound_title
 from harness.projections import project
 
 
@@ -86,6 +87,16 @@ def test_upgrade_moment_uses_one_device_promo(console):
     assert waiting["moment"]["when"] == "wait"
     assert waiting["moment"]["upgrade_eligible"] is False
     assert "12" in waiting["moment"]["headline"]
+
+
+def test_upgrade_now_is_not_titled_do_nothing(console):
+    old = console.account("ACC-PERSONA-30")
+    assert old["action"]["choice"] == "do_nothing"
+    assert old["moment"]["when"] == "now"
+    title = outbound_title(old["action"], old["moment"])
+    assert title.startswith("Upgrade now")
+    assert "Do nothing" not in title
+    assert old["message"]["purpose"] == "upgrade"
 
 
 def test_money_stays_in_cents_until_display(console):

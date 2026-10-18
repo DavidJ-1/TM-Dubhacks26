@@ -11,6 +11,21 @@ def _dollars(cents: int | None) -> str:
     return f"${cents / 100:,.2f}"
 
 
+def outbound_title(action: dict, moment: dict | None) -> str:
+    """Heading for the message we would actually send. A paid-off upgrade is not 'do nothing'."""
+    upgrading = bool(moment and moment.get("when") == "now" and moment.get("device_name"))
+    if action.get("choice") == "offer" and upgrading:
+        return f"{action['name']} · upgrade {moment['device_name']}"
+    if action.get("choice") == "offer":
+        return action["name"]
+    if upgrading:
+        promo = (moment.get("promo") or {}).get("name")
+        if promo:
+            return f"Upgrade now · {promo}"
+        return f"Upgrade now · {moment['device_name']}"
+    return "Do nothing"
+
+
 def draft(account: dict, action: dict, moment: dict | None) -> dict:
     language = account["language"] if account["language"] in {"en", "es"} else "en"
     channel = account["contact_preference"]

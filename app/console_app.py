@@ -14,6 +14,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from harness.engine import build_console
+from harness.messages import outbound_title
 from harness.projections import acceptance_curve, project, upgrade_curve
 
 st.set_page_config(page_title="Retention Console", layout="wide")
@@ -222,8 +223,19 @@ def overview(console) -> None:
     )
 
 
+def _table_account(show: pd.DataFrame) -> tuple[str | None, int | None]:
+    """Row the queue table has selected, using the widget state Streamlit stores before the script runs."""
+    state = st.session_state.get("risk_queue")
+    rows = selected_rows(state) if state is not None else []
+    if not rows:
+        return None, None
+    position = int(rows[0])
+    if position < 0 or position >= len(show):
+        return None, None
+    return str(show.iloc[position]["account_id"]), position
+
+
 def queue(console) -> None:
-    account_id = ensure_selection(console)
     c1, c2 = st.columns([2, 1])
     with c1:
         query = st.text_input("Filter by account id or persona title", "")
@@ -236,21 +248,35 @@ def queue(console) -> None:
         frame = frame.loc[frame["account_id"].str.lower().str.contains(needle) | title.str.contains(needle)]
     show = frame[
         ["rank", "account_id", "segment", "model_p", "sandbox_p", "support_90d", "action_name", "upgrade_when", "top_leave"]
-    ].copy()
-    show["model_p"] = show["model_p"].map(lambda value: f"{value:.1%}")
-    show["sandbox_p"] = show["sandbox_p"].map(lambda value: f"{value:.1%}")
-    event = st.dataframe(
-        show,
+    ].reset_index(drop=True)
+    table_account, table_row = _table_account(show)
+    applied = st.session_state.get("queue_applied_row")
+    if table_account and table_row != applied:
+        st.session_state.queue_applied_row = table_row
+        st.session_state.account_id = table_account
+        st.session_state.queue_account_pick = table_account
+    account_id = ensure_selection(console)
+    visible = show["account_id"].tolist()
+    if account_id not in visible and visible:
+        account_id = visible[0]
+        st.session_state.account_id = account_id
+    if "queue_account_pick" not in st.session_state or st.session_state.queue_account_pick not in visible:
+        st.session_state.queue_account_pick = account_id
+    account_id = st.selectbox("Show this account", visible, key="queue_account_pick")
+    st.session_state.account_id = account_id
+    display = show.copy()
+    display["model_p"] = display["model_p"].map(lambda value: f"{value:.1%}")
+    display["sandbox_p"] = display["sandbox_p"].map(lambda value: f"{value:.1%}")
+    st.dataframe(
+        display,
         hide_index=True,
         width="stretch",
         on_select="rerun",
         selection_mode="single-row",
+        key="risk_queue",
         height=420,
     )
-    rows = selected_rows(event)
-    if rows:
-        st.session_state.account_id = frame.iloc[rows[0]]["account_id"]
-        account_id = st.session_state.account_id
+    st.caption("Click a row in the table, or use the account menu. The reasons below follow that account.")
     detail = console.account(account_id)
     st.subheader(account_id)
     if detail.get("title"):
@@ -298,7 +324,7 @@ def action_page(console) -> None:
 
     left, right = st.columns([1.15, 0.85])
     with left:
-        st.subheader(action["name"])
+        st.subheader(outbound_title(action, moment))
         st.write(action["why"])
         st.caption(action["formula"])
         considered = pd.DataFrame(action["considered"])
