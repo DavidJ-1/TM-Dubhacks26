@@ -692,7 +692,7 @@ DN_REASON = {"happy": "nothing is going wrong on this account", "open_ticket": "
              "wait_payoff": "it's better to wait until their phone is paid off"}
 
 
-def outreach_rules(r) -> list[tuple[str, str, str]]:
+def outreach_rules(r, channel: str | None = None) -> list[tuple[str, str, str]]:
     """The outreach rules (from the outreach playbook), in order; the first that applies decides.
     Returns (rule, status, detail) with status 'stop' (decides: no message), 'pass', 'info' or 'skip' (not reached).
     Uses optional columns: action_code, do_nothing_reason, policy_selected, block_reason, unresolved_90d, contact_preference."""
@@ -726,7 +726,8 @@ def outreach_rules(r) -> list[tuple[str, str, str]]:
         (br == "bill_change_no_fix") if "block_reason" in r else None, "Bill went up and we have no offer that lowers it.", "No blocking bill increase.")
     un = _n(r, "unresolved_90d")
     add("With an open support issue, the only message allowed is a fix, never an offer.", un > 0,
-        f"{int(un)} unresolved support contact{'s' if un != 1 else ''}: message is a fix callback.", "No open support issue.", kind="info")
+        f"{int(un)} unresolved support contact{'s' if un != 1 else ''}: "
+        + ("we'll call to help fix their open issue." if (channel or "") == "call" else "we'll help fix their open issue."), "No open support issue.", kind="info")
     pref = sv("contact_preference")
     if pref:
         add("We reach people the way they asked to be reached.", True, f"Prefers {pref}.", "", kind="info")
@@ -1072,8 +1073,8 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
                              f"<span class='p'>{rest + overlap:+.2f} pts</span></div>")
                     st.markdown(f"<div class='o-ph'>Typical {pct(b)} → this customer {pct(pn)}</div>{rows}", unsafe_allow_html=True)
         elif step == 2:
-            rl = outreach_rules(r)
             nv = _next_version(r, decisions)
+            rl = outreach_rules(r, (nv or {}).get("channel") if isinstance(nv, dict) else None)
             mark = {"stop": f"<span style='color:{MAG};font-weight:700'>STOPS HERE</span>", "pass": "passes", "info": "applies", "skip": "not reached"}
             rrows = "".join(f"<div class='o-opt {'win' if s_ == 'stop' else ''} {'off' if s_ == 'skip' else ''}' style='grid-template-columns:1.4fr 1.2fr 110px;padding:5px 0'>"
                             f"<span>{i + 1}. {esc(rule)}</span><span class='why'>{esc(det)}</span><span class='v'>{mark[s_]}</span></div>"

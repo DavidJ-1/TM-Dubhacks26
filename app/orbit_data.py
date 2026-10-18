@@ -160,6 +160,20 @@ def receipts() -> pd.DataFrame:
     return r
 
 
+def bill_line_totals() -> dict | None:
+    """Bill-line counts and the clean lines' total monthly saving, from decisions.csv (receipt_kind,
+    customer_saves_usd_mo): the same rows and column the stat card sums."""
+    dec = _offers_decisions_raw()
+    if dec is None or "receipt_kind" not in dec:
+        return None
+    k = dec.receipt_kind.astype(str).str.lower()
+    clean_rows = k.str.contains("clean|strict")
+    out = {"clean": int(clean_rows.sum()), "tradeoff": int(k.str.contains("trade").sum()), "clean_monthly": None}
+    if "customer_saves_usd_mo" in dec:
+        out["clean_monthly"] = float(pd.to_numeric(dec.customer_saves_usd_mo[clean_rows], errors="coerce").sum())
+    return out
+
+
 @st.cache_data(show_spinner=False)
 def economics() -> dict:
     """Stat-grid numbers. Savings lines from chart_receipt.csv (v2 totals); break-even from the headline file."""
@@ -167,6 +181,9 @@ def economics() -> dict:
     cr = _chart_receipt()
     e = {"receipt_lines": cr["accounts"] if cr else int(len(r)),
          "receipt_monthly": cr["monthly"] if cr else float(r.receipt_saving_mo.fillna(0).sum())}
+    bt = bill_line_totals()   # one source of truth with the stat card: the decision file's clean bill lines
+    if bt:
+        e["receipt_lines"], e["receipt_monthly"] = bt["clean"], bt["clean_monthly"]
     if cr and cr["accounts"] != len(r):
         print(f"[scroll] note: per-account savings lines {len(r)} != chart_receipt {cr['accounts']}")
     m = money_summary()
@@ -252,14 +269,34 @@ def considerations() -> pd.DataFrame | None:
     if not d.how_handled.astype(str).str.strip().eq(STICK_LINE).any():   # only when the file lacks the locked wording
         stick = d.item.astype(str).str.strip().str.lower().eq("do saves stick?")
         d.loc[stick, "how_handled"] = STICK_LINE
-    dec = _offers_decisions_raw()   # bill-line counts come from the decision file's receipt_kind, not the doc's old ones
-    if dec is not None and "receipt_kind" in dec:
-        k = dec.receipt_kind.astype(str).str.lower()
-        n_clean = int(k.str.contains("clean|strict").sum())
-        n_trade = int(k.str.contains("trade").sum())
-        d["item"] = d["item"].astype(str).str.replace(r"^\d[\d,]* accounts, give up nothing", f"{n_clean:,} accounts, give up nothing", regex=True)
-        d["how_handled"] = d["how_handled"].astype(str).str.replace(r"^\d[\d,]* more accounts get a line", f"{n_trade:,} more accounts get a line", regex=True)
+    bt = bill_line_totals()   # bill-line counts and monthly saving from the decision file, same source as the stat card
+    item, how = d["item"].astype(str), d["how_handled"].astype(str)
+    if bt:
+        item = item.str.replace(r"^\d[\d,]* accounts, give up nothing", f"{bt['clean']:,} accounts, give up nothing", regex=True)
+        how = how.str.replace(r"^\d[\d,]* more accounts get a line", f"{bt['tradeoff']:,} more accounts get a line", regex=True)
+    money = (f"${bt['clean_monthly']:,.0f} a month" if bt and bt["clean_monthly"] else None)
+    pat = r"\$[\d,]+ a month"
+    how = how.map(lambda t: re.sub(pat, money, t) if money else re.sub(r"Could pay " + pat + r" less in total for the same features; s", "S", t))
+    how = how.str.replace("25 perk reminders became fix callbacks.", "25 perk reminders became fix-first messages.", regex=False)
+    for a, b in NEUTRAL:
+        item, how = item.str.replace(a, b, regex=True), how.str.replace(a, b, regex=True)
+    d["item"], d["how_handled"] = item, how
+    for c in d.columns.difference(["item", "how_handled"]):
+        if d[c].dtype == object or pd.api.types.is_string_dtype(d[c]):
+            for a, b in NEUTRAL:
+                d[c] = d[c].astype(str).str.replace(a, b, regex=True)
     return d
+
+
+# neutral rewording for 'what we considered' (nothing simulated- or synthetic-flavoured on screen)
+NEUTRAL = [
+    (r"^Simulated enrichment \(", "Extra profile signals ("),
+    (r"^A simulated upgrade score from device age", "An upgrade score worked out from device age"),
+    (r"In our test on simulated data, at the same churn risk", "In our test, at the same churn risk"),
+    (r"^Labels are simulated from a formula we wrote", "Churn outcomes come from a formula we wrote"),
+    (r"\s*\((?:simulated|synthetic)\)", ""),
+    (r"(?i)\b(?:simulated|synthetic)\s+", ""),
+]
 
 
 def engine_inputs() -> pd.DataFrame | None:
@@ -560,7 +597,7 @@ def apply_offer_text(df: pd.DataFrame) -> pd.DataFrame:
     out.loc[use, "message_en"] = msg[use].map(clean)
     if "decision_reason" in d and "reason_line" in out:   # the file's reason (no 'callback' on non-call rows), not the card's
         why = out.account_id.map(d.decision_reason).fillna("").astype(str).str.strip().map(clean)
-        why = why.str.replace(r"^No message[:;,]\s*", "", regex=True)
+        why = why.str.replace(r"^No message:\s*", "", regex=True)   # keeps the file's 'No message, since ...' sentence whole
         ok = why.ne("")
         out.loc[ok, "reason_line"] = why[ok].str[:1].str.upper() + why[ok].str[1:]
     if "receipt_line" in d:
