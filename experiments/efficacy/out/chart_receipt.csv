@@ -1,0 +1,4 @@
+line,accounts,counts_in_headline,monthly_if_all_switch,yearly_if_all_switch,lose_price_guarantee,status,data_note,yearly_at_3pct_switch,yearly_at_2pct_switch,yearly_at_13pct_switch
+Money back to customers (receipt): like-for-like accounts,488,True,10395.0,124740.0,85,computed here from optimizer + engine,SYNTHETIC; switch rate is an assumption,3742.0,2495.0,16216.0
+"Cheaper, but you'd lose something (separate line, never in the headline)",194,False,4435.0,53220.0,41,computed here from optimizer + engine,SYNTHETIC; switch rate is an assumption,1597.0,1064.0,6919.0
+T-Mobile side: the same receipt dollars as a cost (not in business net),488,True,-10395.0,-124740.0,85,computed here from optimizer + engine,SYNTHETIC; switch rate is an assumption,-3742.0,-2495.0,-16216.0

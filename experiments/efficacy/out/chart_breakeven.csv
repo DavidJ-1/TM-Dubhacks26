@@ -1,0 +1,3 @@
+policy,decide_save_rate,true_save_rate,contacts,business_net,customer_savings,margin_given_up,notes,business_net_true_p,business_net_full_dollar,upsell_margin_included,upsell_contacts,boot_ci_lo,boot_ci_hi,boot_p_net_pos,boot_ev_ci_lo,boot_ev_ci_hi,boot_ev_p_net_pos,n_home_internet,true_save_rate_exact
+ev_retention_only_unlimited_picked10_breakeven,0.1,0.05,246,0.0,1300.0,0.0,break-even: true save rate where business_net = 0 (4.53%),-33.0,0.0,0.0,0,,,,,,,,0.0453
+ev_retention_only_unlimited_picked10_breakeven,0.1,0.05,246,33.0,1300.0,0.0,break-even: true save rate where business_net_true_p = 0 (4.55%),-0.0,33.0,0.0,0,,,,,,,,0.0455
