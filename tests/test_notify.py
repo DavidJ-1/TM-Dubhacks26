@@ -1,6 +1,7 @@
 """Each send backend. requests is mocked, and no customer number is passed."""
 
 import os
+from pathlib import Path
 
 import requests
 
@@ -59,7 +60,9 @@ def test_ntfy_posts_plain_text_to_the_topic(monkeypatch):
     assert result["sent"] is True
     assert captured["url"] == "https://ntfy.sh/tm-dubhacks26-lf3reo19tv"
     assert captured["data"] == b"We want to keep you."
-    assert captured["headers"] == {"Content-Type": "text/plain"}
+    assert captured["headers"]["Content-Type"] == "text/plain; charset=utf-8"
+    assert captured["headers"]["Title"] == "Draft"
+    captured["headers"]["Title"].encode("latin-1")
     assert captured["timeout"] == 5
     assert b"phone" not in captured["data"]
 
@@ -136,6 +139,46 @@ def test_dotenv_is_used_when_the_process_env_is_unset(tmp_path, monkeypatch):
     assert b"phone" not in captured["data"]
 
 
-def test_in_app_topic_is_the_last_resort(monkeypatch):
+def test_notify_has_no_builtin_topic(monkeypatch):
     monkeypatch.delenv("NTFY_TOPIC", raising=False)
-    assert default_topic() == "tm-dubhacks26-lf3reo19tv"
+    assert default_topic() == ""
+    assert "DEFAULT_TOPIC" not in Path(__file__).resolve().parents[1].joinpath("harness", "notify.py").read_text()
+
+
+def test_dryrun_keeps_hindi_and_chinese(monkeypatch):
+    _block_network(monkeypatch)
+    monkeypatch.delenv("SEND_BACKEND", raising=False)
+    monkeypatch.delenv("NTFY_TOPIC", raising=False)
+    text = "नमस्ते। अगले बिल पर $25.00 का क्रेडिट है।\n您好。下一期账单有$25.00的信用金。"
+    result = send(text)
+    assert result["ok"] is True
+    assert result["backend"] == "dryrun"
+    assert result["sent"] is False
+    assert result["message"] == text
+    assert "cents" not in result["message"].lower()
+
+
+def test_ntfy_posts_utf8_and_keeps_headers_ascii(monkeypatch):
+    captured = {}
+
+    class _Response:
+        def raise_for_status(self):
+            return None
+
+    def fake_post(url, data=None, headers=None, timeout=None):
+        captured["url"] = url
+        captured["data"] = data
+        captured["headers"] = headers
+        return _Response()
+
+    monkeypatch.delenv("SEND_BACKEND", raising=False)
+    monkeypatch.setattr(requests, "post", fake_post)
+    text = "हिन्दी $10.00 और 中文 $10.00"
+    result = send(text, backend="ntfy", topic="tm-dubhacks26-lf3reo19tv", title="हिन्दी")
+    assert result["sent"] is True
+    assert captured["data"] == text.encode("utf-8")
+    assert captured["headers"]["Content-Type"] == "text/plain; charset=utf-8"
+    title = captured["headers"]["Title"]
+    title.encode("latin-1")
+    assert "हिन्दी" not in title
+    assert title.startswith("=?utf-8?")

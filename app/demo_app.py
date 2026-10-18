@@ -34,6 +34,7 @@ from console_app import (  # noqa: E402
     upgrades_page,
 )
 from harness.notify import default_topic  # noqa: E402
+from harness.saved_sms import hindi_and_chinese  # noqa: E402
 
 DEFAULT_TOPIC = "tm-dubhacks26-lf3reo19tv"
 
@@ -96,12 +97,16 @@ def _story_card(frame: pd.DataFrame, titles: dict, account_id: str, story: str, 
     why = str(row.get("why_this_offer") or "").strip()
     if why == "nan":
         why = ""
+    english = str(row.get("message_en") or "")
+    hindi, chinese = hindi_and_chinese(english)
     text_we_would_send(
-        str(row.get("message_en") or ""),
+        english,
         str(row.get("message_es") or ""),
         why or "Nothing would help them right now.",
         account_id,
         key,
+        hindi=hindi,
+        chinese=chinese,
     )
     st.markdown(f"**{title}**")
     st.caption(f"{account_id} · {row.get('segment', '')} · {action}")
@@ -351,7 +356,7 @@ def send_sidebar() -> None:
     """
     explicit = os.environ.get("SEND_BACKEND", "").strip().lower()
     default_on = explicit != "dryrun"
-    topic_default = default_topic()
+    topic_default = default_topic() or DEFAULT_TOPIC
     on = st.sidebar.toggle("Send texts via ntfy", value=default_on)
     topic = st.sidebar.text_input("ntfy topic", value=topic_default).strip() or DEFAULT_TOPIC
     st.sidebar.caption(f"Install the ntfy app and subscribe to {topic}.")

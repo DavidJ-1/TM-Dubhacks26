@@ -16,6 +16,7 @@ import streamlit as st
 
 from harness.engine import build_console
 from harness.messages import draft, outbound_title
+from harness.draft_lang import LANGUAGES, clean_draft, selected_draft
 from harness.notify import send, will_send
 from harness.playbook.send import frequency_open, record_send
 from harness.playbook.rules import ASSUMPTION_CREDIT_CENTS, FREQUENCY_CAP_DAYS, RULES, VALUE_FORMULA
@@ -383,27 +384,37 @@ def _subscribe_line() -> str:
     return f"Install the ntfy app and subscribe to {shown}."
 
 
-def text_we_would_send(english: str, spanish: str, why: str, account_id: str, key: str) -> None:
-    """Phone mockup and the send button. A click is the only send."""
+def text_we_would_send(
+    english: str,
+    spanish: str,
+    why: str,
+    account_id: str,
+    key: str,
+    hindi: str = "",
+    chinese: str = "",
+) -> None:
+    """One language at a time. Send posts only the language selected in the radio."""
     st.subheader("Text message we'd send")
-    en = "" if english is None or str(english).strip() in {"", "nan"} else str(english).strip()
-    es = "" if spanish is None or str(spanish).strip() in {"", "nan"} else str(spanish).strip()
-    if not en and not es:
+    texts = {
+        "en": clean_draft(english),
+        "es": clean_draft(spanish),
+        "hi": clean_draft(hindi),
+        "zh": clean_draft(chinese),
+    }
+    if not any(texts.values()):
         st.write(f"No message sent, here's why: {why}")
         return
+    labels = [name for _code, name in LANGUAGES]
+    choice = st.radio("Language", labels, horizontal=True, key=f"{key}_lang")
+    body = selected_draft(texts, choice)
     st.markdown(
         "<div class='phone'><div class='phone-bar'></div>"
-        f"<div class='quiet'>English</div><div class='bubble'>{html.escape(en) if en else '—'}</div>"
-        f"<div class='quiet'>Español</div><div class='bubble'>{html.escape(es) if es else '—'}</div>"
+        f"<div class='quiet'>{html.escape(choice)}</div>"
+        f"<div class='bubble'>{html.escape(body) if body else '—'}</div>"
         "</div>",
         unsafe_allow_html=True,
     )
-    parts = []
-    if en:
-        parts.append(f"English\n{en}")
-    if es:
-        parts.append(f"Español\n{es}")
-    _send_to_my_phone({"why": why}, {"text": "\n\n".join(parts)}, account_id, key=key)
+    _send_to_my_phone({"why": why}, {"text": body}, account_id, key=key)
 
 
 def _send_to_my_phone(action: dict, message: dict, account_id: str | None = None, key: str | None = None) -> None:
@@ -450,14 +461,18 @@ def action_page(console) -> None:
     action = detail["action"]
     moment = detail["moment"]
     message = detail["message"]
-    english = draft({**detail, "language": "en"}, action, moment)
-    spanish = draft({**detail, "language": "es"}, action, moment)
+    drafted = {
+        language: draft({**detail, "language": language}, action, moment).get("text") or ""
+        for language in ("en", "es", "hi", "zh")
+    }
     text_we_would_send(
-        english.get("text") or "",
-        spanish.get("text") or "",
+        drafted["en"],
+        drafted["es"],
         action["why"],
         choice,
         f"send_action_{choice}",
+        hindi=drafted["hi"],
+        chinese=drafted["zh"],
     )
 
     left, right = st.columns([1.15, 0.85])
@@ -796,6 +811,8 @@ def upgrades_page(console) -> None:
             decision["why"],
             choice,
             f"send_grow_{choice}",
+            hindi=decision.get("message_hi") or "",
+            chinese=decision.get("message_zh") or "",
         )
     else:
         st.subheader("Text message we'd send")

@@ -166,10 +166,11 @@ def test_message_drafts_do_not_say_cents(upsell):
     word = re.compile(r"\bcents\b", re.IGNORECASE)
     hits = []
     for decision in list(upsell.real.values()) + list(upsell.with_synthetic.values()):
-        for language in ("message_en", "message_es"):
+        for language in ("message_en", "message_es", "message_hi", "message_zh"):
             text = decision[language]
             if word.search(text):
-                hits.append((decision["account_id"] if "account_id" in decision else decision["rule_id"], language, text))
+                hits.append((decision.get("rule_id"), language, text))
+            assert text
     assert hits == []
 
 
@@ -177,14 +178,27 @@ def test_plan_step_up_draft_is_dollars_in_both_languages():
     decision = decide(_ctx(near_cap_months=2), include_synthetic=False)
     assert "$25.00" in decision["message_en"]
     assert "$25.00" in decision["message_es"]
+    assert "$25.00" in decision["message_hi"]
+    assert "$25.00" in decision["message_zh"]
     assert "cents" not in decision["message_en"].lower()
     assert "cents" not in decision["message_es"].lower()
+    assert "cents" not in decision["message_hi"].lower()
+    assert "cents" not in decision["message_zh"].lower()
     assert "Next catalog plan" not in decision["message_es"]
+    assert "Next catalog plan" not in decision["message_hi"]
+    assert "Next catalog plan" not in decision["message_zh"]
     assert "Siguiente plan del catálogo Experience More" in decision["message_es"]
+    assert "Experience More" in decision["message_hi"]
+    assert "Experience More" in decision["message_zh"]
+    assert any("\u0900" <= char <= "\u097f" for char in decision["message_hi"])
+    assert any("\u4e00" <= char <= "\u9fff" for char in decision["message_zh"])
 
 
 def test_personas_and_one_offer(upsell):
     assert upsell.decision("ACC-PERSONA-24")["action"] == "DO NOTHING"
+    assert upsell.decision("ACC-PERSONA-24")["send"] is False
+    for account_id in ("ACC-PERSONA-07", "ACC-PERSONA-31", "ACC-PERSONA-24"):
+        assert upsell.decision(account_id, True)["send"] is False
     for account_id in ("ACC-PERSONA-07", "ACC-PERSONA-31"):
         decision = upsell.decision(account_id, True)
         assert decision.get("upgrade_outcome") != "now"

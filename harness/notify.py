@@ -3,12 +3,14 @@
 SEND_BACKEND selects the backend: dryrun (default) or ntfy.
 A click is the only thing that calls send().
 
-Value precedence is process environment, then a project .env file, then the
-in-app default topic. load_project_env() never overrides a variable that is
-already set, and a missing .env is a no-op.
+Value precedence is process environment, then a project .env file. There is no
+built-in topic: with no NTFY_TOPIC every send is a preview (dry run). The demo
+sidebar supplies its own default. load_project_env() never overrides a variable
+that is already set, and a missing .env is a no-op.
 """
 
 import os
+from email.header import Header
 from pathlib import Path
 
 import requests
@@ -19,7 +21,6 @@ from harness.sms_send import send_sms
 # TODO: a webhook or Twilio backend plugs in as another _BACKENDS entry.
 # Keep customer phone numbers out of this module. Call it only from send().
 
-DEFAULT_TOPIC = "tm-dubhacks26-lf3reo19tv"
 _ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -35,11 +36,11 @@ load_project_env()
 
 
 def default_topic() -> str:
-    """Process env, then .env (already loaded), then the in-app topic."""
-    return _topic(None) or DEFAULT_TOPIC
+    """Process env, then .env (already loaded). Empty when unset; never a hardcoded topic."""
+    return _topic(None)
 
 
-def send(message: str, backend: str | None = None, topic: str | None = None) -> dict:
+def send(message: str, backend: str | None = None, topic: str | None = None, title: str | None = None) -> dict:
     """Send the drafted demo message, or return it unchanged on dryrun."""
     name = _backend_name(backend)
     chosen = _topic(topic)
@@ -53,7 +54,7 @@ def send(message: str, backend: str | None = None, topic: str | None = None) -> 
         preview["hint"] = f"SEND_BACKEND {name} is not wired up. Preview only."
         return preview
     if name == "ntfy":
-        return _ntfy(message, chosen)
+        return _ntfy(message, chosen, title=title)
     return handler(message)
 
 
@@ -105,12 +106,23 @@ def _dryrun(message: str) -> dict:
     }
 
 
-def _ntfy(message: str, topic: str) -> dict:
+def header_ascii(value: str) -> str:
+    """HTTP headers are latin-1. Leave ASCII as-is; encode anything else as RFC 2047."""
+    if value.isascii():
+        return value
+    return Header(value, "utf-8").encode()
+
+
+def _ntfy(message: str, topic: str, title: str | None = None) -> dict:
+    headers = {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Title": header_ascii(title or "Draft"),
+    }
     try:
         response = requests.post(
             f"https://ntfy.sh/{topic}",
             data=message.encode("utf-8"),
-            headers={"Content-Type": "text/plain"},
+            headers=headers,
             timeout=5,
         )
         response.raise_for_status()

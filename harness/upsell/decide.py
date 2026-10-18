@@ -103,6 +103,8 @@ def _near_cap(ctx: dict) -> dict | None:
         rejected="Upgrade timing was not reached. A cap this wide is a plan problem, and a device was not added.",
         offer_line_en=f"Next catalog plan {plan['name']}. Monthly difference {_money(plan['diff_cents'])}.",
         offer_line_es=f"Siguiente plan del catálogo {plan['name']}. Diferencia mensual {_money(plan['diff_cents'])}.",
+        offer_line_hi=f"अगला कैटलॉग प्लान {plan['name']}। मासिक अंतर {_money(plan['diff_cents'])}।",
+        offer_line_zh=f"目录中的下一档套餐 {plan['name']}。每月差额 {_money(plan['diff_cents'])}。",
     )
 
 
@@ -129,6 +131,8 @@ def _usage_growth(ctx: dict) -> dict | None:
         rejected="A step-up that costs more was not used. A device was not added.",
         offer_line_en=f"Catalog plan {plan['name']} costs the same or less. Monthly difference {_money(plan['diff_cents'])}.",
         offer_line_es=f"El plan del catálogo {plan['name']} cuesta lo mismo o menos. Diferencia mensual {_money(plan['diff_cents'])}.",
+        offer_line_hi=f"कैटलॉग प्लान {plan['name']} की कीमत उतनी ही या कम है। मासिक अंतर {_money(plan['diff_cents'])}।",
+        offer_line_zh=f"目录套餐 {plan['name']} 的价格相同或更低。每月差额 {_money(plan['diff_cents'])}。",
         action="PLAN FIT",
     )
 
@@ -145,13 +149,18 @@ def _paid_off(ctx: dict) -> dict | None:
     promo = moment.get("promo") if outcome == "now" and isinstance(moment.get("promo"), dict) else None
     if outcome == "keep":
         name = "Keep"
-        line_en, line_es = _keep_lines()
+        line_en, line_es, line_hi, line_zh = _keep_lines()
     elif outcome == "wait":
         name = "Wait"
-        line_en, line_es = _wait_lines(moment)
+        line_en, line_es, line_hi, line_zh = _wait_lines(moment)
     else:
         name = (promo or {}).get("name") or moment.get("device_name") or "Upgrade now"
-        line_en, line_es = (f"Upgrade now. {name}.", f"Cambia ahora. {name}.")
+        line_en, line_es, line_hi, line_zh = (
+            f"Upgrade now. {name}.",
+            f"Cambia ahora. {name}.",
+            f"अभी अपग्रेड करें। {name}।",
+            f"立即升级。{name}。",
+        )
     return {
         "trigger": "Phone paid off and upgrade-eligible",
         "offer_name": name,
@@ -164,6 +173,8 @@ def _paid_off(ctx: dict) -> dict | None:
         "rejected": "A second device promo is not stacked. A plan change is not added on the same nudge.",
         "offer_line_en": line_en,
         "offer_line_es": line_es,
+        "offer_line_hi": line_hi,
+        "offer_line_zh": line_zh,
         "assumption_note": (moment or {}).get("assumption") or "",
         "send": True,
     }
@@ -179,6 +190,8 @@ def _student(ctx: dict) -> dict | None:
     if same:
         line_en = f"You are already on the closest standard plan, {plan['name']}. This is not an upsell."
         line_es = f"Ya estás en el plan estándar más cercano, {plan['name']}. Esto no es una venta adicional."
+        line_hi = f"आप पहले से सबसे नज़दीकी स्टैंडर्ड प्लान {plan['name']} पर हैं। यह अतिरिक्त बिक्री नहीं है।"
+        line_zh = f"您已经在最接近的标准套餐 {plan['name']} 上。这不是加售。"
     else:
         line_en = (
             f"Move to {plan['name']} before the discount ends, so the bill is not a surprise. "
@@ -188,6 +201,14 @@ def _student(ctx: dict) -> dict | None:
             f"Pasa a {plan['name']} antes de que termine el descuento, para que la factura no sea una sorpresa. "
             f"Diferencia mensual {_money(plan['diff_cents'])}."
         )
+        line_hi = (
+            f"छूट खत्म होने से पहले {plan['name']} पर जाएँ, ताकि बिल अचानक न बढ़े। "
+            f"मासिक अंतर {_money(plan['diff_cents'])}।"
+        )
+        line_zh = (
+            f"在优惠结束前换到 {plan['name']}，这样账单不会突然变高。"
+            f"每月差额 {_money(plan['diff_cents'])}。"
+        )
     return _plan_hit(
         trigger="Student or discount plan",
         plan=plan,
@@ -195,6 +216,8 @@ def _student(ctx: dict) -> dict | None:
         rejected="A device upgrade was not added. A premium tier was not added on top.",
         offer_line_en=line_en,
         offer_line_es=line_es,
+        offer_line_hi=line_hi,
+        offer_line_zh=line_zh,
         action="AVOID SURPRISE BILL",
         send=not same,
     )
@@ -223,6 +246,8 @@ def _kid(ctx: dict) -> dict | None:
             "rejected": f"A second promo was not stacked. {controls}",
             "offer_line_en": f"Add a line. Device {kid['device_name']}. Promo {promo['name']}.",
             "offer_line_es": f"Agrega una línea. Dispositivo {kid['device_name']}. Promoción {promo['name']}.",
+            "offer_line_hi": f"एक लाइन जोड़ें। डिवाइस {kid['device_name']}। प्रोमो {promo['name']}।",
+            "offer_line_zh": f"加一条线路。设备 {kid['device_name']}。优惠 {promo['name']}。",
             "source": "synthetic signal",
             "send": True,
         }
@@ -235,6 +260,8 @@ def _kid(ctx: dict) -> dict | None:
         rejected=f"A device promo was not attached. {controls}",
         offer_line_en=f"Add a line on {plan['name']}. Monthly difference {_money(plan['diff_cents'])}.",
         offer_line_es=f"Agrega una línea en {plan['name']}. Diferencia mensual {_money(plan['diff_cents'])}.",
+        offer_line_hi=f"{plan['name']} पर एक लाइन जोड़ें। मासिक अंतर {_money(plan['diff_cents'])}।",
+        offer_line_zh=f"在 {plan['name']} 上加一条线路。每月差额 {_money(plan['diff_cents'])}。",
         source="synthetic signal",
     )
 
@@ -256,6 +283,8 @@ def _promotion(ctx: dict) -> dict | None:
             "rejected": "The premium plan was not included. One nudge does not carry both a plan and a device.",
             "offer_line_en": f"Upgrade now. {device.get('name') or 'A catalog device'}.",
             "offer_line_es": f"Cambia ahora. {device.get('name') or 'A catalog device'}.",
+            "offer_line_hi": f"अभी अपग्रेड करें। {device.get('name') or 'A catalog device'}।",
+            "offer_line_zh": f"立即升级。{device.get('name') or 'A catalog device'}。",
             "source": "synthetic signal",
             "send": True,
         }
@@ -267,6 +296,8 @@ def _promotion(ctx: dict) -> dict | None:
             rejected="A device was not added on the same nudge.",
             offer_line_en=f"Premium tier {plan['name']}. Monthly difference {_money(plan['diff_cents'])}.",
             offer_line_es=f"Nivel premium {plan['name']}. Diferencia mensual {_money(plan['diff_cents'])}.",
+            offer_line_hi=f"प्रीमियम स्तर {plan['name']}। मासिक अंतर {_money(plan['diff_cents'])}।",
+            offer_line_zh=f"高级套餐 {plan['name']}。每月差额 {_money(plan['diff_cents'])}。",
             source="synthetic signal",
         )
     return None
@@ -283,6 +314,8 @@ def _moving(ctx: dict) -> dict | None:
             "rejected": "No home-internet add-on was attached.",
             "offer_line_en": "Check coverage at the new address. No sale on this message.",
             "offer_line_es": "Revisa la cobertura en la nueva dirección. Este mensaje no es una venta.",
+            "offer_line_hi": "नए पते पर कवरेज जाँचें। इस संदेश में कोई बिक्री नहीं है।",
+            "offer_line_zh": "请核对新地址的覆盖情况。这条消息不是在销售。",
             "source": "synthetic signal",
             "send": True,
         }
@@ -300,6 +333,8 @@ def _moving(ctx: dict) -> dict | None:
         "rejected": "A phone upgrade was not added.",
         "offer_line_en": f"Check coverage, and Home Internet {home['name']} is {_money(home['monthly_cents'])} a month.",
         "offer_line_es": f"Revisa la cobertura, y Home Internet {home['name']} cuesta {_money(home['monthly_cents'])} al mes.",
+        "offer_line_hi": f"कवरेज जाँचें, और Home Internet {home['name']} की कीमत {_money(home['monthly_cents'])} प्रति माह है।",
+        "offer_line_zh": f"请核对覆盖情况，Home Internet {home['name']} 每月 {_money(home['monthly_cents'])}。",
         "source": "synthetic signal",
         "send": True,
     }
@@ -325,6 +360,14 @@ def _merge(ctx: dict) -> dict | None:
             f"Compara {plan['name']} a {_money(plan['monthly_cents'])} con el actual "
             f"{_money(plan.get('current_monthly_cents'))}. Diferencia mensual {_money(plan['diff_cents'])}."
         ),
+        offer_line_hi=(
+            f"{plan['name']} को {_money(plan['monthly_cents'])} पर मौजूदा "
+            f"{_money(plan.get('current_monthly_cents'))} से तुलना करें। मासिक अंतर {_money(plan['diff_cents'])}।"
+        ),
+        offer_line_zh=(
+            f"将 {plan['name']}（{_money(plan['monthly_cents'])}）与当前的 "
+            f"{_money(plan.get('current_monthly_cents'))} 比较。每月差额 {_money(plan['diff_cents'])}。"
+        ),
         source="synthetic signal",
         action="HOUSEHOLD MERGE",
     )
@@ -341,6 +384,8 @@ def _retirement(ctx: dict) -> dict | None:
         rejected="A premium tier and a device were not offered.",
         offer_line_en=f"Cheaper catalog plan {plan['name']}. Monthly difference {_money(plan['diff_cents'])}.",
         offer_line_es=f"Plan más barato del catálogo {plan['name']}. Diferencia mensual {_money(plan['diff_cents'])}.",
+        offer_line_hi=f"सस्ता कैटलॉग प्लान {plan['name']}। मासिक अंतर {_money(plan['diff_cents'])}।",
+        offer_line_zh=f"更便宜的目录套餐 {plan['name']}。每月差额 {_money(plan['diff_cents'])}。",
         source="synthetic signal",
         action="CHEAPER PLAN",
     )
@@ -375,14 +420,16 @@ def _money(cents) -> str:
     return f"${value:,.2f}"
 
 
-def _keep_lines() -> tuple[str, str]:
+def _keep_lines() -> tuple[str, str, str, str]:
     return (
         "Keep the phone. No upgrade push.",
         "Conserva el teléfono. No hay oferta de cambio.",
+        "फ़ोन रखें। अपग्रेड का कोई आग्रह नहीं।",
+        "继续使用这部手机。不会推销升级。",
     )
 
 
-def _wait_lines(moment: dict) -> tuple[str, str]:
+def _wait_lines(moment: dict) -> tuple[str, str, str, str]:
     headline = (moment or {}).get("headline") or "Wait. Upgrade eligibility follows the 12-month ownership rule."
     age = (moment or {}).get("age_months")
     balance = int((moment or {}).get("balance_cents") or 0)
@@ -390,39 +437,118 @@ def _wait_lines(moment: dict) -> tuple[str, str]:
     value_later = (moment or {}).get("tradein_value_in_6_cents")
     months_left = (moment or {}).get("months_remaining")
     if age is None:
-        return headline, "Espera. Esta línea no tiene un teléfono para entregar."
+        return (
+            headline,
+            "Espera. Esta línea no tiene un teléfono para entregar.",
+            "इंतज़ार करें। इस लाइन पर ट्रेड-इन के लिए कोई फ़ोन नहीं है।",
+            "请等待。这条线路没有可以折价的手机。",
+        )
     if int(age) < UPGRADE_MIN_AGE_MONTHS:
         wait = UPGRADE_MIN_AGE_MONTHS - int(age)
         unit = "mes" if wait == 1 else "meses"
-        return headline, (
-            f"Espera {wait} {unit} hasta que el teléfono tenga {UPGRADE_MIN_AGE_MONTHS} meses. "
-            f"Esa es la regla de cambio del sandbox (la mitad del plazo de financiamiento de {FINANCING_TERM_MONTHS} meses)."
+        hi_unit = "महीना" if wait == 1 else "महीने"
+        return (
+            headline,
+            (
+                f"Espera {wait} {unit} hasta que el teléfono tenga {UPGRADE_MIN_AGE_MONTHS} meses. "
+                f"Esa es la regla de cambio del sandbox (la mitad del plazo de financiamiento de {FINANCING_TERM_MONTHS} meses)."
+            ),
+            (
+                f"{wait} {hi_unit} इंतज़ार करें, जब तक फ़ोन {UPGRADE_MIN_AGE_MONTHS} महीने का न हो जाए। "
+                f"यह सैंडबॉक्स का अपग्रेड नियम है ({FINANCING_TERM_MONTHS} महीने की किस्त अवधि का आधा)।"
+            ),
+            (
+                f"请再等{wait}个月，直到手机持有满{UPGRADE_MIN_AGE_MONTHS}个月。"
+                f"这是沙盒的升级规则（{FINANCING_TERM_MONTHS}个月分期期限的一半）。"
+            ),
         )
     if balance > 0 and value is not None and int(value) < balance:
         left = int(months_left or 0)
         unit = "mes" if left == 1 else "meses"
-        return headline, (
-            f"Espera. Entregar este teléfono hoy cobraría el saldo restante de {_money(balance)}, "
-            f"y el canje en condición buena es {_money(value)}. Quedan {left} {unit} de cuota."
+        hi_unit = "महीना" if left == 1 else "महीने"
+        owed, worth = _money(balance), _money(value)
+        return (
+            headline,
+            (
+                f"Espera. Entregar este teléfono hoy cobraría el saldo restante de {owed}, "
+                f"y el canje en condición buena es {worth}. Quedan {left} {unit} de cuota."
+            ),
+            (
+                f"इंतज़ार करें। इस फ़ोन को आज ट्रेड-इन करने पर शेष {owed} आज चार्ज होगा, "
+                f"और अच्छी स्थिति का ट्रेड-इन मूल्य {worth} है। {left} {hi_unit} की किस्त बाकी है।"
+            ),
+            (
+                f"请等待。今天以旧换新会收取剩余的{owed}，"
+                f"良好成色的折价是{worth}。还剩{left}个月的分期。"
+            ),
         )
     if balance == 0:
         drop = 0 if value is None or value_later is None else int(value) - int(value_later)
-        return headline, (
-            f"Está pagado y es elegible para cambio, pero el canje en condición buena solo se mueve {_money(drop)} en 6 meses. "
-            "Esperar es una suposición modelada."
+        moved = _money(drop)
+        return (
+            headline,
+            (
+                f"Está pagado y es elegible para cambio, pero el canje en condición buena solo se mueve {moved} en 6 meses. "
+                "Esperar es una suposición modelada."
+            ),
+            (
+                f"यह चुकाया जा चुका है और अपग्रेड के लिए योग्य है, लेकिन अच्छी स्थिति का ट्रेड-इन मूल्य 6 महीनों में केवल {moved} बदलता है। "
+                "इंतज़ार करना एक मॉडल की गई मान्यता है।"
+            ),
+            (
+                f"已经还清并符合升级条件，但良好成色的折价在6个月内只变动{moved}。"
+                "等待是一项模型假设。"
+            ),
         )
     if value is None:
-        return headline, (
-            f"Elegible para cambio. Entregarlo hoy cobra el saldo restante de {_money(balance)}. "
-            "Este teléfono no está marcado como elegible para canje, así que no se cita un valor de la curva."
+        owed = _money(balance)
+        return (
+            headline,
+            (
+                f"Elegible para cambio. Entregarlo hoy cobra el saldo restante de {owed}. "
+                "Este teléfono no está marcado como elegible para canje, así que no se cita un valor de la curva."
+            ),
+            (
+                f"अपग्रेड के लिए योग्य। आज ट्रेड-इन करने पर शेष {owed} चार्ज होगा। "
+                "यह फ़ोन ट्रेड-इन के लिए चिह्नित नहीं है, इसलिए कर्व का कोई मूल्य नहीं दिया गया।"
+            ),
+            (
+                f"符合升级条件。今天以旧换新会收取剩余的{owed}。"
+                "这部手机未标记为可折价，因此不引用曲线上的价值。"
+            ),
         )
-    return headline, (
-        f"Elegible para cambio. Entregarlo hoy cobra el saldo restante de {_money(balance)}. "
-        f"El valor de canje en condición buena es {_money(value)}."
+    owed, worth = _money(balance), _money(value)
+    return (
+        headline,
+        (
+            f"Elegible para cambio. Entregarlo hoy cobra el saldo restante de {owed}. "
+            f"El valor de canje en condición buena es {worth}."
+        ),
+        (
+            f"अपग्रेड के लिए योग्य। आज ट्रेड-इन करने पर शेष {owed} चार्ज होगा। "
+            f"अच्छी स्थिति का ट्रेड-इन मूल्य {worth} है।"
+        ),
+        (
+            f"符合升级条件。今天以旧换新会收取剩余的{owed}。"
+            f"良好成色的折价是{worth}。"
+        ),
     )
 
 
-def _plan_hit(*, trigger, plan, why, rejected, offer_line_en, offer_line_es, action=None, source=None, send=True) -> dict:
+def _plan_hit(
+    *,
+    trigger,
+    plan,
+    why,
+    rejected,
+    offer_line_en,
+    offer_line_es,
+    offer_line_hi,
+    offer_line_zh,
+    action=None,
+    source=None,
+    send=True,
+) -> dict:
     hit = {
         "trigger": trigger,
         "offer_name": plan["name"],
@@ -432,6 +558,8 @@ def _plan_hit(*, trigger, plan, why, rejected, offer_line_en, offer_line_es, act
         "rejected": rejected,
         "offer_line_en": offer_line_en,
         "offer_line_es": offer_line_es,
+        "offer_line_hi": offer_line_hi,
+        "offer_line_zh": offer_line_zh,
         "send": send,
     }
     if action:
@@ -448,7 +576,7 @@ def _keep(hit: dict) -> dict:
     hit["offer_sku"] = None
     hit["promo_skus"] = []
     hit["promo_savings_cents"] = None
-    hit["offer_line_en"], hit["offer_line_es"] = _keep_lines()
+    hit["offer_line_en"], hit["offer_line_es"], hit["offer_line_hi"], hit["offer_line_zh"] = _keep_lines()
     hit["rejected"] = "Upgrade push blocked for persona 07 or 31."
     hit["why"] = "This persona never gets an upgrade push. Keep is the outcome."
     return hit
@@ -458,6 +586,8 @@ def _pack(rule: dict | None, **hit) -> dict:
     promo_skus = [sku for sku in (hit.get("promo_skus") or []) if sku][:1]
     offer_en = hit.get("offer_line_en") or hit.get("offer_line") or "No upsell."
     offer_es = hit.get("offer_line_es") or offer_en
+    offer_hi = hit.get("offer_line_hi") or offer_en
+    offer_zh = hit.get("offer_line_zh") or offer_en
     tier = hit.get("tier") or (rule["tier"] if rule else "none")
     source = hit.get("source") or (rule["source"] if rule else "")
     if tier == "tier2":
@@ -485,6 +615,8 @@ def _pack(rule: dict | None, **hit) -> dict:
         "send": bool(hit.get("send")),
         "message_en": templates["en"].format(offer_line=offer_en),
         "message_es": templates["es"].format(offer_line=offer_es),
+        "message_hi": templates["hi"].format(offer_line=offer_hi),
+        "message_zh": templates["zh"].format(offer_line=offer_zh),
     }
 
 
@@ -492,42 +624,62 @@ _TEMPLATES = {
     "near_cap": {
         "en": "Your data has been tight against the cap. {offer_line}",
         "es": "Tus datos han estado cerca del límite. {offer_line}",
+        "hi": "आपका डेटा प्लान की सीमा के करीब रहा है। {offer_line}",
+        "zh": "您的流量一直接近套餐上限。{offer_line}",
     },
     "usage_growth": {
         "en": "Your recent usage is higher than the earlier months. {offer_line}",
         "es": "Tu uso reciente es más alto que los meses anteriores. {offer_line}",
+        "hi": "हाल के महीनों में आपका उपयोग पहले से ज़्यादा रहा है। {offer_line}",
+        "zh": "您最近的用量比之前几个月更高。{offer_line}",
     },
     "paid_off": {
         "en": "{offer_line}",
         "es": "{offer_line}",
+        "hi": "{offer_line}",
+        "zh": "{offer_line}",
     },
     "student_graduating": {
         "en": "This is so the bill is not a surprise. It is not an upsell. {offer_line}",
         "es": "Esto es para que la factura no sea una sorpresa. No es una venta adicional. {offer_line}",
+        "hi": "यह इसलिए है ताकि बिल अचानक न बढ़े। यह अतिरिक्त बिक्री नहीं है। {offer_line}",
+        "zh": "这是为了避免账单突然变高，不是在向您加售。{offer_line}",
     },
     "kid_turning_13": {
         "en": "A line for a kid turning 13. {offer_line}",
         "es": "Una línea para un hijo que cumple 13. {offer_line}",
+        "hi": "13 साल के होते बच्चे के लिए एक लाइन। {offer_line}",
+        "zh": "为即将满13岁的孩子加一条线路。{offer_line}",
     },
     "promotion_or_new_job": {
         "en": "Congratulations on the new role. {offer_line}",
         "es": "Felicidades por el nuevo puesto. {offer_line}",
+        "hi": "नई भूमिका के लिए बधाई। {offer_line}",
+        "zh": "恭喜您担任新职务。{offer_line}",
     },
     "moving": {
         "en": "You are moving. {offer_line}",
         "es": "Te estás mudando. {offer_line}",
+        "hi": "आप घर बदल रहे हैं। {offer_line}",
+        "zh": "您正在搬家。{offer_line}",
     },
     "household_merge": {
         "en": "Two households on one account. {offer_line}",
         "es": "Dos hogares en una cuenta. {offer_line}",
+        "hi": "एक खाते पर दो घर। {offer_line}",
+        "zh": "一个账户上的两个家庭。{offer_line}",
     },
     "retirement_or_income_down": {
         "en": "A smaller plan is available. {offer_line}",
         "es": "Hay un plan más pequeño. {offer_line}",
+        "hi": "एक छोटा प्लान उपलब्ध है। {offer_line}",
+        "zh": "有一个更小的套餐可以选。{offer_line}",
     },
     "none": {
         "en": "No message: nothing would help them right now.",
         "es": "Sin mensaje: ahora mismo nada les ayudaría.",
+        "hi": "कोई संदेश नहीं: अभी कुछ भी उनकी मदद नहीं करेगा।",
+        "zh": "不发送消息：现在没有什么能帮到他们。",
     },
 }
 
