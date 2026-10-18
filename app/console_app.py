@@ -23,6 +23,9 @@ from harness.playbook.rules import ASSUMPTION_CREDIT_CENTS, FREQUENCY_CAP_DAYS, 
 from harness.upsell.config import INCLUDE_SYNTHETIC_DEFAULT, SYNTHETIC_BADGE
 from harness.projections import acceptance_curve, project, upgrade_curve
 
+DEFAULT_SAVE_RATE = 0.10  # the save rate the Devpost uses; measured campaigns are about 2-11%
+BREAK_EVEN_SAVE_RATE = 0.048  # Devpost / docs: next-version engine breaks even at about 4.8% (simulated)
+
 PINNED = [
     "ACC-PERSONA-04",
     "ACC-PERSONA-24",
@@ -576,28 +579,56 @@ def projections(console) -> None:
         "They are not measured offer responses, not a before/after test, and not a retrained model."
     )
     population = console.frame.loc[console.frame["is_persona"] == 0]
-    a, b, c = st.columns(3)
-    acceptance = a.slider("Offer acceptance rate", 0.0, 0.8, 0.25, 0.05)
-    save_rate = b.slider("Share of accepted offers assumed to avert churn", 0.0, 1.0, 1.0, 0.05)
+    a, c = st.columns(2)
+    save_rate = a.slider(
+        "Save rate: share of contacted at-risk customers we keep",
+        0.0,
+        0.30,
+        DEFAULT_SAVE_RATE,
+        0.005,
+        format="%.3f",
+        help="Measured retention campaigns land around 2% to 11%. 10% is the rate the Devpost uses.",
+    )
     upgrade_rate = c.slider("Upgrade acceptance among upgrade-now accounts", 0.0, 1.0, 0.2, 0.05)
-    outcome = project(population, acceptance, save_rate, upgrade_rate)
+    outcome = project(population, save_rate, 1.0, upgrade_rate)
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Baseline expected churn", f"{outcome['baseline_rate']:.2%}")
-    m2.metric("Projected expected churn", f"{outcome['projected_rate']:.2%}")
-    m3.metric("Expected churners averted", f"{outcome['expected_saves']:.0f}")
+    m1.metric("Sandbox reference score, 90-day churn", f"{outcome['baseline_rate']:.1%}")
+    m2.metric("Projected, at this save rate", f"{outcome['projected_rate']:.1%}")
+    m3.metric("Expected customers kept", f"{outcome['expected_saves']:.0f}")
     m4.metric("Projected upgrades", f"{outcome['projected_upgrades']:.0f}")
+    if save_rate >= BREAK_EVEN_SAVE_RATE:
+        st.success(
+            f"{save_rate:.1%} is above the ~{BREAK_EVEN_SAVE_RATE:.1%} break-even, so retention messages pay for themselves (simulated)."
+        )
+    else:
+        st.warning(
+            f"{save_rate:.1%} is below the ~{BREAK_EVEN_SAVE_RATE:.1%} break-even. At this rate, sending costs more than it saves, "
+            "so the right call is to send less and do nothing more often (simulated)."
+        )
     st.caption(
-        "The offer list is frozen at the 25% acceptance used to rank actions, "
-        "and credits are only considered at or above a 15% model risk. "
-        "Moving these sliders does not rebuild who is contacted. "
+        "The baseline is the sandbox reference score (the judges' toy score), not our calibrated model. "
+        "Who gets contacted stays fixed; the sliders only change the arithmetic. "
         f"Offers in that fixed list: {outcome['targeted_offers']:,}. "
         f"Upgrade-now accounts in the 5,000: {outcome['upgrade_now_accounts']:,}."
     )
-    curve = acceptance_curve(population, save_rate)
+    curve = acceptance_curve(population, 1.0, points=31)
+    curve = curve.assign(save_rate=curve["acceptance"] * 0.30 / 0.8)
+    curve["projected_churn_rate"] = [
+        project(population, rate, 1.0, 0.0)["projected_rate"] for rate in curve["save_rate"]
+    ]
     fig = go.Figure()
+    fig.add_vrect(
+        x0=0.02,
+        x1=0.11,
+        fillcolor="#E4D9CF",
+        opacity=0.5,
+        line_width=0,
+        annotation_text="Measured campaigns, 2-11%",
+        annotation_position="top left",
+    )
     fig.add_trace(
         go.Scatter(
-            x=curve["acceptance"],
+            x=curve["save_rate"],
             y=curve["projected_churn_rate"],
             mode="lines",
             name="Projected churn",
@@ -608,13 +639,21 @@ def projections(console) -> None:
         y=outcome["baseline_rate"],
         line_dash="dot",
         line_color="#1A1220",
-        annotation_text="Baseline",
-        annotation_position="top left",
+        annotation_text="Sandbox reference score",
+        annotation_position="top right",
     )
-    fig.add_vline(x=acceptance, line_dash="dot", line_color="#8A7B84")
-    fig.update_xaxes(range=[-0.02, 0.84], tickformat=".0%", title="Offer acceptance rate")
+    fig.add_vline(
+        x=BREAK_EVEN_SAVE_RATE,
+        line_dash="dash",
+        line_color="#1F7A4D",
+        line_width=2,
+        annotation_text=f"Break-even ~{BREAK_EVEN_SAVE_RATE:.1%}",
+        annotation_position="bottom right",
+    )
+    fig.add_vline(x=save_rate, line_dash="dot", line_color="#8A7B84")
+    fig.update_xaxes(range=[0, 0.30], tickformat=".0%", title="Save rate")
     fig.update_yaxes(tickformat=".1%", title="Expected 90-day churn")
-    fig.update_layout(title="Projected, illustrative assumptions — churn")
+    fig.update_layout(title="Projected churn by save rate (illustrative)", showlegend=False)
     chart(fig)
     lifts = upgrade_curve(population)
     fig = go.Figure(
@@ -628,16 +667,15 @@ def projections(console) -> None:
     fig.add_vline(x=upgrade_rate, line_dash="dot", line_color=COLORS["magenta"])
     fig.update_xaxes(range=[-0.02, 1.02], tickformat=".0%", title="Upgrade acceptance")
     fig.update_yaxes(title="Projected upgrades")
-    fig.update_layout(title="Projected, illustrative assumptions — upgrade lift")
+    fig.update_layout(title="Projected upgrades (illustrative)")
     chart(fig)
     st.markdown(
-        """
+        f"""
         **Assumptions on this screen**
-        - Acceptance is the share of sent retention offers that are taken. Default 25%, and that same 25% is what Model B uses to rank a credit against doing nothing.
-        - "Share assumed to avert churn" turns an acceptance into a cancelled churn probability. At 100%, an accepted offer removes that account's sandbox probability from the expected-churn total. That is not something the data measured.
-        - Upgrade acceptance applies only to accounts whose detector says upgrade now (paid off, over the cap, or phone age, and the timing rule says now).
-        - Value horizon inside Model B is 24 months of the latest bill, matching the financing term. Open-ended credits are costed at 12 months, which is how the sandbox estimates savings.
-        - Battery health and any wait that is not the 12-month upgrade rule or a remaining installment are labeled on the customer card as modeled assumptions. This chart does not use them.
+        - Save rate is the share of contacted at-risk customers who stay because we reached out. Default 10%, the rate in our Devpost. Real retention campaigns have measured about 2% to 11%.
+        - Break-even (~{BREAK_EVEN_SAVE_RATE:.1%}) is where our engine's retention messages stop paying for their credits and contact cost (simulated, from the strategy comparison). Below it, sending less is the honest answer.
+        - Upgrade acceptance applies only to accounts whose detector says upgrade now (paid off, over the cap, or an old phone, and the timing rule says now).
+        - None of this is measured. A holdout test with real customers is the next step.
         """
     )
 
