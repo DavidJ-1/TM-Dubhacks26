@@ -36,6 +36,7 @@ Every action a customer qualifies for is priced against doing nothing, which is 
 - With no real outcomes, we couldn't measure lift, so we label every number simulated and don't claim one.
 - Texts that quote prices have to be right every time.
 - Profit depends on a save rate we can only simulate: retention-only texting breaks even at about 4.8% and is a coin flip at 5%. Measured retention campaigns run from about 2% to 11% relative; this pays off in the stronger ones and loses money in the weakest (simulated).
+- With every account valued the same, the plan pays above about a 5% save rate. If saved customers stay as risky as they were, it barely breaks even, so the first real test is whether saves stick (simulated).
 
 ## Accomplishments that we're proud of
 - Restraint you can check: most accounts get no text at all.
