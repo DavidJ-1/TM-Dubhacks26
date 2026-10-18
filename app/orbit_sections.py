@@ -829,9 +829,12 @@ def _select_lang(r, drafts: dict[str, str], key: str, account_id: str) -> str:
 
 
 def _send_to_phone(body: str, *, title: str, button_key: str) -> None:
-    """Post the text on screen. An empty SEND_BACKEND still uses ntfy; an explicit dryrun stays a preview."""
+    """Post the text on screen to the customer. An empty SEND_BACKEND still uses ntfy; an explicit dryrun stays a preview."""
     st.session_state["_phone_preview"] = body
-    if not body or not st.button("Send to my phone", key=button_key):
+    if not body:
+        return
+    st.caption("Demo delivers this via ntfy to the demo phone.")
+    if not st.button("Send to customer", key=button_key):
         return
     import os
     try:
@@ -844,9 +847,9 @@ def _send_to_phone(body: str, *, title: str, button_key: str) -> None:
         st.toast(str(exc) or "Send failed.")
         return
     if result.get("ok") and result.get("sent"):
-        st.toast("Sent to your phone.")
+        st.toast("Sent to customer. Demo delivers it via ntfy to the demo phone.")
     elif result.get("ok"):
-        st.toast("Preview only. Nothing was sent.")
+        st.toast("Preview only. Nothing was sent to the customer.")
     else:
         st.toast(result.get("detail") or "Send failed.")
 

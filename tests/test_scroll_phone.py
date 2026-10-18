@@ -1,4 +1,4 @@
-"""Send to my phone on the scroll page. Dry-run only: requests.post must not run."""
+"""Send to customer on the scroll page. Dry-run only: requests.post must not run."""
 from __future__ import annotations
 
 import html
@@ -64,12 +64,12 @@ def test_do_nothing_copy_has_no_send():
     text = html.unescape(" ".join(m.value for m in at.markdown))
     assert "No message sent, here's why" in text
     assert "likely to pay off" in text
-    assert not any(b.label == "Send to my phone" for b in at.button)
+    assert not any(b.label == "Send to customer" for b in at.button)
 
     at3 = _open(AppTest.from_function(page), "ACC-00347", 3)
     text3 = html.unescape(" ".join(m.value for m in at3.markdown))
     assert "No message sent, here's why" in text3
-    assert not any(b.label == "Send to my phone" for b in at3.button)
+    assert not any(b.label == "Send to customer" for b in at3.button)
 
 
 def test_send_button_posts_the_shown_language_as_dryrun(monkeypatch):
@@ -117,15 +117,16 @@ def test_send_button_posts_the_shown_language_as_dryrun(monkeypatch):
         sections.render_customer(df, "ACC-01607", key="orbit")
 
     at = _open(AppTest.from_function(page), "ACC-01607", 4, lang="ES")
-    assert any(b.label == "Send to my phone" for b in at.button)
+    assert any(b.label == "Send to customer" for b in at.button)
     assert any("Lo arreglamos" in m.value for m in at.markdown)
-    at = next(b for b in at.button if b.label == "Send to my phone").click().run()
+    assert any("ntfy" in c.value and "demo phone" in c.value for c in at.caption)
+    at = next(b for b in at.button if b.label == "Send to customer").click().run()
     assert seen["body"] == "Lo arreglamos. Hay un crédito único de $25."
     assert seen["to"] is None
-    assert any("Preview only" in t.value for t in at.toast)
+    assert any("Preview only" in t.value and "customer" in t.value for t in at.toast)
 
     at_hi = _open(AppTest.from_function(page), "ACC-01607", 4, lang="HI")
     assert any("हिन्दी" in m.value for m in at_hi.markdown)
-    at_hi = next(b for b in at_hi.button if b.label == "Send to my phone").click().run()
+    at_hi = next(b for b in at_hi.button if b.label == "Send to customer").click().run()
     assert seen["body"] == "हिन्दी ड्राफ्ट"
-    assert any("Preview only" in t.value for t in at_hi.toast)
+    assert any("Preview only" in t.value and "customer" in t.value for t in at_hi.toast)
