@@ -84,10 +84,7 @@ st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
 a, b, c = st.columns([2, 1, 0.8])
 a.segmented_control("Open a customer", D.DEMO, key="seg", format_func=lambda d: f"Customer {d}", on_change=_from_seg)
 b.text_input("Find a customer", key="q", placeholder="e.g. 38 or 01607", on_change=_from_search)
-live = D.live_events()
-if live is not None and D.LIVE_ACC in set(df.account_id):
-    c.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-    c.button("Live what-if", key="open_live", on_click=_from_live, width="stretch")
+live = D.live_events()   # the event rail in the customer section is the entry point (no separate button)
 acc = st.session_state["acc"]
 # the walk-through: decisions/options from the offers team's files (ledger/outreach fallbacks), today's candidates for eligibility
 opts = D.offer_options(df, acc)
@@ -108,11 +105,40 @@ TICK_CSS = (f"<style>.st-key-orbit_tick{{position:sticky;top:0;z-index:20;backgr
             f".o-tick .dot{{width:12px;height:12px;border-radius:50%;border:1.5px solid {O.INK};background:{O.BG};flex:none}}"
             f".o-tick .dot.past{{background:{O.INK}}}.o-tick .dot.now{{background:{O.MAG};border-color:{O.MAG}}}"
             f".o-tick .lab{{margin:0 10px 0 6px;white-space:nowrap}}.o-tick .lab.now{{color:{O.MAG}}}.o-tick .lab.fut{{color:{O.MUTED}}}"
-            f".o-tickline{{font:400 16px/1.35 'SG';margin-top:4px;padding-bottom:10px;border-bottom:1px solid {O.INK}}}</style>")
+            f".o-tickline{{font:400 16px/1.35 'SG';margin-top:4px;padding-bottom:10px;border-bottom:1px solid {O.INK}}}"
+            # ---- animations: plain CSS, transform/opacity/box-shadow only (no layout change, no page jump), ease-out,
+            # under 600ms, no overshoot. The 'tka' class is set only on the run right after a Next event press, so each
+            # plays once per press; React swaps the element (its markup changes), which restarts the animation.
+            "@keyframes tkUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}"
+            "@keyframes tkIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}"
+            f"@keyframes tkRing{{from{{box-shadow:0 0 0 0 {O.MAG}}}to{{box-shadow:0 0 0 9px rgba(226,0,116,0)}}}}"
+            "@keyframes tkLine{from{transform:scaleX(0)}to{transform:scaleX(1)}}"
+            f"@keyframes tkFade{{from{{opacity:1;color:{O.INK}}}to{{opacity:.75;color:{O.MUTED}}}}}"
+            f"@keyframes tkFlash{{0%{{box-shadow:0 0 0 2px {O.MAG}}}100%{{box-shadow:0 0 0 2px rgba(226,0,116,0)}}}}"
+            "@keyframes tkFlip{from{transform:perspective(900px) rotateX(-90deg);opacity:.2}to{transform:perspective(900px) rotateX(0);opacity:1}}"
+            ".tka .o-tk-risk{animation:tkUp .45s ease-out both}"
+            ".tka .o-tk-chip{animation:tkIn .45s ease-out .1s both}"
+            ".o-tick .dot.now.tka{animation:tkRing .55s ease-out 1}"
+            f".tka .o-chg{{position:relative}}.tka .o-chg::after{{content:'';position:absolute;left:0;right:0;bottom:-1px;height:1px;"
+            f"background:{O.MAG};transform-origin:left;animation:tkLine .5s ease-out both}}"
+            ".tka .o-chg .wv{animation:tkFade .55s ease-out both}"
+            "[class*='st-key-orbit_tower_flash']{animation:tkFlash .55s ease-out 1}"
+            ".o-tk-flip{animation:tkFlip .5s ease-out both;transform-origin:top center}"
+            ".o-tk-slide{animation:tkUp .45s ease-out .15s both}</style>")
 
 
 def _tick_go(i: int) -> None:
     st.session_state[TICK_KEY] = i
+    st.session_state["_tick_anim"] = i > 0   # animate the run right after a Next event press (not on Reset)
+
+
+def _tick_open() -> None:   # the rail as entry point: from any other customer, Next event opens the live account
+    st.session_state["acc"] = D.LIVE_ACC
+    st.session_state["seg"] = None
+    st.session_state["q"] = ""
+    st.session_state[TICK_KEY] = 1
+    st.session_state["_tick_anim"] = True
+    st.session_state["_tick_full"] = True
 
 
 def _tick_rail(t: dict):
@@ -124,7 +150,8 @@ def _tick_rail(t: dict):
             parts = []
             for j in range(1, n + 1):
                 k = "now" if j == i else ("past" if j < i else "fut")
-                parts.append(f"<span class='dot {k}'></span><span class='lab {k}'>{j:02d} · {O.esc(labs[j]) if j <= i else '?'}</span>")
+                lab = f"{j:02d} · {O.esc(labs[j])}" if j <= i else f"{j:02d}"
+                parts.append(f"<span class='dot {k} {t.get('anim', '') if j == i else ''}'></span><span class='lab {k}'>{lab}</span>")
             a.markdown(f"<div class='o-tick'><span class='lab'>EVENTS</span>{'<span class=seg></span>'.join(parts)}</div>",
                        unsafe_allow_html=True)
             b.button("Next event →", key=f"{TICK_KEY}_next", disabled=i >= n, on_click=_tick_go, args=(i + 1,),
@@ -135,17 +162,37 @@ def _tick_rail(t: dict):
     return draw
 
 
+def _entry_rail():
+    """For any other customer: a slim rail whose Next event opens the account that ticks."""
+    with st.container(key="orbit_tick"):
+        st.markdown(TICK_CSS, unsafe_allow_html=True)
+        a, b = st.columns([8, 1.2], vertical_alignment="center")
+        a.markdown(f"<div class='o-tick'><span class='lab'>EVENTS</span><span class='lab fut'>"
+                   f"Watch customer {O.esc(O.cid(D.LIVE_ACC))} react as things happen to the account</span></div>",
+                   unsafe_allow_html=True)
+        b.button("Next event →", key=f"{TICK_KEY}_open", on_click=_tick_open, type="primary", width="stretch")
+
+
 @st.fragment
 def customer_section():
+    if st.session_state.pop("_tick_full", False):   # opened from the entry rail: redraw the picker too
+        st.rerun()
     acc_ = st.session_state["acc"]
     inp = D.engine_inputs()
     t = D.live_tick(df, acc_, int(st.session_state.get(TICK_KEY, 0)), inp) if acc_ == D.LIVE_ACC else None
-    view, cfn = df, D.contributions
+    view, cfn, dec_v, opt_v = df, D.contributions, dec, opts
     if t is not None:
+        t = D.live_tick_more(t, df, acc_, show_money=SHOW_MONEY)
+        t["anim"] = "tka" if st.session_state.pop("_tick_anim", False) else ""
         t["rail"] = _tick_rail(t)
         view, cfn = D.live_row(df, acc_, t["step"]), D.live_contributions(t["step"], acc_)
+        dec_v = D.live_decisions(dec, acc_, t["step"], show_money=SHOW_MONEY)
+        opt_v = D.live_options(acc_, t["step"], show_money=SHOW_MONEY)
+    elif live is not None:
+        st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
     _call(O.render_customer, view if SHOW_MONEY else D.strip_money(view), acc_, contributions_fn=cfn, candidates=cand,
-          inputs=inp, events=D.events(), decisions=dec, options=opts, tick=t)
+          inputs=inp, events=D.events(), decisions=dec_v, options=opt_v, tick=t if t is not None else
+          ({"rail": _entry_rail, "risk": None} if live is not None else None))
 
 
 customer_section()

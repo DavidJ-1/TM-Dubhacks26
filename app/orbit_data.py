@@ -713,7 +713,51 @@ def live_row(df: pd.DataFrame, acc: str, i: int) -> pd.DataFrame:
         if k in out.columns:
             out.loc[m, k] = v
     out.loc[m, "p_churn_90d"] = float(s["risk"])
+    for k, v in (s.get("rules") or {}).items():   # this step's engine + guardrail verdict inputs (step 3's rules)
+        v = None if v == "" else v
+        if k in out.columns:
+            out[k] = out[k].astype(object)
+        out.loc[m, k] = v
+    dd = s.get("decision") or {}
+    if dd:   # what the customer sees at this step (message only once the engine decides to send one)
+        sent = dd.get("decision") == "message"
+        out.loc[m, "messaged"] = sent
+        out.loc[m, "channel"] = dd.get("channel") if sent else None
+        out.loc[m, "message_en"] = clean(dd.get("message_en") or "") if sent else ""
+        out.loc[m, "reason_line"] = clean(dd.get("decision_reason") or "")
     return out
+
+
+def _live_step(acc: str, i: int) -> dict | None:
+    return next((x for x in (live_steps() or []) if x["account_id"] == acc and int(x["step"]) == i), None)
+
+
+def live_decisions(dec: pd.DataFrame | None, acc: str, i: int, show_money: bool = True) -> pd.DataFrame | None:
+    """decisions= with the live account's row replaced by this step's engine decision (script output). Money columns
+    for that row are left blank: the script saves the guardrail's policy_ev_usd only, not the ledger's save-rate nets."""
+    s = _live_step(acc, i)
+    if dec is None or s is None or not s.get("decision"):
+        return dec
+    d = dict(s["decision"])
+    row = {c: None for c in dec.columns}
+    row.update({"account_id": acc, "decision": d["decision"], "channel": d["channel"],
+                "decision_reason": clean(d["decision_reason"]), "offer_label": clean(d["offer_label"]),
+                "message_en": clean(d["message_en"]), "receipt_line": "", "already_leaving": False})
+    return pd.concat([dec[dec.account_id != acc], pd.DataFrame([row])[dec.columns]], ignore_index=True)
+
+
+def live_options(acc: str, i: int, show_money: bool = True) -> pd.DataFrame | None:
+    """options= for the live account at this step (the script's per-step 'options weighed', same wording as options.csv)."""
+    s = _live_step(acc, i)
+    if s is None or not s.get("options"):
+        return None
+    o = pd.DataFrame(s["options"])
+    o.insert(0, "account_id", acc)
+    for c in ("option_label", "reason"):
+        o[c] = o[c].fillna("").astype(str).map(clean)
+    if not show_money:
+        o = o.drop(columns=["net_mid_usd"], errors="ignore")
+    return o
 
 
 def live_contributions(i: int, acc: str):
@@ -767,11 +811,59 @@ def live_tick(df: pd.DataFrame, acc: str, i: int, inputs: pd.DataFrame | None) -
                 a, b = fn(r_old), fn(r_new)
                 if a != b and b is not None:
                     t["was"][it] = a if a is not None else "—"
-    # step 2: the signal whose contribution moved most this event
-    s1 = next((x for x in S if x["account_id"] == acc and int(x["step"]) == i), None)
-    s0 = next((x for x in S if x["account_id"] == acc and int(x["step"]) == i - 1), None)
+    # step 2: the signal whose contribution moved most this event, its old and new points, and whether it is the same
+    # reason group the CSV's reason_changed was worded from
+    s1, s0 = _live_step(acc, i), _live_step(acc, i - 1)
     if s1 and s0:
-        dc = pd.Series(s1["contributions"]).sub(pd.Series(s0["contributions"]), fill_value=0).abs()
+        c1, c0 = pd.Series(s1["contributions"]), pd.Series(s0["contributions"])
+        dc = c1.sub(c0, fill_value=0).abs()
         if len(dc) and float(dc.max()) > 1e-9:
-            t["hl"] = str(dc.idxmax())
+            f = str(dc.idxmax())
+            t["hl"] = f
+            p1 = O.breakdown(float(s1["intercept"]), c1, float(s1["risk"]), None, k=len(c1))[1]
+            p0 = O.breakdown(float(s0["intercept"]), c0, float(s0["risk"]), None, k=len(c0))[1]
+            new = float(p1.set_index("feat").pts.get(f, 0.0))
+            old = float(p0.set_index("feat").pts.get(f, 0.0))
+            t["hl_old_pts"], t["hl_delta"] = old, new - old
+        g1, g0 = pd.Series(s1["groups"]), pd.Series(s0["groups"])
+        dg = g1.sub(g0, fill_value=0).abs()
+        try:
+            _model()   # puts the model's package on the path
+            import churn_model as cm
+            t["same_signal"] = bool(t.get("hl")) and cm.reason_group(t["hl"]) == str(dg.idxmax())
+        except Exception:  # noqa: BLE001
+            t["same_signal"] = False
+    return t
+
+
+def live_tick_more(t: dict | None, df: pd.DataFrame, acc: str, show_money: bool = True) -> dict | None:
+    """Steps 3-5 extras for the tick: which rule's verdict changed this event, the pick note ('still doing nothing' /
+    'changed at event N'), whether this is the flip event, and (money on only) this customer's expected value."""
+    import orbit_sections as O
+    if t is None:
+        return None
+    i, L = t["step"], live_events()
+    L = L[L.account_id == acc].sort_values("step").reset_index(drop=True)
+    picks = [str(x) for x in L.pick]
+    flip = next((j for j in range(1, len(picks)) if picks[j] != picks[0]), None)
+    t["flip_at"], t["is_flip"] = flip, (flip is not None and i == flip)
+    if flip is None or i < flip:
+        t["pick_note"] = "Still doing nothing." + (f" Nothing has changed the decision through event {i}." if i else "")
+    else:
+        t["pick_note"] = f"Changed at event {flip}."
+    t["rules_changed"] = []
+    if i > 0:
+        def rules(j):
+            v = live_row(df, acc, j)
+            r = v[v.account_id == acc].iloc[0]
+            s = _live_step(acc, j) or {}
+            ch = (s.get("decision") or {}).get("channel")
+            return {rule: st_ for rule, st_, _ in O.outreach_rules(r, ch if ch and ch != "none" else None)}
+        a, b = rules(i - 1), rules(i)
+        # the first rule whose verdict changed (later rules only follow from it: 'not reached' <-> 'passes')
+        t["rules_changed"] = [k for k in b if a.get(k) != b[k]][:1]
+    s = _live_step(acc, i) or {}
+    ev = s.get("policy_ev_usd")
+    t["ev"] = (f"Expected value, this customer only: {'+' if ev >= 0 else '−'}${abs(ev):,.2f}"
+               if show_money and ev is not None and (s.get("decision") or {}).get("decision") == "message" else "")
     return t

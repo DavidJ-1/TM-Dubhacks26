@@ -478,8 +478,10 @@ def breakdown(b0: float, C: pd.Series, p: float, Z: pd.Series | None = None, k: 
     return base, top.reset_index(drop=True), rest, overlap, p * 100
 
 
-def _tower(base, top, rest, overlap, p_now, key, hl: str | None = None) -> go.Figure:
-    """hl (optional): feature whose block gets a magenta outline (the 'Other' block when it isn't in the top)."""
+def _tower(base, top, rest, overlap, p_now, key, hl: str | None = None, hl_old: float | None = None,
+           hl_delta: float | None = None) -> go.Figure:
+    """hl (optional): feature whose block moved (the 'Other' block when it isn't in the top): drawn solid magenta at its
+    new height, a dashed grey outline at its old height (hl_old pts), and a 'moved · +x pts' callout (hl_delta)."""
     cols = [("Typical customer", "base", base, 0.0)]
     cum = base
     hl_i = None
@@ -502,6 +504,8 @@ def _tower(base, top, rest, overlap, p_now, key, hl: str | None = None) -> go.Fi
         lo, hi = ((0.0, v) if lane in ("base", "total") else ((z0, z0 + v) if v >= 0 else (z0 + v, z0)))
         hi = max(hi, lo + 0.012)
         color = {"base": "#D9D3C9", "total": INK, "Other": BG}.get(lane, MAG if v > 0 else "#FFFFFF")
+        if i == hl_i:
+            color = MAG
         X = [x - W, x + W, x + W, x - W] * 2
         Y = [y - W, y - W, y + W, y + W] * 2
         Z = [lo] * 4 + [hi] * 4
@@ -512,12 +516,17 @@ def _tower(base, top, rest, overlap, p_now, key, hl: str | None = None) -> go.Fi
                                 f"{esc(lab)}<br>{v:.2f}%<extra></extra>", showscale=False))
         for a, b in [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)]:
             ex += [X[a], X[b], None]; ey += [Y[a], Y[b], None]; ez += [Z[a], Z[b], None]
-            if i == hl_i:   # magenta outline drawn just outside the block so it reads on a magenta fill too
-                g, gz = 0.14, max(0.06 * (hi - lo), 0.03)
+            if i == hl_i and hl_old is not None:   # dashed grey outline: the same block at its old height
+                g = 0.04
                 OX = [x - W - g, x + W + g, x + W + g, x - W - g] * 2
                 OY = [y - W - g, y - W - g, y + W + g, y + W + g] * 2
-                OZ = [max(lo - gz, 0.0)] * 4 + [hi + gz] * 4
+                olo, ohi = (z0, z0 + hl_old) if hl_old >= 0 else (z0 + hl_old, z0)
+                OZ = [olo] * 4 + [max(ohi, olo + 0.012)] * 4
                 hx += [OX[a], OX[b], None]; hy += [OY[a], OY[b], None]; hz += [OZ[a], OZ[b], None]
+        if i == hl_i and hl_delta is not None:
+            ann.append(dict(x=x, y=y, z=hi, text=f"<b>moved</b> · {hl_delta:+.2f} pts", showarrow=True, arrowhead=0, arrowwidth=1,
+                            arrowcolor=MAG, ax=40, ay=-30, font=dict(family="SM", size=10, color=MAG), bgcolor="#fff",
+                            bordercolor=MAG, borderwidth=1, borderpad=3))
         if lane in ("base", "total"):
             ann.append(dict(x=x, y=y, z=hi, text=f"<b>{'TYPICAL' if lane == 'base' else 'THIS CUSTOMER'}</b><br>{pct(v)}",
                             showarrow=True, arrowhead=0, arrowwidth=1, arrowcolor=INK, ax=0, ay=-40,
@@ -529,7 +538,7 @@ def _tower(base, top, rest, overlap, p_now, key, hl: str | None = None) -> go.Fi
         run += v
     fig.add_trace(go.Scatter3d(x=ex, y=ey, z=ez, mode="lines", line=dict(color=INK, width=1.6), hoverinfo="skip", showlegend=False))
     if hx:
-        fig.add_trace(go.Scatter3d(x=hx, y=hy, z=hz, mode="lines", line=dict(color=MAG, width=7), hoverinfo="skip", showlegend=False))
+        fig.add_trace(go.Scatter3d(x=hx, y=hy, z=hz, mode="lines", line=dict(color=MUTED, width=2, dash="dash"), hoverinfo="skip", showlegend=False))
     fig.add_trace(go.Scatter3d(x=cx, y=cy, z=cz, mode="lines", line=dict(color=INK, width=1.4, dash="dash"), hoverinfo="skip", showlegend=False))
     for n in range(min(3, len(top))):
         t, i = top.loc[n], n + 1
@@ -646,9 +655,14 @@ def _inputs_html(r, inputs: pd.DataFrame, was: dict | None = None) -> tuple[str,
             total += 1
             shown += val is not None
             w = (was or {}).get(str(it.item))
-            sty = f" style='border-left:2px solid {MAG};padding-left:8px'" if w is not None else ""
-            wtxt = f" <span style='color:{MUTED};font-size:12px'>was {esc(str(w))}</span>" if w is not None else ""
-            rows += (f"<div class='o-kv'{sty}><span>{esc(str(it.item))}</span><span>{esc(str(val)) + wtxt if val is not None else '<i style=\"color:#6B675F\">not in this view</i>'}</span></div>")
+            if w is not None and val is not None:
+                a_, b_ = str(val).split(" ", 1) + [""], str(w).split(" ", 1) + [""]
+                nv_, ov_ = (a_[0], b_[0]) if a_[1] and a_[1] == b_[1] else (str(val), str(w))   # '−0.20 was −0.13'
+                nv_, ov_ = nv_.replace("-", "−"), ov_.replace("-", "−")
+                rows += (f"<div class='o-kv o-chg' style='border-left:2px solid {MAG};padding-left:8px;margin:3px 0'><span>{esc(str(it.item))}</span>"
+                         f"<span><span class='nv' style='color:{MAG}'>{esc(nv_)}</span> <span class='wv' style='color:{MUTED};font-size:12px'>was {esc(ov_)}</span></span></div>")
+                continue
+            rows += (f"<div class='o-kv'><span>{esc(str(it.item))}</span><span>{esc(str(val)) if val is not None else '<i style=\"color:#6B675F\">not in this view</i>'}</span></div>")
         cols += f"<div class='col'><div class='gh'>{esc(name)} · {len(x)}</div>{rows}</div>"
     return cols, shown, total
 
@@ -1128,14 +1142,16 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
     was = f"<div class='was'>(what-if, was {pct(p_orig)})</div>" if edits and bd else ""
     lines = int(_n(r, "n_lines"))
     if tick and tick.get("chip"):
-        was = f"<div class='was' style='color:{MAG}'>{esc(tick['chip'])}</div>"
+        was = f"<div class='was o-tk-chip' style='color:{MAG}'>{esc(tick['chip'])}</div>"
     if tick and callable(tick.get("rail")):
         tick["rail"]()
-    sub = (f"typical customer {pct(base)} · " if base else "") + (f"risk rank {int(r.risk_rank):,} of {len(df):,}" if "risk_rank" in r else "")
+    sub = (f"typical customer {pct(base)} · " if base else "") + (f"risk rank {int(r.risk_rank):,} of {len(df):,}" if "risk_rank" in r and not (tick and "step" in tick) else "")
+    sub = sub.rstrip(" ·")
+    an = (tick or {}).get("anim", "")   # CSS hook: set only on the run right after a Next event press
     st.markdown(f"""<div class='o-cust'><div><div class='o-lbl'>Customer {esc(cid(account_id))}</div>
 <div class='name'>{esc(str(r.get('segment', '')).title())} account · {(str(int(_n(r, 'tenure_months')) // 12) + ' yrs') if _n(r, 'tenure_months') >= 12 else (str(int(_n(r, 'tenure_months'))) + ' months')} with us · {lines} line{'s' if lines != 1 else ''}</div>
 <div class='sub'>{sub}</div></div>
-<div><div class='risk'>{pct(p_now)[:-1]}<small>%</small></div><div class='rl'>90-DAY CHURN RISK</div>{was}</div></div>""", unsafe_allow_html=True)
+<div class='{an}'><div class='risk o-tk-risk'>{pct(p_now)[:-1]}<small>%</small></div><div class='rl'>90-DAY CHURN RISK</div>{was}</div></div>""", unsafe_allow_html=True)
 
     events_df = _events_for(account_id, events, decisions)
     strip = _strip_html(events_df, _next_version(r, decisions))
@@ -1155,7 +1171,7 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
             if inputs is not None and len(inputs):
                 cols, shown, total = _inputs_html(r, inputs, (tick or {}).get("was"))
                 st.markdown(f"<div class='o-ph'>Every input the engine uses, and this customer's value<small>{total} inputs</small></div>"
-                            f"<div class='o-know o-know-sm' style='margin-bottom:16px'>{cols}</div>", unsafe_allow_html=True)
+                            f"<div class='o-know o-know-sm {an}' style='margin-bottom:16px'>{cols}</div>", unsafe_allow_html=True)
             else:
                 g = _facts(r)
                 cols = "".join(f"<div class='col'><div class='gh'>{k}</div>" + "".join(
@@ -1169,26 +1185,39 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
                 b, top, rest, overlap, pn = bd
                 a, z = st.columns([1.5, 1], gap="large")
                 with a:
-                    st.plotly_chart(_tower(b, top, rest, overlap, pn, key, (tick or {}).get("hl")), width="stretch", theme=None, config=CFG3D,
-                                    key=f"{key}_tower")
+                    tk = tick or {}
+                    with st.container(key=f"orbit_tower_{'flash_' + str(tk.get('step')) if an and tk.get('hl') else 'still'}"):
+                        st.plotly_chart(_tower(b, top, rest, overlap, pn, key, tk.get("hl"), tk.get("hl_old_pts"), tk.get("hl_delta")),
+                                        width="stretch", theme=None, config=CFG3D, key=f"{key}_tower")
                     st.markdown("<div class='o-hint'>drag to rotate · hover a block</div>", unsafe_allow_html=True)
                 with z:
-                    rows = "".join(f"<div class='o-drv'><span class='n'>{i + 1:02d}</span><span>{esc(t.label)} <span class='g'>· {t.lane}</span></span>"
+                    hlf = (tick or {}).get("hl")
+                    rows = "".join(f"<div class='o-drv'><span class='n'>{i + 1:02d}</span><span>{esc(t.label)} <span class='g'>· {t.lane}</span>"
+                                   + (f" <b style='color:{MAG};font:500 11px SM'>MOVED</b>" if hlf and t.feat == hlf else "") + "</span>"
                                    f"<span class='g' style='text-align:right'>{'raises' if t.pts > 0 else 'lowers'}</span>"
                                    f"<span class='p {'up' if t.pts > 0 else ''}'>{t.pts:+.2f} pts</span></div>" for i, t in top.iterrows())
                     rows += (f"<div class='o-drv'><span class='n'>··</span><span>Other small signals + overlap</span><span></span>"
                              f"<span class='p'>{rest + overlap:+.2f} pts</span></div>")
+                    if hlf and not any(t.feat == hlf for _, t in top.iterrows()):
+                        rows += f"<div class='o-lbl' style='margin-top:6px;color:{MAG}'>moved: inside other small signals</div>"
                     if tick and tick.get("reasons"):
+                        same = bool(tick.get("same_signal"))
+                        tag = "new · moved" if same else "new reason"
                         rows = "".join(f"<div class='o-drv'><span class='n'>{i + 1:02d}</span><span>{esc(t_)}</span><span></span>"
-                                       f"<span class='p up'>{'new' if nw else ''}</span></div>" for i, (t_, nw) in enumerate(tick["reasons"])) \
+                                       f"<span class='p up'>{tag if nw else ''}</span></div>" for i, (t_, nw) in enumerate(tick["reasons"])) \
+                            + ("" if same or not any(nw for _, nw in tick["reasons"]) else
+                               f"<div class='o-lbl' style='margin:6px 0 0'>The new reason is worded by reason group; the block marked moved is the single signal that changed most.</div>") \
                             + "<div class='o-lbl' style='margin:14px 0 4px'>Biggest signals</div>" + rows
                     st.markdown(f"<div class='o-ph'>Typical {pct(b)} → this customer {pct(pn)}</div>{rows}", unsafe_allow_html=True)
         elif step == 2:
             nv = _next_version(r, decisions)
             rl = outreach_rules(r, (nv or {}).get("channel") if isinstance(nv, dict) else None)
             mark = {"stop": f"<span style='color:{MAG};font-weight:700'>STOPS HERE</span>", "pass": "passes", "info": "applies", "skip": "not reached"}
-            rrows = "".join(f"<div class='o-opt {'win' if s_ == 'stop' else ''} {'off' if s_ == 'skip' else ''}' style='grid-template-columns:1.4fr 1.2fr 110px;padding:5px 0'>"
-                            f"<span>{i + 1}. {esc(rule)}</span><span class='why'>{esc(det)}</span><span class='v'>{mark[s_]}</span></div>"
+            chg = set((tick or {}).get("rules_changed") or [])
+            rrows = "".join(f"<div class='o-opt {'win' if s_ == 'stop' else ''} {'off' if s_ == 'skip' else ''}' style='grid-template-columns:1.4fr 1.2fr 110px;padding:5px 0"
+                            + (f";border-left:3px solid {MAG};padding-left:8px;background:#fff" if rule in chg else "") + "'>"
+                            f"<span>{i + 1}. {esc(rule)}" + (f" <b style='color:{MAG};font:500 11px SM'>CHANGED</b>" if rule in chg else "")
+                            + f"</span><span class='why'>{esc(det)}</span><span class='v'>{mark[s_]}</span></div>"
                             for i, (rule, s_, det) in enumerate(rl))
             st.markdown(f"<div class='o-ph'>The rules, in order<small>the first one that applies decides</small></div>{rrows}", unsafe_allow_html=True)
             if (candidates is not None and len(candidates)) or _opts_for(options, account_id) is not None:
@@ -1212,19 +1241,29 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
             if nv.get("leaving"):
                 when += (f"<div style='border-top:1px solid #111;padding:10px 14px'><div style='border:1px solid #111;padding:8px 12px'>"
                          f"<div class='o-lbl'>Asked us about leaving</div><div style='font:400 14px/1.4 SG;margin-top:4px'>{esc(nv['leaving'])}</div></div></div>")
-            st.markdown(f"<div class='o-dec' style='max-width:780px'><div class='hd'><span class='o-lbl'>What we picked</span></div>{big}{why}{when}{money}</div>",
+            tk = tick or {}
+            if tk.get("pick_note"):
+                ch_ = tk.get("flip_at") is not None and tk.get("step", 0) >= tk["flip_at"]
+                big = (f"<div class='o-lbl' style='padding:10px 14px 0;color:{MAG if ch_ else MUTED}'>{esc(tk['pick_note'])}</div>"
+                       + (big if ch_ else "<div class='big hero'>Still doing nothing.<br>No text is sent.</div>"))
+                if tk.get("ev"):
+                    money += f"<div style='border-top:1px solid #111;padding:8px 14px;font:400 13px SM;color:{MUTED}'>{esc(tk['ev'])}</div>"
+            flipc = " o-tk-flip" if (tk.get("is_flip") and an) else ""
+            st.markdown(f"<div class='o-dec{flipc}' style='max-width:780px'><div class='hd'><span class='o-lbl'>What we picked</span></div>{big}{why}{when}{money}</div>",
                         unsafe_allow_html=True)
             if nv["kind"] in ("message", "bill"):
                 m = _message_html(r, _drow(decisions, account_id))
                 if m:
                     lab = "On the bill:" if nv["kind"] == "bill" else f"Sent {CHANNEL_PHRASE.get(nv['channel'], 'as a message')}:"
-                    st.markdown(f"<div class='o-lbl' style='margin:12px 0 6px'>{esc(lab)}</div>{m}", unsafe_allow_html=True)
+                    slide = " o-tk-slide" if ((tick or {}).get("is_flip") and an) else ""
+                    st.markdown(f"<div class='o-lbl' style='margin:12px 0 6px'>{esc(lab)}</div><div class='{slide}'>{m}</div>", unsafe_allow_html=True)
         elif step == 4:
             m = _message_html(r, _drow(decisions, account_id))
             reason = str(r.get("reason_line", "") or "")
             head = "Why we're reaching out" if r.messaged else "Why we're not"
             top = f"<div class='o-lbl'>{head}</div><div class='o-ph'>{esc(_cap(reason))}</div>" if reason else ""
-            st.markdown(top + m, unsafe_allow_html=True)
+            slide = " o-tk-slide" if ((tick or {}).get("is_flip") and an) else ""
+            st.markdown(top + (f"<div class='{slide}'>{m}</div>" if m else ""), unsafe_allow_html=True)
         else:
             rel = [(k, lab) for k, lab, cond, _ in TOGGLES if cond(r)]
             st.markdown("<div class='o-ph'>Switch a fact off and the risk model re-scores live</div>", unsafe_allow_html=True)

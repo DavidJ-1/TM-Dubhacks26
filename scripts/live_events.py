@@ -53,6 +53,11 @@ from experiments.engine_rules.apply_rules import _db_path, connect_ro  # noqa: E
 cs.OUT = _TMP                                  # scorer cache to temp, nothing written in the repo
 OUT_CSV = ROOT / "data" / "live_events" / "live_events.csv"
 OUT_STEPS = ROOT / "data" / "live_events" / "live_events_steps.json"
+DECISIONS = ROOT / "data" / "decisions" / "decisions.csv"
+
+
+class StepZeroMismatch(AssertionError):
+    pass
 SUMMARY = json.loads((ROOT / "experiments/engine_rules/out/demo/summary.json").read_text())["guardrail"]
 FROZEN_SCALE = float(SUMMARY["save_rate_scale"])   # the scale behind the shipped 184; frozen so no other row moves
 SHIPPED_GUARD = ROOT / "experiments/engine_rules/out/demo/guardrail_detail.csv"
@@ -104,6 +109,11 @@ def ev_comp(f, e):     # visits a competitor's site
 def ev_port(f, e):     # asks how to move their number
     f["port_out_inquiry"] = 1; e["port_out_inquiry"] = 1
 
+
+# every engine-frame field an event function writes (seeded from the real row in run_path)
+ENGINE_FIELDS = ("app_sessions_30d", "support_90d", "unresolved_90d", "network_90d", "network_unresolved_90d",
+                 "neg_contacts_90d", "avg_sentiment_90d", "last_bill_cents", "bill_increase_pct", "days_since_bill_shock",
+                 "competitor_research_score", "port_out_inquiry")
 
 EVENTS = {
     "app":  ("Logged into the app", "Opened the app to check their usage.", ev_app, None),
@@ -212,10 +222,75 @@ def _diff(before: dict, after: dict) -> list[dict]:
             for k in after if _plain(before.get(k)) != _plain(after[k])]
 
 
+def options_for(aid: str, d: dict, g: pd.Series, c1: pd.DataFrame) -> list[dict]:
+    """decisions_out.build's 'options weighed' rows for one account (do nothing first), from this step's engine
+    candidates and decision. Same wording and order as data/decisions/options.csv."""
+    lab = dict(eng.ACTION_LABEL)
+    strict = set(pd.read_csv(dout.STRICT_RECEIPT).account_id) if dout.STRICT_RECEIPT.exists() else set()
+    trade = set(pd.read_csv(dout.TRADEOFF_RECEIPT).account_id) if dout.TRADEOFF_RECEIPT.exists() else set()
+    line, tline = aid in strict, aid in trade
+    ok, offer, chan = d["pick"] == "message", d["pick_code"] if d["pick"] == "message" else "", d["channel"]
+    open_t = isinstance(g.open_issue_topic, str) and bool(g.open_issue_topic)
+    out = [{"option_label": "Do nothing", "verdict": "not_sent" if ok else "picked",
+            "reason": "Baseline: no message, no cost." if ok else dout.money_free(dout.clean(d["why"])), "net_mid_usd": 0.0}]
+    seen = False
+    for _, c in c1.sort_values("expected_value", ascending=False).iterrows():
+        a = c.action_code
+        if a == "do_nothing":
+            continue
+        olab = lab.get(a, a)
+        if a in dout.FIX and chan != "call":
+            olab = olab.replace("fix-first callback", "fix-first message")
+        if str(c.eligible) != "True":
+            out.append({"option_label": olab, "verdict": "ruled_out", "reason": dout.plain_reason(c.blocked_or_ineligible_reason),
+                        "net_mid_usd": None})
+            continue
+        ev = float(c.expected_value)
+        if a == offer:
+            v, why, seen = "picked", "Sent.", True
+        elif a in eng.PLAN_MOVES:
+            v, why = "not_sent", ("Shown on the bill only: same features, lower price." if line
+                                  else "Shown on the bill with what they'd lose." if tline
+                                  else "Not suggested: not a like-for-like match." if not line
+                                  else "Plan changes are shown on the bill, never sent as a message.")
+        elif open_t and a not in dout.FIX:
+            v, why = "not_sent", "Open support issue: only a fix message is allowed."
+        elif ev <= 0:
+            v, why = "not_sent", "Expected to cost more than it brings back."
+        elif ok:
+            v, why = "not_sent", "One message per account; another option was sent."
+        else:
+            v, why = "not_sent", "Didn't pass the outreach rules for a message."
+        out.append({"option_label": olab, "verdict": v, "reason": why, "net_mid_usd": round(ev, 2)})
+    if offer and not seen:
+        out.append({"option_label": d["pick_label"], "verdict": "picked", "reason": "Sent.", "net_mid_usd": None})
+    return out
+
+
+def message_for(d: dict, aid: str, sup: pd.DataFrame, as_of) -> str:
+    """decisions_out.build's text for a message that has no outreach-card text: the fix-first template for the channel
+    and the latest open support topic in the last 90 days (same rule as decisions_out.sandbox_facts, on this step's
+    support rows); digital channels never promise a call."""
+    if d["pick"] != "message":
+        return ""
+    chan = d["channel"]
+    s_ = sup[sup.account_id == aid].copy()
+    s_["interaction_date"] = pd.to_datetime(s_.interaction_date)
+    op = s_[(s_.resolved.astype(int) == 0) & (s_.interaction_date >= pd.Timestamp(as_of) - pd.Timedelta(days=90))]
+    tp = str(op.sort_values("interaction_date").topic.iloc[-1]) if len(op) else "billing"
+    m = dout.FIX_EN[chan].format(t=dout.TOPIC_EN.get(tp, "your account")) if chan in dout.FIX_EN else ""
+    return dout.clean(dout.no_call(m) if chan != "call" else m)
+
+
 def run_path(W: World, aid: str, keys: list[str], check_book: bool = True, steps_out: list | None = None) -> pd.DataFrame:
     f = W.feats_m.loc[aid].to_dict()
     f0 = dict(f)
-    e = {}
+    # engine-frame fields the events touch, seeded from this customer's real row in the engine frame (the same frame
+    # behind today's decisions.csv), so each event adds to the real value instead of to an empty start
+    e = {k: _plain(W.df.loc[aid, k]) for k in ENGINE_FIELDS if k in W.df.columns}
+    missing = [k for k in ENGINE_FIELDS if k not in W.df.columns]
+    if missing:
+        print("engine frame lacks (left unseeded):", missing)
     rows = []
     sup_add = []
     as_of = W.sandbox[0]
@@ -289,6 +364,32 @@ def run_path(W: World, aid: str, keys: list[str], check_book: bool = True, steps
             assert (G.loc[others, "contact_ok"] == base.loc[G.index[others], "contact_ok"]).all(), "another row moved"
             assert int(base.loc[G.index[others], "contact_ok"].sum()) + int(base.loc[aid, "contact_ok"]) == 184
         d = decision_for(aid, G.loc[aid], W.contact_pref.get(aid, ""), o1.loc[aid])
+        opts = options_for(aid, d, G.loc[aid], c1)
+        if steps_out is not None:
+            gr = G.loc[aid]
+            steps_out[-1].update({
+                "rules": {"action_code": _plain(o1.loc[aid, "action_code"]),
+                          "do_nothing_reason": _plain(o1.loc[aid].get("do_nothing_reason")),
+                          "policy_selected": _plain(gr.get("policy_selected")), "block_reason": _plain(gr.block_reason),
+                          "contact_ok": _plain(gr.contact_ok), "open_issue_topic": _plain(gr.open_issue_topic)},
+                "decision": {"decision": d["pick"], "channel": d["channel"], "decision_reason": d["why"],
+                             "offer_label": d["pick_label"] if d["pick"] == "message" else "",
+                             "message_en": message_for(d, aid, sup, AS_OF)},
+                "policy_ev_usd": _plain(gr.policy_ev_usd), "options": opts})
+        if step == 0 and DECISIONS.exists():   # step 0 must reproduce today's decision file exactly
+            dr = pd.read_csv(DECISIONS).set_index("account_id").loc[aid]
+            want = ("message" if dr.decision == "message" else "silent", str(dr.channel), str(dr.decision_reason))
+            got = (d["pick"], d["channel"], d["why"])
+            if got != want:
+                raise StepZeroMismatch(f"{aid}: step 0 {got} != decisions.csv {want}")
+            OPTS = ROOT / "data" / "decisions" / "options.csv"
+            if OPTS.exists():
+                oc = pd.read_csv(OPTS)
+                oc = oc[oc.account_id == aid]
+                a_ = [(x.option_label, x.verdict, x.reason) for x in oc.itertuples()]
+                b_ = [(x["option_label"], x["verdict"], x["reason"]) for x in opts]
+                if a_ != b_:
+                    raise StepZeroMismatch(f"{aid}: step 0 options differ from options.csv: {a_} vs {b_}")
         rows.append({"step": step, "event": key, "event_label": "" if key == "start" else EVENTS[key][0],
                      "event_line": "" if key == "start" else EVENTS[key][1],
                      "risk": round(p, 4), "reason_1": risks[0] if risks else "",

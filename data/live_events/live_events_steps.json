@@ -44,7 +44,115 @@
    "tenure": 0.35671851006105487,
    "unresolved": 0.2710541931051818
   },
-  "risk": 0.058317
+  "risk": 0.058317,
+  "rules": {
+   "action_code": "do_nothing",
+   "do_nothing_reason": "recent_complaints",
+   "policy_selected": false,
+   "block_reason": "not_worth_contacting",
+   "contact_ok": false,
+   "open_issue_topic": ""
+  },
+  "decision": {
+   "decision": "silent",
+   "channel": "none",
+   "decision_reason": "No message, since nothing we could offer is likely to pay off.",
+   "offer_label": "",
+   "message_en": ""
+  },
+  "policy_ev_usd": 0.0,
+  "options": [
+   {
+    "option_label": "Do nothing",
+    "verdict": "picked",
+    "reason": "No message, since nothing we could offer is likely to pay off.",
+    "net_mid_usd": 0.0
+   },
+   {
+    "option_label": "$25 care credit",
+    "verdict": "not_sent",
+    "reason": "Expected to cost more than it brings back.",
+    "net_mid_usd": -6.83
+   },
+   {
+    "option_label": "loyalty credit",
+    "verdict": "ruled_out",
+    "reason": "They haven't been with us long enough for this yet.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "keep-your-phone credit",
+    "verdict": "ruled_out",
+    "reason": "They're still paying off their phone.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "switch to discount plan variant",
+    "verdict": "ruled_out",
+    "reason": "No cheaper version of their plan that they qualify for.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "right-size plan",
+    "verdict": "ruled_out",
+    "reason": "No cheaper plan fits how they use their lines.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "step-up plan",
+    "verdict": "ruled_out",
+    "reason": "Their usage doesn't call for a bigger plan.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "family upgrade",
+    "verdict": "ruled_out",
+    "reason": "There's no child or teen line on the account.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "device upgrade",
+    "verdict": "ruled_out",
+    "reason": "They don't have a paid-off phone to trade in.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "fix-first message",
+    "verdict": "ruled_out",
+    "reason": "There's no open issue to fix.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "$25 care credit + fix-first message",
+    "verdict": "ruled_out",
+    "reason": "This needs both a credit-worthy issue and an open problem.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "bill-shock relief ($25 credit, price-guarantee fact)",
+    "verdict": "ruled_out",
+    "reason": "Their bill hasn't jumped recently.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "check-in / plan review",
+    "verdict": "ruled_out",
+    "reason": "No sign they're thinking of leaving.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "perk reminder",
+    "verdict": "ruled_out",
+    "reason": "No unused streaming perk to point out.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "Home Internet bundle",
+    "verdict": "ruled_out",
+    "reason": "They're at high risk of leaving, so they get care, not a sale.",
+    "net_mid_usd": null
+   }
+  ]
  },
  {
   "account_id": "ACC-02363",
@@ -60,8 +168,8 @@
   "engine_changed": [
    {
     "field": "app_sessions_30d",
-    "old": null,
-    "new": 1
+    "old": 10,
+    "new": 11
    }
   ],
   "inputs_now": {
@@ -105,7 +213,115 @@
    "tenure": 0.35671851006105487,
    "unresolved": 0.2710541931051818
   },
-  "risk": 0.056195
+  "risk": 0.056195,
+  "rules": {
+   "action_code": "do_nothing",
+   "do_nothing_reason": "recent_complaints",
+   "policy_selected": false,
+   "block_reason": "not_worth_contacting",
+   "contact_ok": false,
+   "open_issue_topic": ""
+  },
+  "decision": {
+   "decision": "silent",
+   "channel": "none",
+   "decision_reason": "No message, since nothing we could offer is likely to pay off.",
+   "offer_label": "",
+   "message_en": ""
+  },
+  "policy_ev_usd": 0.0,
+  "options": [
+   {
+    "option_label": "Do nothing",
+    "verdict": "picked",
+    "reason": "No message, since nothing we could offer is likely to pay off.",
+    "net_mid_usd": 0.0
+   },
+   {
+    "option_label": "$25 care credit",
+    "verdict": "not_sent",
+    "reason": "Expected to cost more than it brings back.",
+    "net_mid_usd": -7.6
+   },
+   {
+    "option_label": "loyalty credit",
+    "verdict": "ruled_out",
+    "reason": "They haven't been with us long enough for this yet.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "keep-your-phone credit",
+    "verdict": "ruled_out",
+    "reason": "They're still paying off their phone.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "switch to discount plan variant",
+    "verdict": "ruled_out",
+    "reason": "No cheaper version of their plan that they qualify for.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "right-size plan",
+    "verdict": "ruled_out",
+    "reason": "No cheaper plan fits how they use their lines.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "step-up plan",
+    "verdict": "ruled_out",
+    "reason": "Their usage doesn't call for a bigger plan.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "family upgrade",
+    "verdict": "ruled_out",
+    "reason": "There's no child or teen line on the account.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "device upgrade",
+    "verdict": "ruled_out",
+    "reason": "They don't have a paid-off phone to trade in.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "fix-first message",
+    "verdict": "ruled_out",
+    "reason": "There's no open issue to fix.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "$25 care credit + fix-first message",
+    "verdict": "ruled_out",
+    "reason": "This needs both a credit-worthy issue and an open problem.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "bill-shock relief ($25 credit, price-guarantee fact)",
+    "verdict": "ruled_out",
+    "reason": "Their bill hasn't jumped recently.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "check-in / plan review",
+    "verdict": "ruled_out",
+    "reason": "No sign they're thinking of leaving.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "perk reminder",
+    "verdict": "ruled_out",
+    "reason": "No unused streaming perk to point out.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "Home Internet bundle",
+    "verdict": "ruled_out",
+    "reason": "They're at high risk of leaving, so they get care, not a sale.",
+    "net_mid_usd": null
+   }
+  ]
  },
  {
   "account_id": "ACC-02363",
@@ -161,32 +377,32 @@
   "engine_changed": [
    {
     "field": "support_90d",
-    "old": null,
-    "new": 1
+    "old": 6,
+    "new": 7
    },
    {
     "field": "unresolved_90d",
-    "old": null,
+    "old": 0,
     "new": 1
    },
    {
     "field": "network_90d",
-    "old": null,
-    "new": 1
+    "old": 1,
+    "new": 2
    },
    {
     "field": "network_unresolved_90d",
-    "old": null,
+    "old": 0,
     "new": 1
    },
    {
     "field": "neg_contacts_90d",
-    "old": null,
-    "new": 1
+    "old": 5,
+    "new": 6
    },
    {
     "field": "avg_sentiment_90d",
-    "old": null,
+    "old": -0.1333,
     "new": -0.2
    }
   ],
@@ -240,7 +456,115 @@
    "tenure": 0.35671851006105487,
    "unresolved": 0.5551597377790242
   },
-  "risk": 0.090657
+  "risk": 0.090657,
+  "rules": {
+   "action_code": "fix_first",
+   "do_nothing_reason": "",
+   "policy_selected": false,
+   "block_reason": "not_worth_contacting",
+   "contact_ok": false,
+   "open_issue_topic": "coverage issue"
+  },
+  "decision": {
+   "decision": "silent",
+   "channel": "none",
+   "decision_reason": "No message, since nothing we could offer is likely to pay off.",
+   "offer_label": "",
+   "message_en": ""
+  },
+  "policy_ev_usd": 0.0,
+  "options": [
+   {
+    "option_label": "Do nothing",
+    "verdict": "picked",
+    "reason": "No message, since nothing we could offer is likely to pay off.",
+    "net_mid_usd": 0.0
+   },
+   {
+    "option_label": "fix-first message",
+    "verdict": "not_sent",
+    "reason": "Didn't pass the outreach rules for a message.",
+    "net_mid_usd": 27.08
+   },
+   {
+    "option_label": "$25 care credit + fix-first message",
+    "verdict": "not_sent",
+    "reason": "Didn't pass the outreach rules for a message.",
+    "net_mid_usd": 22.48
+   },
+   {
+    "option_label": "$25 care credit",
+    "verdict": "not_sent",
+    "reason": "Open support issue: only a fix message is allowed.",
+    "net_mid_usd": 4.92
+   },
+   {
+    "option_label": "loyalty credit",
+    "verdict": "ruled_out",
+    "reason": "They haven't been with us long enough for this yet.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "keep-your-phone credit",
+    "verdict": "ruled_out",
+    "reason": "They're still paying off their phone.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "switch to discount plan variant",
+    "verdict": "ruled_out",
+    "reason": "No cheaper version of their plan that they qualify for.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "right-size plan",
+    "verdict": "ruled_out",
+    "reason": "No cheaper plan fits how they use their lines.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "step-up plan",
+    "verdict": "ruled_out",
+    "reason": "Their usage doesn't call for a bigger plan.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "family upgrade",
+    "verdict": "ruled_out",
+    "reason": "There's no child or teen line on the account.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "device upgrade",
+    "verdict": "ruled_out",
+    "reason": "They don't have a paid-off phone to trade in.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "bill-shock relief ($25 credit, price-guarantee fact)",
+    "verdict": "ruled_out",
+    "reason": "Their bill hasn't jumped recently.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "check-in / plan review",
+    "verdict": "ruled_out",
+    "reason": "Their open issue comes first.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "perk reminder",
+    "verdict": "ruled_out",
+    "reason": "No unused streaming perk to point out.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "Home Internet bundle",
+    "verdict": "ruled_out",
+    "reason": "They're at high risk of leaving, so they get care, not a sale.",
+    "net_mid_usd": null
+   }
+  ]
  },
  {
   "account_id": "ACC-02363",
@@ -256,7 +580,7 @@
   "engine_changed": [
    {
     "field": "competitor_research_score",
-    "old": null,
+    "old": 0.21,
     "new": 0.8
    }
   ],
@@ -311,7 +635,115 @@
    "tenure": 0.35671851006105487,
    "unresolved": 0.5551597377790242
   },
-  "risk": 0.184238
+  "risk": 0.184238,
+  "rules": {
+   "action_code": "care_credit_fix_first",
+   "do_nothing_reason": "",
+   "policy_selected": false,
+   "block_reason": "not_worth_contacting",
+   "contact_ok": false,
+   "open_issue_topic": "coverage issue"
+  },
+  "decision": {
+   "decision": "silent",
+   "channel": "none",
+   "decision_reason": "No message, since nothing we could offer is likely to pay off.",
+   "offer_label": "",
+   "message_en": ""
+  },
+  "policy_ev_usd": 0.0,
+  "options": [
+   {
+    "option_label": "Do nothing",
+    "verdict": "picked",
+    "reason": "No message, since nothing we could offer is likely to pay off.",
+    "net_mid_usd": 0.0
+   },
+   {
+    "option_label": "$25 care credit + fix-first message",
+    "verdict": "not_sent",
+    "reason": "Didn't pass the outreach rules for a message.",
+    "net_mid_usd": 92.14
+   },
+   {
+    "option_label": "fix-first message",
+    "verdict": "not_sent",
+    "reason": "Didn't pass the outreach rules for a message.",
+    "net_mid_usd": 74.65
+   },
+   {
+    "option_label": "$25 care credit",
+    "verdict": "not_sent",
+    "reason": "Open support issue: only a fix message is allowed.",
+    "net_mid_usd": 38.9
+   },
+   {
+    "option_label": "loyalty credit",
+    "verdict": "ruled_out",
+    "reason": "They haven't been with us long enough for this yet.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "keep-your-phone credit",
+    "verdict": "ruled_out",
+    "reason": "They're still paying off their phone.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "switch to discount plan variant",
+    "verdict": "ruled_out",
+    "reason": "No cheaper version of their plan that they qualify for.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "right-size plan",
+    "verdict": "ruled_out",
+    "reason": "No cheaper plan fits how they use their lines.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "step-up plan",
+    "verdict": "ruled_out",
+    "reason": "Their usage doesn't call for a bigger plan.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "family upgrade",
+    "verdict": "ruled_out",
+    "reason": "There's no child or teen line on the account.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "device upgrade",
+    "verdict": "ruled_out",
+    "reason": "They don't have a paid-off phone to trade in.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "bill-shock relief ($25 credit, price-guarantee fact)",
+    "verdict": "ruled_out",
+    "reason": "Their bill hasn't jumped recently.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "check-in / plan review",
+    "verdict": "ruled_out",
+    "reason": "Their open issue comes first.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "perk reminder",
+    "verdict": "ruled_out",
+    "reason": "No unused streaming perk to point out.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "Home Internet bundle",
+    "verdict": "ruled_out",
+    "reason": "They're at high risk of leaving, so they get care, not a sale.",
+    "net_mid_usd": null
+   }
+  ]
  },
  {
   "account_id": "ACC-02363",
@@ -327,7 +759,7 @@
   "engine_changed": [
    {
     "field": "port_out_inquiry",
-    "old": null,
+    "old": 0,
     "new": 1
    }
   ],
@@ -383,6 +815,114 @@
    "tenure": 0.35671851006105487,
    "unresolved": 0.5551597377790242
   },
-  "risk": 0.263059
+  "risk": 0.263059,
+  "rules": {
+   "action_code": "care_credit_fix_first",
+   "do_nothing_reason": "",
+   "policy_selected": true,
+   "block_reason": "",
+   "contact_ok": true,
+   "open_issue_topic": "coverage issue"
+  },
+  "decision": {
+   "decision": "message",
+   "channel": "in_app",
+   "decision_reason": "We'll help fix their open issue, which is likely worth it.",
+   "offer_label": "fix-first message",
+   "message_en": "We're sorry the issue with your coverage is still open. Our team is working on your open request. Tap to see updates. No sales pitch, no plan change. Turn off these notes anytime in Settings."
+  },
+  "policy_ev_usd": 5.28,
+  "options": [
+   {
+    "option_label": "Do nothing",
+    "verdict": "not_sent",
+    "reason": "Baseline: no message, no cost.",
+    "net_mid_usd": 0.0
+   },
+   {
+    "option_label": "$25 care credit + fix-first message",
+    "verdict": "not_sent",
+    "reason": "One message per account; another option was sent.",
+    "net_mid_usd": 150.81
+   },
+   {
+    "option_label": "fix-first message",
+    "verdict": "picked",
+    "reason": "Sent.",
+    "net_mid_usd": 114.72
+   },
+   {
+    "option_label": "$25 care credit",
+    "verdict": "not_sent",
+    "reason": "Open support issue: only a fix message is allowed.",
+    "net_mid_usd": 67.52
+   },
+   {
+    "option_label": "loyalty credit",
+    "verdict": "ruled_out",
+    "reason": "They haven't been with us long enough for this yet.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "keep-your-phone credit",
+    "verdict": "ruled_out",
+    "reason": "They're still paying off their phone.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "switch to discount plan variant",
+    "verdict": "ruled_out",
+    "reason": "No cheaper version of their plan that they qualify for.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "right-size plan",
+    "verdict": "ruled_out",
+    "reason": "No cheaper plan fits how they use their lines.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "step-up plan",
+    "verdict": "ruled_out",
+    "reason": "Their usage doesn't call for a bigger plan.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "family upgrade",
+    "verdict": "ruled_out",
+    "reason": "There's no child or teen line on the account.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "device upgrade",
+    "verdict": "ruled_out",
+    "reason": "They don't have a paid-off phone to trade in.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "bill-shock relief ($25 credit, price-guarantee fact)",
+    "verdict": "ruled_out",
+    "reason": "Their bill hasn't jumped recently.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "check-in / plan review",
+    "verdict": "ruled_out",
+    "reason": "Their open issue comes first.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "perk reminder",
+    "verdict": "ruled_out",
+    "reason": "No unused streaming perk to point out.",
+    "net_mid_usd": null
+   },
+   {
+    "option_label": "Home Internet bundle",
+    "verdict": "ruled_out",
+    "reason": "They're at high risk of leaving, so they get care, not a sale.",
+    "net_mid_usd": null
+   }
+  ]
  }
 ]
