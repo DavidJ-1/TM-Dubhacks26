@@ -190,3 +190,7 @@ Judgement calls: churn-risk penalty applies only above average risk; tenure 0.10
 ## Caveat: the upgrade lift from income is circular (synthetic)
 
 The synthetic upgrade label (`upgrade_90d`) is generated partly from `household_income_usd` and `step_up_cost_pct_income`, along with an already-on-top-plan flag. Any upgrade model that takes those columns as inputs is partly recovering our own label formula. The AUC gain they add (for example, tm-strategy measured 0.742 to 0.780) is circular and is **not** evidence that income predicts real upgrades. Report upgrade models on base features as the honest number. The churn label uses none of the enrichment or household columns.
+
+## Caveat: churn personas 21 and 22 are borderline (synthetic)
+
+The persona "high churn" bar is the top 10% (90th percentile). Even using the true synthetic probability, personas 21 and 22 sit right at that line, at the 91.7th and 90.2th percentiles. Across resampled refits they clear it only 45% and 66% of the time (tm-churn's bootstrap). That comes from how the labels are built, not from the models. The labels are deliberately unchanged.

@@ -80,7 +80,9 @@ The harness never writes `uplift.csv` or `policy_eval.csv`.
   split. With about 35 churn positives per holdout, single splits are noisy: read the CV mean and the
   same-rows oracle.
 - Persona checks are provisional. "High" means at or above the 90th percentile of regular accounts' scores
-  (David has not yet chosen between 80 and 90); "low" means at or below the median.
+  (top 10%), per David on 2026-10-17; "low" means at or below the median (50th percentile). Personas 21 and 22
+  are borderline by label design: they sit at the 91.7th and 90.2th percentile even on the true (synthetic)
+  probability, so they can miss the bar in some resamples or with some models.
 - The upgrade rule is a proxy for "near the cap 2+ months", because features.csv has no monthly near-cap count.
 - The Orange Belgium uplift data (CC BY-NC-ND) is read in place from `/workspace/tmobile/raw/` and is never
   committed.

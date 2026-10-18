@@ -1,4 +1,4 @@
-"""Pipeline visualization: sandbox + enrichment -> features -> Model A -> EV engine -> message on a phone.
+"""Pipeline visualization: sandbox (+ real household fields) -> features -> Model A -> EV engine -> message on a phone.
 
 Writes (all numbers SYNTHETIC; counts computed from harness/out/*.csv at run time, never typed in):
   app/viz/pipeline_flow.html     self-contained (plotly.js inlined), animated: pipeline strip, Sankey funnel
@@ -330,11 +330,11 @@ def arrow_shapes(xa, xb, y, color=MAGENTA):
 
 
 # ----------------------------------------------------------------------------------------------- strip
-def strip_shapes(stats, y0, y1, x0=0.0, x1=1.0, highlight=None, compact=False, plot_h=755):
+def strip_shapes(stats, y0, y1, x0=0.0, x1=1.0, highlight=None, compact=False, plot_h=755, pointer=False):
     """Five pipeline cards with arrows, in paper coords. Returns (shapes, annotations)."""
     st = stats
     cards = [
-        ("DATA", "Judge sandbox + enrichment",
+        ("DATA", "Judge sandbox",
          f"{st['sandbox']['n_tables_used']} sandbox tables · {st['sandbox']['rows_used']:,} rows<br>"
          f"accounts, lines (incl. {st['sandbox'].get('kid_lines', {}).get('child_lines', 0) + st['sandbox'].get('kid_lines', {}).get('teen_lines', 0):,} kid lines),<br>usage, bills, support, signals, plans, promos<br>"
          f"household: family plan, kid lines + band,<br>promo / financing months (real tables)"),
@@ -372,13 +372,10 @@ def strip_shapes(stats, y0, y1, x0=0.0, x1=1.0, highlight=None, compact=False, p
             ann.append(dict(xref="paper", yref="paper", x=cx0 + 0.008, y=y1 - 62 / plot_h, xanchor="left", yanchor="top",
                             text=body, showarrow=False, align="left",
                             font=dict(color=MUTED, size=11, family=FONT), opacity=op))
-        if k == 0 and not compact:  # simulated enrichment: context only, dashed + greyed
-            by0, by1 = y0 + 8 / plot_h, y0 + 46 / plot_h
-            shapes.append(dict(type="rect", xref="paper", yref="paper", x0=cx0 + 0.006, x1=cx0 + w - 0.006, y0=by0, y1=by1,
-                               fillcolor="rgba(0,0,0,0)", line=dict(color=GREY, width=1, dash="dash")))
-            ann.append(dict(xref="paper", yref="paper", x=cx0 + 0.011, y=by1 - 5 / plot_h, xanchor="left", yanchor="top",
-                            text=st["enrichment"]["card_text"], showarrow=False, align="left",
-                            font=dict(color="#8A7A8E", size=10, family=FONT), opacity=op))
+        if k == 0 and pointer:  # simulated job change / income live only on the Future panel
+            ann.append(dict(xref="paper", yref="paper", x=cx0 + 0.008, y=y0 + 8 / plot_h, xanchor="left", yanchor="bottom",
+                            text="<i>job change / income: see 05 Future panel (simulated, not used)</i>",
+                            showarrow=False, font=dict(color="#8A7A8E", size=9, family=FONT), opacity=op))
         if k < n - 1:
             ax = cx0 + w
             shapes += arrow_shapes(ax + 0.002, ax + gap - 0.002, (y0 + y1) / 2)
@@ -464,7 +461,8 @@ def customer_story(d, m, cut):
             item = item.strip()
             if ":" in item:
                 grp, sig = item.split(":", 1)
-                drivers.append((grp.strip(), sig.strip()))
+                if not grp.strip().lower().startswith("enrichment"):  # simulated enrichment never shown in the walkthrough
+                    drivers.append((grp.strip(), sig.strip()))
     ecols = set(en.index) if en is not None else set()
     household = []   # derived from REAL sandbox tables
     if "is_family_plan" in ecols:
@@ -482,11 +480,6 @@ def customer_story(d, m, cut):
     if "next_plan_sku" in ecols and pd.notna(g(en, "next_plan_sku", None)):
         household.append(f"Next plan up: {str(g(en, 'next_plan_sku')).replace('TMO-STUB-PLAN-', '').title()}"
                          + (f", +${float(g(en, 'step_up_cost_cents', 0)) / 100:,.0f}/mo" if g(en, 'step_up_cost_cents', None) is not None else ""))
-    simulated = []
-    if "recent_job_change" in ecols:
-        simulated.append(f"Recent job change: {'yes' if int(g(en, 'recent_job_change', 0)) == 1 else 'no'}  (BLS base rate)")
-    if "income_band" in ecols:
-        simulated.append(f"Income band: {g(en, 'income_band')}  (ACS national distribution)")
     enrich = household + ["Never written into the message."]
     oc["label"] = oc["action"]
     elig = oc[oc["eligible"] == True].sort_values("expected_value")  # noqa: E712
@@ -495,7 +488,7 @@ def customer_story(d, m, cut):
         account_id=a, rank=rank, n=len(d["churn_scores"]), p=p, flagged=bool(flagged), cut=cut,
         risk=[cs[f"risk_reason_{i}"] for i in (1, 2, 3) if pd.notna(cs.get(f"risk_reason_{i}"))],
         stay=[cs[f"stay_reason_{i}"] for i in (1, 2, 3) if pd.notna(cs.get(f"stay_reason_{i}"))],
-        signals=signals, enrich=enrich, drivers=drivers, household=household, simulated=simulated,
+        signals=signals, enrich=enrich, drivers=drivers, household=household,
         elig=[(standin_text(r["action"]), float(r["expected_value"]), bool(r["is_chosen"])) for _, r in elig.iterrows()],
         inel=[(r["action"], str(r["reason"]).replace("Not eligible: ", "")) for _, r in inel.iterrows()],
         chosen=standin_text(of["action"]), chosen_code=str(of["action_code"]), ev=float(of["expected_value"]),
@@ -560,14 +553,9 @@ def customer_frame(story, step):
     elif step == 1:
         head("Household context", "derived from real sandbox tables: line roles, plans, financing")
         lines(s["household"], y=0.62, size=14)
-        # simulated enrichment: dashed, greyed, context only
-        shapes.append(dict(type="rect", xref="paper", yref="paper", x0=0.035, x1=0.62, y0=0.18, y1=0.33,
-                           fillcolor="rgba(0,0,0,0)", line=dict(color=GREY, width=1.5, dash="dash")))
-        ann.append(dict(xref="paper", yref="paper", x=0.045, y=0.315, xanchor="left", yanchor="top",
-                        text="<b>Enrichment (simulated) · context only, not used in decision</b><br>"
-                             + ("<br>".join(f"• {t}" for t in s["simulated"]) or "• none in enrichment.csv")
-                             + "<br><i>tm-offers ENRICHMENT_IN_DECISIONS is off by default</i>",
-                        showarrow=False, align="left", font=dict(color="#8A7A8E", size=13, family=FONT)))
+        ann.append(dict(xref="paper", yref="paper", x=0.035, y=0.10, xanchor="left", yanchor="bottom",
+                        text="<i>Simulated job change / income band are not part of this path: see 05 · Future: consented data (simulated, not used).</i>",
+                        showarrow=False, font=dict(color="#8A7A8E", size=11, family=FONT)))
         ann.append(dict(xref="paper", yref="paper", x=0.035, y=0.40, xanchor="left", yanchor="top",
                         text=("<b>Household data from the sandbox feeds the decision (family_upgrade / kid-line drivers in offers.csv). "
                               "Nothing here is written into the message.</b>") if s.get("household_in_decisions") else
@@ -756,7 +744,7 @@ def funnel_fig(nodes, links, stats, animated=True):
 
 def strip_fig(stats):
     lay = base_layout("The pipeline: from T-Mobile's sandbox to a text that doesn't feel weird", h=420, top=110)
-    sh, an = strip_shapes(stats, 0.02, 0.98, plot_h=420 - 110 - 72)
+    sh, an = strip_shapes(stats, 0.02, 0.98, plot_h=420 - 110 - 72, pointer=True)
     lay.update(shapes=sh, annotations=an + banner(), xaxis=dict(visible=False), yaxis=dict(visible=False))
     return go.Figure(layout=lay)
 
@@ -798,11 +786,42 @@ def household_in_decisions(offers: pd.DataFrame) -> bool:
     return False
 
 
-def enrich_card_text(e):
-    have = [n for k, n in SIM_ENRICH.items() if k in e.columns]
-    if not have:
-        return "enrichment (simulated): none in enrichment.csv"
-    return "<i>Enrichment (simulated): " + ", ".join(have) + "<br>context only, not used in decision</i>"
+INCOME_ORDER = ["<$25k", "$25-50k", "$50-75k", "$75-100k", "$100-150k", "$150-200k", "$200k+"]
+
+
+def future_fig(e):
+    """Separate panel: simulated job change / income band. Never feeds Model A, the EV engine or message text."""
+    lay = base_layout("Future: consented data (simulated, not used)", h=440, top=110)
+    lay.title.font.color = "#B0A0B4"
+    shapes = [dict(type="rect", xref="paper", yref="paper", x0=-0.035, x1=1.01, y0=-0.08, y1=1.13,
+                   line=dict(color=GREY, width=2, dash="dash"), fillcolor="rgba(0,0,0,0)")]
+    data, ann = [], []
+    if "income_band" in e.columns:
+        vc = e["income_band"].value_counts()
+        order = [b for b in INCOME_ORDER if b in vc.index] + [b for b in vc.index if b not in INCOME_ORDER]
+        data.append(go.Bar(x=order, y=[int(vc[b]) for b in order], marker=dict(color="#5E4E62", line=dict(color="#8A7A8E", width=1)),
+                           text=[f"{int(vc[b]):,}" for b in order], textposition="outside", cliponaxis=False,
+                           textfont=dict(color="#B0A0B4", size=11), xaxis="x", yaxis="y", showlegend=False,
+                           hovertemplate="%{x}: %{y:,} accounts (simulated)<extra></extra>"))
+        ann.append(dict(xref="paper", yref="paper", x=0.0, y=1.0, xanchor="left", yanchor="bottom", text="<b>Income band</b> (simulated, ACS national marginals)",
+                        showarrow=False, font=dict(color="#B0A0B4", size=13, family=FONT)))
+    if "recent_job_change" in e.columns:
+        n1 = int(e["recent_job_change"].sum()); n0 = int(len(e) - n1)
+        data.append(go.Bar(x=["no recent job change", "recent job change (90d)"], y=[n0, n1],
+                           marker=dict(color="#5E4E62", line=dict(color="#8A7A8E", width=1)),
+                           text=[f"{n0:,}", f"{n1:,} ({n1 / len(e):.1%})"], textposition="outside", cliponaxis=False,
+                           textfont=dict(color="#B0A0B4", size=11), xaxis="x2", yaxis="y2", showlegend=False,
+                           hovertemplate="%{x}: %{y:,} accounts (simulated)<extra></extra>"))
+        ann.append(dict(xref="paper", yref="paper", x=0.62, y=1.0, xanchor="left", yanchor="bottom", text="<b>Job change</b> (simulated, BLS JOLTS base rate)",
+                        showarrow=False, font=dict(color="#B0A0B4", size=13, family=FONT)))
+    ax = dict(color="#8A7A8E", gridcolor="#2E2234", zeroline=False)
+    lay.update(xaxis=dict(domain=[0.0, 0.55], anchor="y", **ax), yaxis=dict(domain=[0.0, 0.9], anchor="x", **ax),
+               xaxis2=dict(domain=[0.62, 1.0], anchor="y2", **ax), yaxis2=dict(domain=[0.0, 0.9], anchor="x2", **ax),
+               shapes=shapes, annotations=ann + banner() + [footnote(
+                   "Simulated per-account values from harness/out/enrichment.csv. Per tm-strategy's A/B test these NEVER feed Model A, the EV engine "
+                   "or any message text.<br>Shown only as a future idea that would need customer consent. All synthetic.")])
+    lay.margin.update(l=80, r=40)
+    return esc_dollars(go.Figure(data=data, layout=lay))
 
 
 def whatif_data(d, m):
@@ -927,7 +946,7 @@ def main():
             "likely_kid": int(d["enrichment"]["likely_kid_flag"].sum()) if "likely_kid_flag" in d["enrichment"] else None,
             "kid_age_band": d["enrichment"]["kid_age_band"].value_counts().to_dict() if "kid_age_band" in d["enrichment"] else None,
             "income_band": d["enrichment"]["income_band"].value_counts().to_dict() if "income_band" in d["enrichment"] else None,
-            "card_text": enrich_card_text(d["enrichment"]),
+            "future_consented_simulated_not_used": ["recent_job_change", "income_band"],
             "provenance": "harness/enrichment.py docstring: job change + income synthetic (BLS JOLTS / ACS B19001 marginals); "
                           "family plan + kid lines/age band derived from real sandbox lines.member_role.",
         },
@@ -976,12 +995,14 @@ def main():
     # ---- figures
     f_strip, f_funnel, f_cust = strip_fig(stats), funnel_fig(nodes, links, stats), customer_fig(story)
     f_whatif = whatif_fig(wi)
+    f_future = future_fig(d["enrichment"])
     cfg = dict(displaylogo=False, responsive=False)
     parts = [pio.to_html(f_strip, include_plotlyjs="inline", full_html=False, config=cfg, div_id="strip"),
              pio.to_html(f_funnel, include_plotlyjs=False, full_html=False, config=cfg, div_id="funnel",
                          auto_play=False),
              pio.to_html(f_cust, include_plotlyjs=False, full_html=False, config=cfg, div_id="customer",
                          auto_play=False),
+             pio.to_html(f_future, include_plotlyjs=False, full_html=False, config=cfg, div_id="future"),
              pio.to_html(f_whatif, include_plotlyjs=False, full_html=False, config=cfg, div_id="whatif",
                          auto_play=False)]
     html = f"""<!doctype html><html><head><meta charset="utf-8"><title>TM retention pipeline (synthetic)</title>
@@ -993,7 +1014,8 @@ h2{{font-weight:600;color:{MUTED};font-size:14px;letter-spacing:.12em;margin:22p
 <div class="wrap"><h2>01 · PIPELINE</h2><div class="sec">{parts[0]}</div>
 <h2>02 · FUNNEL (press Play)</h2><div class="sec" id="s-funnel">{parts[1]}</div>
 <h2>03 · FOLLOW ONE CUSTOMER (press Play)</h2><div class="sec" id="s-customer">{parts[2]}</div>
-<h2>04 · WHAT IF (drag the slider)</h2><div class="sec" id="s-whatif">{parts[3]}</div></div></body></html>"""
+<h2>04 · WHAT IF (drag the slider)</h2><div class="sec" id="s-whatif">{parts[4]}</div>
+<h2 style="color:#8A7A8E">05 · FUTURE: CONSENTED DATA (simulated, not used)</h2><div class="sec" id="s-future" style="opacity:.85">{parts[3]}</div></div></body></html>"""
     assert "with autopay" not in html.lower(), "never write 'with AutoPay'"
     (HERE / "pipeline_flow.html").write_text(html, encoding="utf-8")
 
