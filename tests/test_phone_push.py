@@ -1,6 +1,7 @@
 """phone_push: dry run default, zero network in dry run, live flag without topic -> dry run, topic masked.
 Never posts: requests/urllib/notify network paths are patched to fail the test if touched."""
 import json
+import re
 import sys
 import urllib.request
 from pathlib import Path
@@ -92,3 +93,28 @@ def test_engine_text_and_cli(tmp_path, capsys):
     assert pp.engine_text("ACC-PERSONA-24", "en", p) is None
     assert pp.main(["--account", "38", "--offers", str(p)]) == 0
     assert json.loads(capsys.readouterr().out)["preview"]["text"] == "[DEMO, synthetic] Hello en"
+
+
+def test_notify_has_no_hardcoded_topic():
+    src = (Path(__file__).resolve().parents[1] / "harness" / "notify.py").read_text()
+    assert "DEFAULT_TOPIC" not in src
+    assert re.findall(r"ntfy\.sh/[^\"'\s]*", src) == ["ntfy.sh/{topic}"]  # only URL: built from an explicit topic
+    assert not re.search(r"=\s*[\"']tm-", src)  # no topic-like string literal
+
+
+def test_notify_without_topic_never_posts(monkeypatch):
+    monkeypatch.setenv("SEND_BACKEND", "ntfy")
+    monkeypatch.delenv("NTFY_TOPIC", raising=False)
+    from harness import notify  # network is patched to fail in the autouse fixture
+    monkeypatch.delenv("NTFY_TOPIC", raising=False)  # in case a local .env set it at import
+    assert notify.default_topic() == ""
+    assert notify.will_send() is False
+    r = notify.send("hello")
+    assert r["sent"] is False and r["backend"] == "dryrun"
+
+
+def test_env_example_topic_blank():
+    ex = Path(__file__).resolve().parents[1] / ".env.example"
+    for line in ex.read_text().splitlines():
+        if line.strip().startswith("NTFY_TOPIC"):
+            assert line.split("=", 1)[1].strip() == ""

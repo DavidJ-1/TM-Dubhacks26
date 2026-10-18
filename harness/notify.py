@@ -3,8 +3,8 @@
 SEND_BACKEND selects the backend: dryrun (default) or ntfy.
 A click is the only thing that calls send().
 
-Value precedence is process environment, then a project .env file, then the
-in-app default topic. load_project_env() never overrides a variable that is
+Value precedence is process environment, then a project .env file. There is no
+built-in topic: with no NTFY_TOPIC every send is a preview (dry run). load_project_env() never overrides a variable that is
 already set, and a missing .env is a no-op.
 """
 
@@ -19,7 +19,6 @@ from harness.sms_send import send_sms
 # TODO: a webhook or Twilio backend plugs in as another _BACKENDS entry.
 # Keep customer phone numbers out of this module. Call it only from send().
 
-DEFAULT_TOPIC = "tm-dubhacks26-lf3reo19tv"
 _ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -35,8 +34,8 @@ load_project_env()
 
 
 def default_topic() -> str:
-    """Process env, then .env (already loaded), then the in-app topic."""
-    return _topic(None) or DEFAULT_TOPIC
+    """Process env, then .env (already loaded). Empty string when unset; never a hardcoded topic."""
+    return _topic(None)
 
 
 def send(message: str, backend: str | None = None, topic: str | None = None) -> dict:

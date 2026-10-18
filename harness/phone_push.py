@@ -5,7 +5,7 @@ SEND_BACKEND=ntfy and NTFY_TOPIC set it posts to the public ntfy.sh server, and 
 So this wrapper enforces dry run itself:
 
   * DRY RUN BY DEFAULT. Live only when TM_SEND_LIVE=1 is in the process env AND a topic is set
-    (NTFY_TOPIC in env, or in .env). notify.py's DEFAULT_TOPIC is never used.
+    (NTFY_TOPIC in env, or in .env). There is no built-in topic.
   * In dry run notify.py is not even imported: zero network calls, no .env side effects.
     It returns the exact payload (url with masked topic, headers, body) and writes a log line.
   * The topic is masked everywhere it is shown or logged (ntfy topics are readable by anyone who knows them).
