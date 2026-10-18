@@ -42,10 +42,10 @@
 .grid{display:grid;grid-template-columns:1fr;gap:1px;margin-top:6px}.pill{display:inline-block;font-size:9.5px;font-weight:650;border-radius:999px;padding:1px 7px;margin-right:6px;min-width:62px;text-align:center}.pill.Commerce{background:#E8F0FE;color:#1A56C4}.pill.Customer{background:#E9F7EE;color:#1E7B3C}.pill.Real-time{background:#FFF0F7;color:#C2006A}.mix{font-size:11.5px;color:var(--mut);margin-top:6px;opacity:0;transition:opacity .4s}.mix.in{opacity:1}.rawid{font-size:10.5px;color:var(--mut);font-weight:400;margin-left:6px}
 .kv{display:flex;justify-content:space-between;border-bottom:1px dashed var(--line);padding:2px 0;font-size:12.5px;opacity:0;transition:opacity .3s}
 .kv.in{opacity:1}.kv span{color:var(--mut)}.kv b.hot{color:var(--mag)}
-.gauge{height:14px;background:var(--bg2);border-radius:7px;position:relative;overflow:visible;margin:6px 0 16px}
+.gauge{height:14px;background:var(--bg2);border-radius:7px;position:relative;overflow:visible;margin:20px 0 16px}
 .gauge .fill{height:100%;width:0;border-radius:7px;background:linear-gradient(90deg,#F7A8CE,var(--mag));transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
-.gauge .cut{position:absolute;top:-4px;bottom:-4px;width:2px;background:#1F2328}
-.gauge .cutl{position:absolute;top:17px;font-size:10px;color:var(--mut);transform:translateX(-50%);white-space:nowrap}
+.gauge .tick{position:absolute;top:0;bottom:0;width:1px;background:#C9CED6}.gauge .tickl{position:absolute;top:17px;font-size:10px;color:#9AA1AB;transform:translateX(-50%)}.gauge .cut{position:absolute;top:-4px;bottom:-4px;width:2px;background:#1F2328}
+.gauge .cutl{position:absolute;top:-16px;color:#1F2328;font-weight:600;font-size:10px;color:var(--mut);transform:translateX(-50%);white-space:nowrap}
 .pnum{font-size:26px;font-weight:750}.pnum small{font-size:12px;color:var(--mut);font-weight:500}
 .rs{font-size:12.5px;margin:3px 0;opacity:0;transform:translateY(6px);transition:all .35s}.rs.in{opacity:1;transform:none}
 .rs .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px}
@@ -114,6 +114,7 @@ const D={"meta":{"n_all":5042,"n_flag":504,"cutoff":0.052167,"n_contacted":1123,
 const M=D.meta, R=D.reasons, C=D.c, L=M.labels;
 const MAG="#E20074";
 const $=s=>document.querySelector(s);
+const gpos=p=>Math.max(1.5,Math.min(100,(Math.log10(Math.max(p,0.001))+3)/(Math.log10(0.8)+3)*100));
 const fmtPct=p=>(p*100<1?(p*100).toFixed(2):(p*100).toFixed(1))+"%";
 const cname=c=>"Customer #"+(c.pid?c.pid.slice(1):c.id.replace(/^ACC-/,""))+" (synthetic)";
 const byId={};C.forEach((c,i)=>{c.i=i;byId[c.id]=c;});
@@ -211,7 +212,7 @@ async function start(c){
   try{
     // (a) data card
     let s=stageBox(1,"Their signals (synthetic)");
-    const who=el("div","who");const wb=el("b",null,cname(c));wb.appendChild(el("span","rawid",c.id));who.appendChild(wb);s.appendChild(who);
+    const who=el("div","who");who.appendChild(el("b",null,cname(c)));s.appendChild(who);
     const g=el("div","grid");s.appendChild(g);
     const sentTxt=c.sent==null?"n/a":(c.sent>0.15?"positive":c.sent<-0.15?"negative":"neutral")+" ("+c.sent.toFixed(2)+")";
     const rows=[
@@ -233,12 +234,12 @@ async function start(c){
     s=stageBox(2,"Churn risk model: 90-day score (synthetic)");
     const pn=el("div","pnum");s.appendChild(pn);
     const gg=el("div","gauge");const fill=el("div","fill");gg.appendChild(fill);const cutx=Math.min(100,M.cutoff*100/0.8*100);
-    const cut=el("div","cut");cut.style.left=(M.cutoff/0.8*100)+"%";gg.appendChild(cut);const cl=el("div","cutl","flag line "+fmtPct(M.cutoff));cl.style.left=(M.cutoff/0.8*100)+"%";gg.appendChild(cl);
-    s.appendChild(el("div","more","scale 0\u201380%"));s.insertBefore(gg,s.lastChild);
+    const cut=el("div","cut");cut.style.left=gpos(M.cutoff)+"%";gg.appendChild(cut);const cl=el("div","cutl","flag line "+fmtPct(M.cutoff));cl.style.left=gpos(M.cutoff)+"%";gg.appendChild(cl);[0.01,0.1].forEach(v=>{const t=el("div","tick");t.style.left=gpos(v)+"%";gg.appendChild(t);const tl=el("div","tickl",(v*100)+"%");tl.style.left=gpos(v)+"%";gg.appendChild(tl);});
+    s.appendChild(el("div","more","log scale, 0.1%\u201380%"));s.insertBefore(gg,s.lastChild);
     const flagged=c.rank<=M.n_flag;
     const t1=performance.now(),dur=1000*speed;(function tick(){if(tk!==token)return;const k=Math.min(1,(performance.now()-t1)/dur),e=1-Math.pow(1-k,3);
       pn.innerHTML="";pn.appendChild(document.createTextNode(fmtPct(c.p*e)));const sm=el("small",null,"  rank "+c.rank.toLocaleString()+" of "+M.n_all.toLocaleString()+(k>=1?(flagged?" \u00b7 FLAGGED top 10%":" \u00b7 not flagged"):""));pn.appendChild(sm);if(k<1)requestAnimationFrame(tick);})();
-    requestAnimationFrame(()=>{fill.style.transition="width "+(1.1*speed)+"s cubic-bezier(.2,.8,.2,1)";fill.style.width=Math.min(100,c.p/0.8*100)+"%";});
+    requestAnimationFrame(()=>{fill.style.transition="width "+(1.1*speed)+"s cubic-bezier(.2,.8,.2,1)";fill.style.width=gpos(c.p)+"%";});
     await wait(900,tk);
     const rr=c.rr.filter(i=>i>=0),sr=c.sr.filter(i=>i>=0);
     for(const i of rr){const d=el("div","rs");const dt=el("span","dot");dt.style.background=MAG;d.appendChild(dt);d.appendChild(document.createTextNode("Risk: "+R[i]));s.appendChild(d);await wait(160,tk);d.classList.add("in");}
