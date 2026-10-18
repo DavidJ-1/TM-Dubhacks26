@@ -121,7 +121,7 @@ EVENTS = {
              "network"),
     "bill": ("Bill went up", "Their next bill came in about 18% higher.", ev_bill, None),
     "comp": ("Visited a competitor's site", "They spent time on a competitor's plans page.", ev_comp, None),
-    "port": ("Asked about moving their number", "They asked how to move their number to another carrier.", ev_port,
+    "port": ("Asked to move their number", "They asked how to move their number to another carrier.", ev_port,
              None),
 }
 

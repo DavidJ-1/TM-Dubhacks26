@@ -137,7 +137,8 @@ TICK_CSS = (f"<style>.st-key-orbit_tick{{position:sticky;top:0;z-index:20;backgr
             f".o-tick .seg{{flex:1;height:1px;background:{O.INK}}}"
             f".o-tick .dot{{width:12px;height:12px;border-radius:50%;border:1.5px solid {O.INK};background:{O.BG};flex:none}}"
             f".o-tick .dot.past{{background:{O.INK}}}.o-tick .dot.now{{background:{O.MAG};border-color:{O.MAG}}}"
-            f".o-tick .lab{{margin:0 10px 0 6px;white-space:nowrap}}.o-tick .lab.now{{color:{O.MAG}}}.o-tick .lab.fut{{color:{O.MUTED}}}"
+            f".o-tick .lab{{margin:0 8px 0 4px;white-space:nowrap;font-size:11px}}.o-tick .lab.now{{color:{O.MAG}}}.o-tick .lab.fut{{color:{O.MUTED}}}"
+            f".st-key-{TICK_KEY}_open button{{white-space:nowrap}}"
             f".o-tickline{{font:400 16px/1.35 'SG';margin-top:4px;padding-bottom:10px;border-bottom:1px solid {O.INK}}}"
             # ---- animations: plain CSS, transform/opacity/box-shadow only (no layout change, no page jump), ease-out,
             # under 600ms, no overshoot. The 'tka' class is set only on the run right after a Next event press, so each
@@ -169,6 +170,7 @@ def _tick_open() -> None:   # the rail as entry point: from any other customer, 
     st.session_state[TICK_KEY] = 1
     st.session_state["_tick_anim"] = True
     st.session_state["_tick_full"] = True
+    st.session_state["_tick_switched"] = True
 
 
 def _tick_rail(t: dict):
@@ -194,19 +196,23 @@ def _tick_rail(t: dict):
 
 def _entry_rail():
     """For any other customer: a slim rail whose Next event opens the account that ticks."""
+    who = O.cid(D.LIVE_ACC)
     with st.container(key="orbit_tick"):
         st.markdown(TICK_CSS, unsafe_allow_html=True)
-        a, b = st.columns([8, 1.2], vertical_alignment="center")
+        a, b = st.columns([1.3, 1], vertical_alignment="center")
         a.markdown(f"<div class='o-tick'><span class='lab'>EVENTS</span><span class='lab fut'>"
-                   f"Watch customer {O.esc(O.cid(D.LIVE_ACC))} react as things happen to the account</span></div>",
+                   f"Live events demo follows customer {O.esc(who)}</span></div>",
                    unsafe_allow_html=True)
-        b.button("Next event →", key=f"{TICK_KEY}_open", on_click=_tick_open, type="primary", width="stretch")
+        b.button(f"Next event → switches to customer {who}", key=f"{TICK_KEY}_open", on_click=_tick_open,
+                 type="primary", width="stretch")
 
 
 @st.fragment
 def customer_section():
     if st.session_state.pop("_tick_full", False):   # opened from the entry rail: redraw the picker too
         st.rerun()
+    if st.session_state.pop("_tick_switched", False):
+        st.toast(f"Now showing {O.cid(D.LIVE_ACC)} for live events")
     acc_ = st.session_state["acc"]
     inp = D.engine_inputs()
     t = D.live_tick(df, acc_, int(st.session_state.get(TICK_KEY, 0)), inp) if acc_ == D.LIVE_ACC else None
