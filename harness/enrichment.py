@@ -19,6 +19,20 @@ next_plan_sku / next_plan_price_cents / step_up_cost_cents / step_up_cost_pct_in
   plans table. Ladder: Essentials Saver -> Essentials -> Experience More -> Experience Beyond, keeping the
   variant (Community/Partner/55); Essentials 4-line -> More. Beyond is the top (blank next plan / cost).
   step_up_cost_pct_income = 12 x monthly step-up cost / household income x 100.
+Household fields (for the offer strategy; NOT used in the churn label):
+  n_lines: copy of features.csv n_lines.
+  is_family_plan: REAL-derived: 2+ phone lines on the account's shared plan and not a business (smb) account.
+  likely_kid_flag / n_kid_lines / kid_age_band: derived from the REAL sandbox line roles (lines.member_role
+    child / teen / adult-child). Ages are NOT in the sandbox, so the band mapping is a SYNTHETIC assumption:
+    child -> "0-12", teen -> "13-17", adult (adult child on a parent's account) -> "18-24"; band = youngest kid.
+    Kids without their own line are invisible (no synthetic fill). Check vs Census: ACS 2020-2024 5-year B11005,
+    29.5% of US households have someone under 18 (38,169,316 / 129,227,496;
+    https://api.censusreporter.org/1.0/data/show/acs2024_5yr?table_ids=B11005&geo_ids=01000US).
+  promo_months_remaining: INFERRED from REAL sandbox tables, as of 2026-10-01. The sandbox does not record which
+    promo an account took, so a line counts as on a device-credit promo if its device_sku is in that promo's
+    device_skus and the plan family qualifies; remaining = payout_months - device age (months), if > 0.
+    Max across lines; 0 otherwise (and 0 for accounts whose promo expired, billing change_reason promo_expired).
+  contract_or_financing_months_remaining: max(lines.financing_months_remaining, promo_months_remaining).
 Run: python harness/enrichment.py   (after features.py)
 """
 from __future__ import annotations
@@ -111,6 +125,49 @@ def step_up(df: pd.DataFrame, plans: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+KID_BAND = {"child": (0, "0-12"), "teen": (1, "13-17"), "adult": (2, "18-24")}
+KID_BANDS = ["none", "0-12", "13-17", "18-24"]
+
+
+def household(f: pd.DataFrame) -> pd.DataFrame:
+    conn = sqlite3.connect(find_db().as_uri() + "?mode=ro", uri=True)
+    try:
+        lines = pd.read_sql("SELECT l.*, a.segment FROM lines l JOIN accounts a USING (account_id)", conn)
+        promos = pd.read_sql("SELECT sku, device_skus, plan_families, payout_months FROM promotions "
+                             "WHERE kind = 'device_credit' AND device_skus IS NOT NULL", conn)
+        plans = pd.read_sql("SELECT sku, family FROM plans", conn).set_index("sku")["family"]
+    finally:
+        conn.close()
+    lines["is_kid"] = lines["member_role"].isin(KID_BAND)
+    # 'adult' role only counts as a kid on family accounts (adult child); elsewhere it is an adult
+    lines.loc[(lines["member_role"] == "adult") & (lines["segment"] != "family"), "is_kid"] = False
+    lines["kid_rank"] = lines["member_role"].map({k: v[0] for k, v in KID_BAND.items()}).where(lines["is_kid"])
+    g = lines.groupby("account_id")
+    hh = pd.DataFrame({"n_kid_lines": g["is_kid"].sum(), "youngest": g["kid_rank"].min()})
+    hh["kid_age_band"] = hh["youngest"].map({v[0]: v[1] for v in KID_BAND.values()}).fillna("none")
+    # promo months remaining (inferred)
+    lines["purchase"] = pd.to_datetime(lines["device_purchase_date"])
+    age = (2026 - lines["purchase"].dt.year) * 12 + (10 - lines["purchase"].dt.month)
+    fam = lines["plan_sku"].map(plans)
+    rem = pd.Series(0.0, index=lines.index)
+    for p in promos.itertuples():
+        ok = lines["device_sku"].isin(p.device_skus.split(",")) & fam.isin(str(p.plan_families).split(","))
+        rem = np.maximum(rem, np.where(ok, (p.payout_months - age).clip(lower=0).fillna(0), 0))
+    lines["promo_rem"] = rem
+    hh["promo_months_remaining"] = lines.groupby("account_id")["promo_rem"].max()
+    hh["max_fin"] = g["financing_months_remaining"].max()
+    out = f[["account_id", "n_lines", "segment", "promo_expired_recent"]].merge(hh, left_on="account_id",
+                                                                              right_index=True, how="left")
+    out["is_family_plan"] = ((out["n_lines"] >= 2) & (out["segment"] != "smb")).astype(int)
+    out["n_kid_lines"] = out["n_kid_lines"].fillna(0).astype(int)
+    out["likely_kid_flag"] = (out["n_kid_lines"] > 0).astype(int)
+    out.loc[out["promo_expired_recent"] == 1, "promo_months_remaining"] = 0
+    out["promo_months_remaining"] = out["promo_months_remaining"].fillna(0).astype(int)
+    out["contract_or_financing_months_remaining"] = np.maximum(out["max_fin"].fillna(0), out["promo_months_remaining"]).astype(int)
+    return out[["n_lines", "is_family_plan", "likely_kid_flag", "n_kid_lines", "kid_age_band",
+                "promo_months_remaining", "contract_or_financing_months_remaining"]].reset_index(drop=True)
+
+
 def build(f: pd.DataFrame) -> pd.DataFrame:
     probs, median = load_acs()
     regular = (f["is_persona"] == 0).values
@@ -134,6 +191,7 @@ def build(f: pd.DataFrame) -> pd.DataFrame:
     e["area_median_income_usd"] = median
     e["income_geo_level"] = "national (sandbox has no geography)"
     e = pd.concat([e, step_up(f.assign(household_income_usd=income), load_plans())], axis=1)
+    e = pd.concat([e, household(f)], axis=1)
     return e
 
 
@@ -148,6 +206,11 @@ def main():
           f"income median={r.household_income_usd.median():,.0f} (ACS national {e.area_median_income_usd.iloc[0]:,.0f}); "
           f"top-tier (no step-up) share={r.next_plan_sku.isna().mean():.3f}; "
           f"median step-up ${r.step_up_cost_cents.median() / 100:.0f}/mo, {r.step_up_cost_pct_income.median():.2f}% of income")
+    print(f"is_family_plan={r.is_family_plan.mean():.4f} likely_kid_flag={r.likely_kid_flag.mean():.4f} "
+          f"kid_age_band={r.kid_age_band.value_counts(normalize=True).round(4).to_dict()} "
+          f"promo>0={(r.promo_months_remaining > 0).mean():.4f} (mean {r.promo_months_remaining.mean():.2f}) "
+          f"contract_or_fin>0={(r.contract_or_financing_months_remaining > 0).mean():.4f} "
+          f"(mean {r.contract_or_financing_months_remaining.mean():.2f})")
 
 
 if __name__ == "__main__":
