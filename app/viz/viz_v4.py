@@ -432,6 +432,7 @@ FEATURED = [  # (account, intended story, action codes that match that story)
     ("ACC-PERSONA-04", "fixed first", {"fix_first", "care_credit_fix_first"}),
     ("ACC-PERSONA-21", "check-in", {"check_in"}),
 ]
+HAPPY_ACCOUNT = "ACC-PERSONA-24"  # confirmed by tm-strategy: 9 contacts, all resolved and positive
 AVOID_HAPPY = {"ACC-PERSONA-28", "ACC-PERSONA-10", "ACC-PERSONA-06", "ACC-PERSONA-19"}
 
 
@@ -491,7 +492,7 @@ def _first(df, names):
     return next((c for c in names if c in df.columns), None)
 
 
-def options_rows(oc_acc: pd.DataFrame, standin_text) -> tuple[list[dict], dict]:
+def options_rows(oc_acc: pd.DataFrame, standin_text, plan_delta=None) -> tuple[list[dict], dict]:
     """Options we considered. Uses tm-offers' new columns when present, else derives from existing ones."""
     c_cost = _first(oc_acc, ["cost_to_tmobile", "cost_to_tmobile_usd", "tmobile_cost", "cost_to_t_mobile"])
     c_cust = _first(oc_acc, ["customer_monthly_change", "customer_monthly_change_usd", "monthly_change_customer",
@@ -499,7 +500,8 @@ def options_rows(oc_acc: pd.DataFrame, standin_text) -> tuple[list[dict], dict]:
     c_win = _first(oc_acc, ["is_winner", "winner", "is_chosen"])
     c_ev = _first(oc_acc, ["ev", "expected_value"])
     c_loss = _first(oc_acc, ["why_not_chosen", "loss_reason", "why_lost", "lost_because", "plain_loss_reason"])
-    used = dict(cost=c_cost or "offer_cost (fallback)", customer=c_cust or "customer_benefit / upsell_gain (fallback)",
+    used = dict(cost=c_cost or "offer_cost (fallback)",
+                customer=c_cust or "plan price change (features.plan_price_cents vs sandbox plans.line_prices) (fallback)",
                 winner=c_win, loss=c_loss or "blocked_or_ineligible_reason / EV comparison (fallback)")
     win = oc_acc[oc_acc[c_win] == True] if c_win else oc_acc.iloc[0:0]  # noqa: E712
     win_ev = float(win[c_ev].iloc[0]) if c_ev and len(win) and pd.notna(win[c_ev].iloc[0]) else 0.0
@@ -519,8 +521,11 @@ def options_rows(oc_acc: pd.DataFrame, standin_text) -> tuple[list[dict], dict]:
             cust = "no change" if v == 0 else (f"saves ${-v:,.0f}/mo" if v < 0 else f"pays ${v:,.0f}/mo more")
         elif not elig:
             cust = "—"
-        elif pd.notna(r.get("customer_benefit")) and float(r.get("customer_benefit") or 0) > 0:
-            cust = f"benefit ${float(r['customer_benefit']):,.0f} (model est.)"
+        elif plan_delta is not None and (pdv := plan_delta(r)) is not None:
+            v = pdv
+            cust = "no change" if v == 0 else (f"saves ${-v:,.0f}/mo" if v < 0 else f"pays ${v:,.0f}/mo more")
+        elif str(r.get("action_code", "")) in ("variant_switch", "right_size", "step_up", "family_upgrade"):
+            cust = "—"  # plan change but no price data: never show the model's benefit estimate
         elif pd.notna(r.get("upsell_gain")) and float(r.get("upsell_gain") or 0) > 0:
             cust = "pays more (upgrade)"
         elif "credit" in str(r["action"]).lower():
@@ -601,7 +606,7 @@ def card_html(story, rows, title, mismatch, drivers):
     why = story.get("why") or story["reason"].split(" EV =")[0]
     return (f"<div class='card'><div><div class='ctag'>[ {story['account_id']} ] {_html.escape(title.upper())}</div>"
             + (f"<div class='warn'>NOTE: {_html.escape(mismatch)}</div>" if mismatch else "")
-            + f"<div class='why'>{_html.escape(why)}</div>"
+            + f"<div class='why'>{_html.escape(why)}</div>" + story.get("callout_html", "")
             + "<div class='meta'>" + "".join(f"<span>{_html.escape(k)} <b>{_html.escape(v)}</b></span>" for k, v in meta) + "</div>"
             + (f"<div class='chips'>{chips}</div>" if chips else "")
             + "<div class='ctag' style='margin:6px 0 6px'>[ OPTIONS WE CONSIDERED ]  <span style='color:var(--muted);font-weight:400'>hover a row for the details</span></div>"
@@ -631,17 +636,22 @@ def page(parts: dict, sets, cards, stats) -> str:
                         "<div class='foot'>Live toggles and re-picks are in the Streamlit app; these are precomputed (risk only).</div></div>"
                         for i, c in enumerate(cards))
 
+    gapnote = (f"<div class='gapnote'><b>Why {f['messaged']:,} messages but only {f['flagged']:,} flagged?</b> "
+               f"Messages include money-saving, fix-first, check-in and plan-upgrade texts to customers who aren't at risk "
+               f"({f['messaged_not_flagged']:,}), not only the {f['flagged']:,} flagged ({f['messaged_flagged']:,} of the flagged get a message). "
+               f"<span style='color:var(--muted)'>(synthetic)</span></div>")
+
     def sec(i, t, sub, body):
         return f"<div class='sec'><div class='sh'><span class='id'>[ {i:02d} ]</span><span class='t'>{t}</span><span class='s'>{sub}</span></div>{body}</div>"
 
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>TM retention pipeline v4 (synthetic)</title>
-<meta name="viewport" content="width=device-width"><style>{CSS}{CARD_CSS}</style>{parts['js']}</head><body>
+<meta name="viewport" content="width=device-width"><style>{CSS}{CARD_CSS}{CALLOUT_CSS}</style>{parts['js']}</head><body>
 <div class="top"><span>ALL CUSTOMERS AND NUMBERS ARE SYNTHETIC</span><span>[ TM RETENTION PIPELINE · v4 ]</span><span>NOTHING IS SENT</span></div>
 <div class="ticker"><span>{_html.escape(ticker)}</span></div>
 <div class="wrap">
 <div class="hero"><h1>WHO WE TEXT, <b>WHAT</b> WE OFFER, AND WHY WE LEAVE MOST PEOPLE ALONE</h1>
 <p>Judge sandbox data → features → Model A (churn risk + reasons) → Model B (weighs every eligible option against doing nothing) → a plain message in the customer's language. Every count is computed from the team's synthetic CSVs at build time.</p></div>
-{sec(1, "Funnel", "sandbox 5k · press play", parts['funnel'])}
+{sec(1, "Funnel", "sandbox 5k · press play", gapnote + parts['funnel'])}
 {sec(2, "Four customers, four answers", "why first · options we considered · the text they get", "<div class='btns'>" + cu_btns + "</div>" + cu_blocks)}
 {sec(3, "Population cloud", "drag to orbit · scroll to zoom · switch dataset", "<div class='btns'>" + ds_btns + "</div>" + ds_blocks)}
 {sec(4, "Pipeline stack", "each plane = 400 dots ≈ 13 accounts each · lit = passes that stage", parts['stack'])}
@@ -651,3 +661,48 @@ def page(parts: dict, sets, cards, stats) -> str:
 <div class="foot">Model A = tm-churn churn_scores.csv (sandbox 5k) and scaled_scores/churn_scores.csv (50k). Model B = tm-offers offers.csv / offer_candidates.csv.
 † judge-provided stand-in credit (sandbox promotions.source = 'stub'). Held-out Model A: top 10% catches 62% of churners (oracle 64%, 3+ calls rule 53%), AUC 0.853. Policy dollars PROVISIONAL.</div>
 </div></body></html>"""
+
+
+CALLOUT_CSS = """.gapnote{margin:4px 30px 0;padding:6px 12px;border-left:3px solid var(--pink);color:var(--ink);font-size:13px}
+.gapnote b{color:var(--pink)}
+.callout{border:1px solid var(--edge);border-left:3px solid var(--mag);padding:8px 12px;margin:8px 0 10px;font-size:12.5px;line-height:1.55}
+.callout b{color:var(--mag)} .callout .n{font-size:22px;color:var(--ink);font-weight:700;margin-right:6px}"""
+
+
+def happy_detail(d, acct):
+    """Facts for the 'left alone' card, read from features / offers / churn_scores (no enrichment)."""
+    f = d["features"].set_index("account_id")
+    o = d["offers"].set_index("account_id")
+    if acct not in f.index or acct not in o.index:
+        return None
+    r, orow = f.loc[acct], o.loc[acct]
+    g = lambda c, dflt=0: r[c] if c in r.index and pd.notna(r[c]) else dflt
+    det = dict(account_id=acct, action_code=str(orow["action_code"]), p_churn_90d=float(orow["p_churn_90d"]),
+               why_this_offer=str(orow.get("why_this_offer", "")), reason=str(orow.get("reason", "")),
+               support_270d=int(g("support_270d")), support_90d=int(g("support_90d")),
+               unresolved_270d=int(g("unresolved_270d")), unresolved_90d=int(g("unresolved_90d")),
+               negative_contacts_90d=int(g("negative_contacts_90d")), avg_sentiment=float(g("avg_sentiment")),
+               min_sentiment_270d=float(g("min_sentiment_270d")), port_out_inquiry=int(g("port_out_inquiry")),
+               plan_is_unlimited=int(g("plan_is_unlimited")), data_gb_3m_avg=float(g("data_gb_3m_avg")),
+               competitor_research_score=float(g("competitor_research_score")))
+    det["checks"] = {
+        "action is do_nothing": det["action_code"] == "do_nothing",
+        f"{det['support_270d']} support contacts in 270 days, 0 unresolved": det["unresolved_270d"] == 0,
+        "0 negative contacts in 90 days": det["negative_contacts_90d"] == 0,
+        f"lowest contact sentiment {det['min_sentiment_270d']:+.2f} (all positive)": det["min_sentiment_270d"] > 0,
+        "no port-out inquiry": det["port_out_inquiry"] == 0,
+        f"shopping score {det['competitor_research_score']:.2f}": det["competitor_research_score"] <= 0.2,
+        "p_churn_90d < 1%": det["p_churn_90d"] < 0.01,
+    }
+    return det
+
+
+def happy_callout(det, rule_flag: bool):
+    return (f"<div class='callout'><span class='n'>{det['support_270d']}</span>support contacts in 270 days "
+            f"({det['support_90d']} in the last 90) · <b>{det['unresolved_270d']} unresolved</b> · "
+            f"{det['negative_contacts_90d']} negative · lowest sentiment {det['min_sentiment_270d']:+.2f}<br>"
+            + ("A naive 3+ support-calls rule would flag this customer as about to leave. " if rule_flag else "")
+            + f"Model A reads the contacts as resolved and positive: p(churn 90d) {det['p_churn_90d']:.2%}, "
+            f"no port-out inquiry, shopping score {det['competitor_research_score']:.2f}"
+            + (f", unlimited plan ({det['data_gb_3m_avg']:.1f} GB/mo avg)" if det["plan_is_unlimited"] else "")
+            + ". So we leave them alone. <span style='color:var(--muted)'>(synthetic)</span></div>")

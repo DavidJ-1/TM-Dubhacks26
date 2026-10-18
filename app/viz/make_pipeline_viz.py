@@ -122,6 +122,47 @@ def load():
     return d
 
 
+def make_plan_delta(d):
+    """Customer monthly change for a plan-change candidate: target plan price (sandbox plans.line_prices for the
+    account's n_lines) minus current features.plan_price_cents. Returns callable(row) -> dollars/mo or None."""
+    plans = None
+    for c in [os.environ.get("DUBHACKS_DB"), os.environ.get("SANDBOX_DB"), REPO / "dubhacks" / "data" / "sandbox.db",
+              REPO.parent / "dubhacks" / "data" / "sandbox.db", REPO / "vendor" / "dubhacks" / "data" / "sandbox.db"]:
+        if c and Path(c).exists():
+            try:
+                conn = sqlite3.connect(Path(c).resolve().as_uri() + "?mode=ro", uri=True)
+                plans = pd.read_sql("SELECT sku, line_prices, extra_line_cents FROM plans", conn).set_index("sku")
+                conn.close()
+            except Exception:  # noqa: BLE001
+                plans = None
+            break
+    f = d["features"].set_index("account_id")
+
+    def price(sku, n):
+        if plans is None or sku not in plans.index:
+            return None
+        lp = [int(x) for x in str(plans.loc[sku, "line_prices"]).split(",") if x.strip()]
+        extra = plans.loc[sku, "extra_line_cents"]
+        tot = sum(lp[:n]) + max(0, n - len(lp)) * (int(extra) if pd.notna(extra) else (lp[-1] if lp else 0))
+        return tot
+
+    def delta(r):
+        if str(r.get("action_code", "")) not in ("variant_switch", "right_size", "step_up", "family_upgrade"):
+            return None
+        if not bool(r.get("eligible", False)):
+            return None
+        acct = r["account_id"]
+        skus = [s for s in str(r.get("promo_skus", "")).split(";") if "PLAN" in s]
+        if acct not in f.index or not skus or "plan_price_cents" not in f.columns:
+            return None
+        new = price(skus[0].strip(), int(f.loc[acct, "n_lines"]))
+        if new is None:
+            return None
+        return (new - int(f.loc[acct, "plan_price_cents"])) / 100.0
+
+    return delta
+
+
 def sandbox_tables():
     """Row counts read-only from the judge sandbox; None if the DB is not on this machine."""
     cands = [os.environ.get("SANDBOX_DB"), REPO / "dubhacks" / "data" / "sandbox.db",
@@ -739,11 +780,11 @@ def funnel_fig(nodes, links, stats, animated=True):
     foot = footnote(f"Flagged = Model A p(churn 90d) ≥ {stats['funnel']['flag_cut']:.4f}, the top 10% of the 5,000 regular "
                     "accounts (churn lane's cut; 42 personas scored on the same cut). Offered = any action worth making, not only flagged (offers.csv action ≠ do nothing).<br>"
                     "Message ready = message_status 'ok' (drafted + validated, nothing sent). Language = account preference.<br>"
-                    f"Model A = tm-churn churn_scores.csv · actions = Model B (tm-offers offers.csv) · column 4 = {stats['funnel']['col3_source']} · "
+                    f"Model A = tm-churn churn_scores.csv · actions = Model B (tm-offers offers.csv) · column 4 = {stats['funnel']['col3_source']}<br>"
                     "† judge-provided stand-in credit (sandbox promo source 'stub'). " + OTHER_LANG_LONG + ".")
     lay = base_layout(title)
-    lay.margin.b = 86
-    foot["yshift"] = -82
+    lay.margin.b = 104
+    foot["yshift"] = -84
     stage_ann = lambda k: [dict(xref="paper", yref="paper", x=0.02, y=1.0, yshift=18, xanchor="left", yanchor="bottom",
                                 text=STAGE_TITLES[k], showarrow=False, font=dict(color=MAGENTA, size=16, family=FONT))]
     stage_heads = lambda k: [dict(xref="paper", yref="paper", x=x, y=1.0, yshift=-2, xanchor=xa, yanchor="bottom",
@@ -1003,6 +1044,9 @@ def main():
             "messaged": int(len(msg)), "message_status_counts": m["message_status"].value_counts().to_dict(),
             "messaged_by_language": msg["language"].value_counts().to_dict(),
             "offered_not_messaged": int((m["offered"] & ~m["messaged"]).sum()),
+            "messaged_flagged": int((m["messaged"] & m["flagged"]).sum()),
+            "messaged_not_flagged": int((m["messaged"] & ~m["flagged"]).sum()),
+            "messaged_not_flagged_by_action": m[m["messaged"] & ~m["flagged"]]["action_code"].value_counts().to_dict(),
         },
         "sankey_links": [],
     }
@@ -1018,12 +1062,17 @@ def main():
 
     hid = household_in_decisions(d["offers"])
     stats["household_in_decisions"] = hid
-    happy_id, happy_detail = V4.pick_happy(d)
-    stats["happy_pick"] = happy_detail
+    happy_id = V4.HAPPY_ACCOUNT
+    hdet = V4.happy_detail(d, happy_id)
+    if hdet is None or hdet["action_code"] != "do_nothing":
+        happy_id, _ = V4.pick_happy(d)  # fallback: data-driven pick
+        hdet = V4.happy_detail(d, happy_id) if happy_id else None
+    stats["happy_pick"] = hdet
     stats["happy_label_audit"] = V4.happy_audit(d)
     featured = [f for f in V4.FEATURED if f[0] in set(d["offers"]["account_id"])]
     if happy_id:
         featured.append((happy_id, "left alone · verifiably happy", {"do_nothing"}))
+    plan_delta = make_plan_delta(d)
     toggles, has_choose = V4.compute_toggles(REPO, d, [f[0] for f in featured], cut)
     stats["choose_offer_available"] = has_choose
     stats["toggles"] = toggles
@@ -1036,8 +1085,10 @@ def main():
             f"current action is '{st['chosen_code']}', not the intended '{'/'.join(sorted(want))}' story")
         if mismatch:
             mism[acct] = mismatch
+        if hdet and acct == hdet["account_id"]:
+            st["callout_html"] = V4.happy_callout(hdet, rule_flag=hdet["support_90d"] >= 3)
         oc_acc = d["offer_candidates"][d["offer_candidates"]["account_id"] == acct]
-        rows, used = V4.options_rows(oc_acc, standin_text)
+        rows, used = V4.options_rows(oc_acc, standin_text, plan_delta=plan_delta)
         key = acct.replace("ACC-", "").replace("PERSONA-", "P").lower()
         btn = f"{acct.replace('ACC-PERSONA-', 'PERSONA ')} · {title.split(' · ')[0]}"
         cards.append(dict(key=key, acct=acct, btn=btn, html=V4.card_html(st, rows, title, mismatch, st["drivers"]),

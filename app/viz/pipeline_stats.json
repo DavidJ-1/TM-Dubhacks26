@@ -1,6 +1,6 @@
 {
  "note": "All customers and numbers are synthetic. Counts computed from harness/out CSVs at build time.",
- "built_at": "2026-10-17 20:05:32 America/Los_Angeles",
+ "built_at": "2026-10-17 20:10:12 America/Los_Angeles",
  "inputs": {
   "churn_scores": {
    "path": "/workspace/tmobile/TM-Dubhacks26/harness/out/churn_scores.csv",
@@ -287,7 +287,19 @@
    "es": 123,
    "other": 52
   },
-  "offered_not_messaged": 0
+  "offered_not_messaged": 0,
+  "messaged_flagged": 471,
+  "messaged_not_flagged": 652,
+  "messaged_not_flagged_by_action": {
+   "fix_first": 206,
+   "step_up": 153,
+   "right_size": 112,
+   "variant_switch": 91,
+   "check_in": 68,
+   "family_upgrade": 17,
+   "home_internet_bundle": 3,
+   "care_credit_fix_first": 2
+  }
  },
  "sankey_links": [
   {
@@ -878,27 +890,31 @@
  },
  "household_in_decisions": true,
  "happy_pick": {
-  "account_id": "ACC-PERSONA-14",
-  "p_churn_90d": 0.003103,
-  "support_90d": 0,
+  "account_id": "ACC-PERSONA-24",
+  "action_code": "do_nothing",
+  "p_churn_90d": 0.003243,
+  "why_this_offer": "They're happy and engaged, so there's no need to interrupt.",
+  "reason": "Simulated churn risk 0.32%; no eligible action applies. EV 0.",
+  "support_270d": 9,
+  "support_90d": 6,
   "unresolved_270d": 0,
+  "unresolved_90d": 0,
+  "negative_contacts_90d": 0,
+  "avg_sentiment": 0.4767,
+  "min_sentiment_270d": 0.34,
   "port_out_inquiry": 0,
-  "bill_increase_pct": 0.0,
-  "bill_change_3m_pct": -0.0185,
-  "promo_expired_recent": 0,
-  "promo_months_remaining": 0,
-  "checks_passed": [
-   "action is do_nothing",
-   "0 support contacts in 90 days",
-   "0 unresolved contacts in 270 days",
-   "no port-out inquiry",
-   "no recent bill increase (last bill and 3-month change <= 0)",
-   "no promo expired recently",
-   "no promo ending within 3 months",
-   "p_churn_90d < 1%",
-   "not persona 28/10/06/19 (unstable between runs)"
-  ],
-  "n_accounts_passing_all_checks": 273
+  "plan_is_unlimited": 1,
+  "data_gb_3m_avg": 13.7933,
+  "competitor_research_score": 0.1,
+  "checks": {
+   "action is do_nothing": true,
+   "9 support contacts in 270 days, 0 unresolved": true,
+   "0 negative contacts in 90 days": true,
+   "lowest contact sentiment +0.34 (all positive)": true,
+   "no port-out inquiry": true,
+   "shopping score 0.10": true,
+   "p_churn_90d < 1%": true
+  }
  },
  "happy_label_audit": {
   "happy_labels": 2109,
@@ -906,7 +922,7 @@
   "happy_with_unresolved_270d": 140,
   "happy_with_any_support_90d": 1270
  },
- "choose_offer_available": false,
+ "choose_offer_available": true,
  "toggles": {
   "ACC-PERSONA-38": [
    {
@@ -1037,43 +1053,45 @@
     ]
    }
   ],
-  "ACC-PERSONA-14": [
+  "ACC-PERSONA-24": [
    {
     "state": "baseline",
-    "p": 0.003103,
+    "p": 0.003243,
     "flagged": false,
-    "top_risk": "Phone is 22 months old",
+    "top_risk": "Single line account",
     "changed": []
    },
    {
     "state": "resolve open tickets",
-    "p": 0.003103,
+    "p": 0.003243,
     "flagged": false,
-    "top_risk": "Phone is 22 months old",
+    "top_risk": "Single line account",
     "changed": []
    },
    {
     "state": "remove port-out inquiry",
-    "p": 0.003103,
+    "p": 0.003243,
     "flagged": false,
-    "top_risk": "Phone is 22 months old",
+    "top_risk": "Single line account",
     "changed": []
    },
    {
     "state": "+20 GB monthly usage",
-    "p": 0.003103,
+    "p": 0.003243,
     "flagged": false,
-    "top_risk": "Phone is 22 months old",
+    "top_risk": "Single line account",
     "changed": [
      "data_gb_3m_avg"
     ]
    },
    {
     "state": "stop shopping other carriers",
-    "p": 0.003103,
+    "p": 0.002825,
     "flagged": false,
-    "top_risk": "Phone is 22 months old",
-    "changed": []
+    "top_risk": "Single line account",
+    "changed": [
+     "competitor_research_score"
+    ]
    }
   ]
  },
@@ -1086,7 +1104,7 @@
    "message_es": "Hola. Buenas noticias: sus 2 l\u00edneas califican para Experience More w/ 55+ Savings 2.0. Las mismas funciones por $110 al mes en lugar de $150. Nada m\u00e1s cambia. Responda S\u00cd y haremos el cambio. Responda STOP para no recibir mensajes.",
    "options_columns_used": {
     "cost": "offer_cost (fallback)",
-    "customer": "customer_benefit / upsell_gain (fallback)",
+    "customer": "plan price change (features.plan_price_cents vs sandbox plans.line_prices) (fallback)",
     "winner": "is_chosen",
     "loss": "blocked_or_ineligible_reason / EV comparison (fallback)"
    },
@@ -1094,7 +1112,7 @@
     {
      "option": "switch to discount plan variant",
      "cost": "$168",
-     "customer": "benefit $168 (model est.)",
+     "customer": "saves $40/mo",
      "why": "WINNER",
      "win": true,
      "elig": true,
@@ -1236,7 +1254,7 @@
    "message_es": "Hola. Nos ha reportado 2 problemas de red recientemente. Un especialista le llamar\u00e1 para resolverlo y le daremos un cr\u00e9dito \u00fanico de $25 en su pr\u00f3xima factura. Responda S\u00cd para programar la llamada. Responda STOP para no recibir mensajes.",
    "options_columns_used": {
     "cost": "offer_cost (fallback)",
-    "customer": "customer_benefit / upsell_gain (fallback)",
+    "customer": "plan price change (features.plan_price_cents vs sandbox plans.line_prices) (fallback)",
     "winner": "is_chosen",
     "loss": "blocked_or_ineligible_reason / EV comparison (fallback)"
    },
@@ -1386,7 +1404,7 @@
    "message_es": "Hola. Gracias por 5 a\u00f1os con nosotros. Su Experience More 2.0 incluye datos premium ilimitados, cubierto por su garant\u00eda de precio de 5 a\u00f1os. \u00bfPodemos mejorar algo de su plan? Responda S\u00cd para revisarlo. Responda STOP para no recibir mensajes.",
    "options_columns_used": {
     "cost": "offer_cost (fallback)",
-    "customer": "customer_benefit / upsell_gain (fallback)",
+    "customer": "plan price change (features.plan_price_cents vs sandbox plans.line_prices) (fallback)",
     "winner": "is_chosen",
     "loss": "blocked_or_ineligible_reason / EV comparison (fallback)"
    },
@@ -1528,7 +1546,7 @@
     }
    ]
   },
-  "ACC-PERSONA-14": {
+  "ACC-PERSONA-24": {
    "title": "left alone \u00b7 verifiably happy",
    "action": "do_nothing",
    "why": "They're happy and engaged, so there's no need to interrupt.",
@@ -1536,7 +1554,7 @@
    "message_es": "",
    "options_columns_used": {
     "cost": "offer_cost (fallback)",
-    "customer": "customer_benefit / upsell_gain (fallback)",
+    "customer": "plan price change (features.plan_price_cents vs sandbox plans.line_prices) (fallback)",
     "winner": "is_chosen",
     "loss": "blocked_or_ineligible_reason / EV comparison (fallback)"
    },
@@ -1551,19 +1569,10 @@
      "ev": 0.0
     },
     {
-     "option": "Home Internet bundle",
-     "cost": "$7",
-     "customer": "pays more (upgrade)",
-     "why": "scored lower than the winner (hover)",
-     "win": false,
-     "elig": true,
-     "ev": -2.95
-    },
-    {
      "option": "$25 care credit (judge-provided stand-in)",
      "cost": "\u2014",
      "customer": "\u2014",
-     "why": "not eligible: needs 3+ support contacts in 90 days (has 0)",
+     "why": "not eligible: guardrail: no bill credits below 5% churn risk (this account 0.3%)",
      "win": false,
      "elig": false,
      "ev": null
@@ -1617,7 +1626,7 @@
      "option": "family upgrade",
      "cost": "\u2014",
      "customer": "\u2014",
-     "why": "not eligible: upgrade gate: not in the no-income upgrade model's top 15% (pct 49)",
+     "why": "not eligible: upgrade gate: not in the no-income upgrade model's top 15% (pct 51)",
      "win": false,
      "elig": false,
      "ev": null
@@ -1672,6 +1681,15 @@
      "cost": "\u2014",
      "customer": "\u2014",
      "why": "not eligible: no unused streaming perk / risk below 5%",
+     "win": false,
+     "elig": false,
+     "ev": null
+    },
+    {
+     "option": "Home Internet bundle",
+     "cost": "\u2014",
+     "customer": "\u2014",
+     "why": "not eligible: already has Home Internet or single line",
      "win": false,
      "elig": false,
      "ev": null
