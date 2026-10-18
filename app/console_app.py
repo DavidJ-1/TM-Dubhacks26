@@ -16,8 +16,10 @@ import streamlit as st
 
 from harness.engine import build_console
 from harness.messages import outbound_title
-from harness.notify import hint, send
+from harness.notify import hint, send, will_send
+from harness.playbook.send import frequency_open, record_send
 from harness.playbook.rules import ASSUMPTION_CREDIT_CENTS, FREQUENCY_CAP_DAYS, RULES, VALUE_FORMULA
+from harness.upsell.config import INCLUDE_SYNTHETIC_DEFAULT, SYNTHETIC_BADGE
 from harness.projections import acceptance_curve, project, upgrade_curve
 
 st.set_page_config(page_title="Retention Console", layout="wide")
@@ -61,6 +63,13 @@ def get_playbook():
     from harness.playbook.build import build_playbook
 
     return build_playbook(get_console())
+
+
+@st.cache_resource(show_spinner="Building upgrades and life moments…")
+def get_upsell():
+    from harness.upsell.build import build_upsell
+
+    return build_upsell(get_console())
 
 
 def apply_css() -> None:
@@ -355,17 +364,22 @@ def queue(console) -> None:
     chart(fig, height=480)
 
 
-def _send_to_my_phone(action: dict, message: dict) -> None:
+def _send_to_my_phone(action: dict, message: dict, account_id: str | None = None) -> None:
     if not message.get("text"):
         st.write(f"No message sent, here's why: {action['why']}")
         return
     note = hint()
     if note:
         st.caption(note)
-    if st.button("Send to my phone"):
+    if st.button("Send to my phone", key=f"send_{account_id or 'next'}"):
+        if account_id and will_send() and not frequency_open(account_id):
+            st.toast(f"Frequency cap: one nudge per {FREQUENCY_CAP_DAYS} days. Nothing sent.")
+            return
         result = send(message["text"])
         if result.get("hint"):
             st.caption(result["hint"])
+        if result.get("sent") and account_id:
+            record_send(account_id)
         if result.get("backend") == "dryrun" or not result.get("sent"):
             if result.get("ok"):
                 st.toast("Preview only. Nothing was sent.")
@@ -437,7 +451,7 @@ def action_page(console) -> None:
                 st.write("No device promotion is eligible on a single trade-in plus one new phone.")
     with right:
         customer_card(detail, message)
-        _send_to_my_phone(action, message)
+        _send_to_my_phone(action, message, choice)
 
 
 def _label(console, account_id: str) -> str:
@@ -684,6 +698,74 @@ def targeting_page(console) -> None:
     )
 
 
+def upgrades_page(console) -> None:
+    from harness.upsell.build import display_frame
+
+    upsell = get_upsell()
+    st.subheader("Upgrades & life moments")
+    st.caption("Real data only is the default. Tier 2 is a seeded consented signal, and it stays off this screen until the toggle is on.")
+    include = st.toggle("With synthetic life-event signals", value=INCLUDE_SYNTHETIC_DEFAULT)
+    if include:
+        st.markdown(f"**{SYNTHETIC_BADGE}**")
+        st.caption(f"Seeded accounts: {upsell.seeded_accounts:,}. Counts only. An earlier real trigger or a guardrail still wins.")
+    else:
+        st.caption("Real data only.")
+    counts = upsell.counts(include)
+    st.markdown("**Counts per trigger**")
+    st.dataframe(counts, hide_index=True, width="stretch")
+    ranked = upsell.ranked(include)
+    shown = display_frame(ranked).head(200).copy()
+    if "monthly_difference" in shown.columns:
+        shown["monthly_difference"] = shown["monthly_difference"].map(
+            lambda value: "n/a" if value is None or (isinstance(value, float) and pd.isna(value)) else dollars(int(value))
+        )
+    st.markdown("**Ranked targets**")
+    st.caption("Order is satisfaction, affordability, and the signal, with the upgrade-propensity score when that file is already built. This list is not a projected save.")
+    st.dataframe(shown, hide_index=True, width="stretch", height=360)
+    export = display_frame(ranked)
+    st.download_button(
+        "Download the target list (CSV)",
+        export.to_csv(index=False).encode("utf-8"),
+        file_name="upgrades_life_moments.csv",
+        mime="text/csv",
+    )
+    choice = st.selectbox("One customer", list(ranked["account_id"]), index=0, key="upsell_account")
+    decision = upsell.decision(choice, include)
+    detail = console.account(choice)
+    st.markdown(f"**{choice}** · {decision['action']}")
+    if decision["badge"]:
+        st.markdown(f"**{decision['badge']}**")
+    st.write(decision["why"])
+    columns = st.columns(2)
+    columns[0].metric("Trigger", decision["trigger"])
+    diff = decision["diff_cents"]
+    columns[1].metric("Monthly difference", "n/a" if diff is None else dollars(int(diff)))
+    offer = decision["offer_name"]
+    if decision.get("promo_savings_cents"):
+        offer += f" · promo savings {dollars(int(decision['promo_savings_cents']))} subtracted by us"
+    st.write(f"Offer: {offer}")
+    st.write(f"Data source: {decision['data_source']}")
+    st.write(f"Why the runner-up was rejected: {decision['rejected']}")
+    if decision.get("assumption_note"):
+        st.caption(decision["assumption_note"])
+    english = decision["message_en"]
+    spanish = decision["message_es"]
+    st.markdown("**Draft**")
+    st.markdown(
+        "<div class='phone'><div class='phone-bar'></div>"
+        f"<div class='quiet'>English</div><div class='bubble'>{html.escape(english)}</div>"
+        f"<div class='quiet'>Español</div><div class='bubble'>{html.escape(spanish)}</div>"
+        "<div class='quiet'>On-screen mockup. Nothing is sent from this phone.</div></div>",
+        unsafe_allow_html=True,
+    )
+    text = english if detail.get("language") != "es" else spanish
+    _send_to_my_phone(
+        {"why": decision["why"]},
+        {"text": text if decision["send"] else None},
+        choice,
+    )
+
+
 def main() -> None:
     apply_css()
     banner()
@@ -696,7 +778,7 @@ def main() -> None:
     st.caption("DubHacks '26 · T-Mobile track")
     page = st.sidebar.radio(
         "Screen",
-        ["Overview", "At-risk queue", "Next best action", "Targeting playbook", "Projections"],
+        ["Overview", "At-risk queue", "Next best action", "Targeting playbook", "Upgrades & life moments", "Projections"],
     )
     st.sidebar.caption("Synthetic sandbox data. Money is cents until it is shown as dollars.")
     if page == "Overview":
@@ -707,6 +789,8 @@ def main() -> None:
         action_page(console)
     elif page == "Targeting playbook":
         targeting_page(console)
+    elif page == "Upgrades & life moments":
+        upgrades_page(console)
     else:
         projections(console)
 

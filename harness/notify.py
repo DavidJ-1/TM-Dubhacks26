@@ -29,6 +29,11 @@ def send(message: str, backend: str | None = None) -> dict:
     return handler(message)
 
 
+def will_send() -> bool:
+    """True only when a click would post to ntfy. Does not send."""
+    return _backend_name(None) == "ntfy" and bool(_topic())
+
+
 def hint() -> str:
     """Page-load hint. Does not send."""
     if _backend_name(None) == "ntfy" and not _topic():
