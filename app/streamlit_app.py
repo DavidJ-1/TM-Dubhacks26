@@ -931,6 +931,15 @@ with tab2:
             card(pick, "Customer lookup", set(), 0, kp="lk_", allow_send=pick in SHORTLIST)
     bottom_c = st.container()
 
+CHANNEL_LABEL = {"text": "Text", "in-app message": "In-app", "email": "Email", "agent call": "Call"}
+
+
+def outreach_card() -> pd.DataFrame | None:
+    """Per-account outreach file (same loader as the card slot), as a flat frame, or None if absent."""
+    o = _outreach()
+    return None if o is None else o.reset_index()
+
+
 # ---------------- How it decides: band (top of first tab) + across-all charts (end) ----------------
 with top_c:
     import plotly.express as px
@@ -942,6 +951,16 @@ with top_c:
     D["contact"] = D.get("action_key", pd.Series("do_nothing", index=D.index)) != "do_nothing"
     has_msg = D.get("message_en", pd.Series("", index=D.index)).fillna("").astype(str).str.strip() != ""
     D["msg"] = D.contact & has_msg
+    D["contact_engine"] = D.contact
+    # who actually gets a message, and on which channel, from the per-account outreach file (falls back to the engine)
+    n_text, ch_mix = None, pd.Series(dtype=int)
+    _oc = outreach_card()
+    if _oc is not None:
+        D["msg"] = D.account_id.astype(str).isin(set(_oc.loc[_oc.has_msg, "account_id"]))
+        D["contact"] = D.msg
+        D["channel"] = D.account_id.astype(str).map(_oc.set_index("account_id").channel).fillna("")
+        n_text = int((D.msg & (D.channel == "text")).sum())
+        ch_mix = D[D.msg].channel.map(lambda c: CHANNEL_LABEL.get(c, c.capitalize())).value_counts()
     n_acc, n_flag, n_msg = len(D), int(D.flagged.sum()), int(D.msg.sum())
     n_dn = int((~D.contact).sum())
     n_msg_nonflag = int((D.msg & ~D.flagged).sum())
@@ -967,13 +986,15 @@ with top_c:
         "<div class='hero-stats'>"
         f"<div class='hero-stat'><div class='hero-num'>{n_acc:,}</div><div class='hero-lbl'>accounts scored</div></div>"
         f"<div class='hero-stat'><div class='hero-num'>{n_flag:,}</div><div class='hero-lbl'>flagged at risk (top 10%)</div></div>"
-        f"<div class='hero-stat'><div class='hero-num'>{n_msg:,}</div><div class='hero-lbl'>texts ready, English/Spanish</div></div>"
+        f"<div class='hero-stat'><div class='hero-num'>{n_msg:,}</div><div class='hero-lbl'>messages ready, English/Spanish"
+        f"{f' · {n_text:,} by text' if n_text is not None else ''}</div></div>"
         f"<div class='hero-stat'><div class='hero-num'>{n_dn:,}</div><div class='hero-lbl'>left alone on purpose</div></div>"
         "</div></div>", unsafe_allow_html=True)
     st.markdown("#### How it works, end to end")
     _rr = NONP[NONP.p_churn_90d >= cut].risk_reason_1.fillna("").map(reason_category)
     top_drv = _rr[_rr != ""].value_counts().head(3)
-    mix_top = D[D.contact].action_key.map(action_label).value_counts().head(4) if "action_key" in D else pd.Series(dtype=int)
+    mix_top = (ch_mix.head(4) if len(ch_mix) else
+               D[D.contact].action_key.map(action_label).value_counts().head(4) if "action_key" in D else pd.Series(dtype=int))
 
     def _mini_bar(series, color, key):  # noqa: ARG001 (HTML bars so long labels stay readable)
         if not len(series):
@@ -1005,12 +1026,13 @@ with top_c:
         "<div class='tile t3'><div class='step'>03 · Why this score</div><div class='sub'>Top drivers among flagged customers</div>"
         f"{_bars(top_drv, '#15111A')}</div>"
         "<div class='tile t4'><div class='step'>04 · Offer engine</div>"
-        f"<div class='big'>{n_contact:,}</div><div class='sub'>get a text · {n_dn:,} left alone</div>{_bars(mix_top.head(3), '#A39DA6')}</div>"
+        f"<div class='big'>{n_contact:,}</div><div class='sub'>get a message · {n_dn:,} left alone</div>{_bars(mix_top.head(4), '#A39DA6')}</div>"
         "<div class='tile t5 dark'><div class='step'>05 · Why this offer → message</div>"
         f"<div class='big'>0</div><div class='sub'>actually sent: this is a demo</div>"
-        f"<div class='note'>{n_msg:,} English/Spanish texts ready</div></div>"
+        f"<div class='note'>{n_msg:,} English/Spanish messages ready"
+        f"{f', {n_text:,} of them texts' if n_text is not None else ''}</div></div>"
         "</div>", unsafe_allow_html=True)
-    st.caption("Every eligible action is weighed, including doing nothing. Each ready text carries a plain-language reason. "
+    st.caption("Every eligible action is weighed, including doing nothing. Each ready message carries a plain-language reason. "
                "")
 
     # ---- follow one customer through it ----
@@ -1083,10 +1105,11 @@ with bottom_c:
     k[2].metric("Top-10% catch", f"{catch:.0%}" if catch is not None else "n/a",
                 help=(TOP10_CLAIM.format(pct=f"{catch:.0%}") if catch is not None else "")
                      + f" Scores: {catch_src}, against simulated outcomes. Not a measure of real-world accuracy.")
-    k[3].metric("Messages ready", f"{n_msg:,}", help="Accounts with an action and an EN/ES text ready.")
+    k[3].metric("Messages ready", f"{n_msg:,}", help="Accounts with an EN/ES message ready"
+                + (f", {n_text:,} of them by text; the rest in-app, by email or as a call." if n_text is not None else "."))
     k[4].metric("Do nothing", f"{n_dn:,}", help="Accounts we deliberately leave alone.")
-    k[5].metric("Texts, not at risk", f"{n_msg_nonflag:,}",
-                help="Customers below the risk flag who still get a text: money-saving, fix-first, or a plan upgrade.")
+    k[5].metric("Messages, not at risk", f"{n_msg_nonflag:,}",
+                help="Customers below the risk flag who still get a message: money-saving, fix-first, or a plan upgrade.")
     try:
         from streamlit_extras.metric_cards import style_metric_cards
         style_metric_cards(border_left_color="#E6E0D8", background_color="#FFFFFF", border_color="#E6E0D8", border_radius_px=16, box_shadow=False)
@@ -1095,9 +1118,9 @@ with bottom_c:
 
     g1, g2 = st.columns(2)
     with g1, st.container(border=True):
-        st.markdown("**From 5,000+ accounts to a handful of texts**")
+        st.markdown("**From 5,000+ accounts to a handful of messages**")
         STEP = {"step_up", "step_up_plan"}
-        D["upsell_nf"] = ~D.flagged & D.action_key.isin(STEP) if "action_key" in D else False
+        D["upsell_nf"] = ~D.flagged & D.contact & D.action_key.isin(STEP) if "action_key" in D else False
         fo = int((D.flagged & D.contact).sum()); fd = int((D.flagged & ~D.contact).sum())
         su = int(D.upsell_nf.sum())
         # "usage-based" only if EVERY step-up to a not-at-risk customer states a usage reason in offers.csv `reason`
@@ -1109,7 +1132,7 @@ with bottom_c:
         mo = m3 + m4
         labels_ = [f"All accounts {n_acc:,}", f"Flagged at-risk {n_flag:,}", f"Not flagged {n_acc - n_flag:,}",
                    f"Offer / contact {fo + no:,}", f"{UPS} {su:,}", f"Do nothing {fd + nd:,}",
-                   f"Text ready {mo:,}"]
+                   f"Message ready {mo:,}"]
         fig = go.Figure(go.Sankey(
             node=dict(label=labels_, pad=18, thickness=16,
                       color=["#A39DA6", "#D6CEC4", "#A39DA6", "#A39DA6", "#D6CEC4", "#D6CEC4", MAGENTA]),
@@ -1118,7 +1141,7 @@ with bottom_c:
                       color=["rgba(21,17,26,.08)"] * 9)))
         fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', template="tm_light", height=380, margin=dict(l=8, r=8, t=8, b=8), font=dict(size=13, color="#15111A"))
         st.plotly_chart(fig, use_container_width=True, theme=None)
-        st.caption(f"Why more texts ({mo:,}) than flags ({n_flag:,}): customers who aren't at risk still get a text when "
+        st.caption(f"Why messages ({mo:,}) and flags ({n_flag:,}) differ: customers who aren't at risk can still get a message when "
                    f"it helps them: {no:,} money-saving or fix-first contacts, plus {su:,} {UPS.lower()}"
                    + (" (near their data cap or using hotspot)" if "usage" in UPS else "")
                    + f". {fd:,} flagged customers get nothing because no offer is worth it.")
@@ -1150,7 +1173,7 @@ with bottom_c:
         else:
             R, hl, rates = S["rows"], S["headline"], S["rates"]
             lo_r, hi_r = min(rates), max(rates)
-            mid_r = [x for x in rates if x not in (lo_r, hi_r)]
+            mid_r = [x for x in rates if x not in (hl, hi_r)]  # ring = the other low rate next to the headline
             dec_txt = f", picks made at a {S['decide']:.0%} save rate" if S.get("decide") else ""
             st.markdown(f"**Business net in full company dollars{dec_txt}**")
             hr_ = R[R.is_headline]
