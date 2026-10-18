@@ -30,7 +30,9 @@ CONTRACTS: dict[str, list[str]] = {
     "labels": ["account_id"],
 }
 # Optional extras (no mock): tm-offers' full option table and Model A out-of-fold predictions.
-OPTIONAL = {"offer_candidates": ["account_id", "action_code"], "churn_oof_pred": ["account_id", "p_churn_90d"]}
+OPTIONAL = {"offer_candidates": ["account_id", "action_code"], "churn_oof_pred": ["account_id", "p_churn_90d"],
+            # per-account logit contributions of the churn logistic regression (coef x standardized value)
+            "churn_contributions": ["account_id", "intercept_logit"]}
 
 
 def out_dirs() -> list[Path]:

@@ -44,6 +44,10 @@ st.markdown(f"""
 .whatif {{border:1px solid #F3B6D2; border-radius:10px; padding:8px 12px; background:#FFF5FA; font-size:.92rem}}
 .how {{background:#F6F7F9; border-radius:10px; padding:.6rem 1rem; font-size:.95rem; color:#1F2328}}
 .how b {{color:{MAGENTA}}}
+.step {{color:{MAGENTA}; font-weight:700; font-size:.85rem; margin-bottom:2px}}
+.big {{font-size:1.7rem; font-weight:700; color:#1F2328; line-height:1.1}}
+.sub {{font-size:.78rem; color:#57606A; margin-bottom:4px}}
+.arrow {{font-size:1.6rem; color:{MAGENTA}; text-align:center; margin-top:4.5rem}}
 .pill {{display:inline-block; font-size:.66rem; font-weight:700; padding:0 6px; border-radius:8px; margin-right:5px;
   color:white; vertical-align:1px}}
 .p-com {{background:#0969DA}} .p-cus {{background:#1A7F37}} .p-rt {{background:#BC4C00}}
@@ -55,8 +59,9 @@ table.opts {{width:100%; border-collapse:collapse; font-size:.86rem; margin-bott
 table.opts th {{text-align:left; color:#57606A; font-weight:600; background:#F6F7F9; padding:6px 8px;
   border-bottom:1px solid #D0D7DE}}
 table.opts td {{padding:6px 8px; border-bottom:1px solid #EEF0F2; vertical-align:top; white-space:normal}}
-table.opts td:nth-child(1) {{width:24%}} table.opts td:nth-child(2) {{width:10%; white-space:nowrap}}
-table.opts td:nth-child(3) {{width:22%}}
+table.opts td:nth-child(1) {{width:19%}} table.opts td:nth-child(2) {{width:8%; white-space:nowrap}}
+table.opts td:nth-child(3) {{width:15%}} table.opts td:nth-child(4) {{width:11%; white-space:nowrap}}
+table.opts td:nth-child(5) {{width:7%; white-space:nowrap}}
 </style>
 """, unsafe_allow_html=True)
 st.info("**All customers are synthetic:** T-Mobile judge sandbox data with simulated scores. Not real customers.", icon="⚠️")
@@ -130,6 +135,8 @@ def clean_text(t) -> str:
     t = re.sub(r"enrichment\([^)]*\)(\[[^\]]*\])?:?[^;,.]*[;,]?\s*", "", t)
     t = re.sub(r"\s*EV\s*=.*?(\(synthetic\)\.?|$)", "", t)
     t = re.sub(r"\bEV\b", "expected value", t)
+    t = t.replace("Model A + EV engine", "churn risk model + offer engine").replace("Model A", "churn risk model")
+    t = t.replace("expected value engine", "offer engine").replace("Model B", "offer engine")
     return t.strip()
 
 
@@ -197,7 +204,12 @@ def options_table(acc: str, cands: pd.DataFrame | None = None, msg_en: str | Non
     c["_chosen"] = c[chosen_col].astype(str).str.lower().isin(("true", "1"))
     c["_elig"] = c["eligible"].astype(str).str.lower().isin(("true", "1"))
     elig, inel = c[c._elig], c[~c._elig]
-    c = pd.concat([elig.sort_values("rank"), inel.head(max(0, 6 - len(elig)))])
+    c = pd.concat([elig.sort_values("rank"), inel.head(max(3, 7 - len(elig)))])
+    evcol = "ev" if "ev" in c else "expected_value"
+    win = c[c._chosen]
+    win_name = (action_label(win.iloc[0]["action_code"]) if normalize_action(win.iloc[0]["action_code"]) in _KNOWN
+                else str(win.iloc[0].get("action", ""))) if len(win) else ""
+    win_ev = float(win.iloc[0][evcol]) if len(win) and pd.notna(win.iloc[0][evcol]) else 0.0
     rows, tips = [], []
     msg_prices = None
     om = df[df.account_id == acc]
@@ -222,22 +234,23 @@ def options_table(acc: str, cands: pd.DataFrame | None = None, msg_en: str | Non
                 if cust not in ("—", txt.split(" (")[0]):
                     txt += " ⚠ text/engine differ"
                 cust = txt
+        evv = r.get(evcol)
         if r._chosen:
-            why = "✅ Our pick"
-        elif "why_not_chosen" in c and isinstance(r.get("why_not_chosen"), str) and r["why_not_chosen"]:
-            why = r["why_not_chosen"]
+            res_, why = "✅ Won", "Our pick: the highest net value for this customer"
         elif not r._elig:
-            why = "Not eligible: " + str(r.get("blocked_or_ineligible_reason") or "rule not met")
-        elif code == "do_nothing":
-            why = "We'd stay silent, but a contact helps here"
-        elif "below zero" in str(r.get("reason", "")):
-            why = "Costs more than it's likely to save"
+            res_, why = "Blocked", "Not eligible: " + str(r.get("blocked_or_ineligible_reason") or "rule not met")
         else:
-            why = "Less value for the customer and for us than our pick"
+            gap = win_ev - (float(evv) if pd.notna(evv) else 0.0)
+            res_, why = "Lost", f"Lost to {win_name} by ${gap:,.2f}"
+            if "why_not_chosen" in c and isinstance(r.get("why_not_chosen"), str) and r["why_not_chosen"]:
+                why += f": {r['why_not_chosen']}"
+            elif "below zero" in str(r.get("reason", "")):
+                why += ": costs more than it's likely to save"
         why = clean_text(why)
         rows.append({"Option": clean_text(name), "Cost to T-Mobile": money(cost) if r._elig else "—",
-                     "Customer": cust if r._elig else "—", "Why not": why})
-        evv = r["ev"] if "ev" in c else r.get("expected_value")
+                     "Customer": cust if r._elig else "—",
+                     "Net value to us (simulated)": (f"${float(evv):,.2f}" if (r._elig and pd.notna(evv)) else "—"),
+                     "Result": res_, "Reason": why})
         if r._elig and pd.notna(evv):
             tips.append(f"{name}: expected value {money(evv)}")
     return pd.DataFrame(rows), "Expected value per option (synthetic, internal only): " + "; ".join(tips)
@@ -359,7 +372,115 @@ def key_facts(r) -> str:
     return "Facts: " + " · ".join(bits) + " (synthetic)" if bits else ""
 
 
-def card(acc: str, story: str, fits: set, idx: int):
+FEATURE_LABELS = {  # churn model column -> (plain label, signal type)
+    "extra_lines": ("Extra lines on the account", "Commerce"), "tenure_capped60": ("Time with T-Mobile", "Customer"),
+    "app_sessions_30d": ("App use, last 30 days", "Real-time"), "financing_ends_within_3m": ("Phone paid off within 3 months", "Commerce"),
+    "is_byod": ("Bring-your-own phone", "Commerce"), "neg_sentiment": ("Negative support sentiment", "Customer"),
+    "cancel_inquiries_270d": ("Asked about cancelling", "Customer"), "short_history": ("Short account history", "Customer"),
+    "has_home_internet": ("Home Internet bundle", "Commerce"), "low_app_use": ("Rarely uses the app", "Real-time"),
+    "plan_misfit_share": ("Plan doesn't fit usage", "Commerce"), "port_out_inquiry": ("Port-out inquiry", "Real-time"),
+    "early_tenure": ("First year with us", "Customer"), "promo_expired_recent": ("Promo just ended", "Commerce"),
+    "max_device_age_months": ("Phone age", "Commerce"), "troubled_4plus": ("4+ support contacts", "Customer"),
+    "bill_increase_pct": ("Bill went up", "Commerce"), "unresolved_90d": ("Unresolved support, 90 days", "Customer"),
+    "competitor_research_score": ("Comparing carriers", "Real-time"),
+    "negative_contacts_90d": ("Unhappy support contacts, 90 days", "Customer"),
+}
+TYPE_COLOR = {"Commerce": "#0969DA", "Customer": "#1A7F37", "Real-time": "#BC4C00"}
+
+
+@st.cache_resource(show_spinner=False)
+def _live_contributions():
+    """Fallback when churn_contributions.csv isn't in the data folder: the scorer's own logistic regression."""
+    import numpy as np  # noqa: F401
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from harness import churn_scorer as cs
+    from harness.churn_features import prepare
+    stt = cs._load()
+    m, feats = stt["model"], stt["feats"]
+    X = prepare(feats)
+    C = m.contributions(X)
+    C.insert(0, "intercept_logit", m.intercept_)
+    C.index = feats["account_id"].values
+    return C
+
+
+def contributions_for(acc: str):
+    cc = data["churn_contributions"]
+    if cc.source == "real" and len(cc.df):
+        row = cc.df[cc.df.account_id == acc]
+        if len(row):
+            return row.iloc[0].drop(labels=["account_id"]).astype(float), "saved"
+    try:
+        C = _live_contributions()
+        if acc in C.index:
+            return C.loc[acc].astype(float), "live"
+    except Exception as e:  # noqa: BLE001
+        print(f"[tm-ui] explanation unavailable: {type(e).__name__}: {e}")
+    return None, None
+
+
+def score_panel(acc: str, p_now: float, kp: str = ""):
+    import numpy as np
+    import plotly.graph_objects as go
+    st.markdown("**Why this score?** How each signal pushes this customer's churn risk up or down",
+                help="The churn risk model is a logistic regression. Each bar = how much risk changes if that one "
+                     "signal were at the typical customer's level instead (coefficient × standardized value, "
+                     "shown in percentage points). Synthetic.")
+    cr, src = contributions_for(acc)
+    if cr is None:
+        st.caption("Explanation unavailable on this machine.")
+        return
+    b0 = float(cr.pop("intercept_logit"))
+    logit = b0 + float(cr.sum())
+    sig = lambda z: 1 / (1 + np.exp(-z))  # noqa: E731
+    p = sig(logit)
+    d = pd.DataFrame({"feat": cr.index, "c": cr.values})
+    d["pts"] = [(p - sig(logit - c)) * 100 for c in d.c]
+    d = d.reindex(d.pts.abs().sort_values(ascending=False).index).head(6)
+    d = d[d.pts.abs() >= 0.005]
+    d["label"] = [f"{FEATURE_LABELS.get(f, (f.replace('_', ' '), 'Commerce'))[0]}  ·  "
+                  f"{FEATURE_LABELS.get(f, ('', 'Commerce'))[1]}" for f in d.feat]
+    d["type"] = [FEATURE_LABELS.get(f, ("", "Commerce"))[1] for f in d.feat]
+    d = d.iloc[::-1]
+    fig = go.Figure(go.Bar(x=d.pts, y=d.label, orientation="h",
+                           marker_color=[("#CF222E" if v > 0 else "#1A7F37") for v in d.pts],
+                           text=[f"{v:+.2f} pts" for v in d.pts], textposition="outside", cliponaxis=False))
+    fig.add_vline(x=0, line_color="#57606A", line_width=1)
+    fig.update_layout(template="plotly_white", height=60 + 34 * max(1, len(d)), margin=dict(l=8, r=60, t=4, b=4),
+                      xaxis_title="change in 90-day churn risk, percentage points (synthetic)", yaxis_title=None,
+                      font=dict(size=12))
+    st.plotly_chart(fig, use_container_width=True, key=f"{kp}why_{acc}")
+    st.caption(f"Typical customer: {fmt_prob(sig(b0))} · this customer: {fmt_prob(p_now)}. "
+               "Red raises risk, green lowers it. Tags: Commerce / Customer / Real-time. Synthetic.")
+
+
+def send_button(body: str, key: str):
+    """'Send this text to my phone': only on click, one click = one send. Body is the exact text shown.
+    Recipient comes from the sender module's own env config; the app never passes or reads a number."""
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    try:
+        from harness.sms_send import is_configured, send_sms
+    except ImportError:
+        is_configured, send_sms = (lambda: False), None
+    try:
+        ok_cfg = bool(is_configured()) and send_sms is not None
+    except Exception:  # noqa: BLE001
+        ok_cfg = False
+    clicked = st.button("📲 Send this text to my phone", key=f"send_{key}", disabled=not ok_cfg)
+    if not ok_cfg:
+        st.caption("Phone sending not set up")
+        return
+    if clicked:  # st.button is True only on the rerun triggered by this click
+        res = send_sms(body)
+        st.session_state[f"sent_{key}"] = res if isinstance(res, dict) else {"ok": False, "detail": str(res)}
+    res = st.session_state.get(f"sent_{key}")
+    if res is not None:
+        (st.success("Sent") if res.get("ok") else st.error(str(res.get("detail") or "Send failed")))
+
+
+def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = True):
     if acc not in set(df.account_id):
         st.warning(f"{acc} is not in the loaded data.")
         return
@@ -391,7 +512,7 @@ def card(acc: str, story: str, fits: set, idx: int):
         edits = {}
         cols = st.columns(max(1, len(rel)))
         for (key, lab, ed), c in zip(rel, cols):
-            if not c.toggle(lab, value=True, key=f"t_{acc}_{key}"):
+            if not c.toggle(lab, value=True, key=f"{kp}t_{acc}_{key}"):
                 edits.update(ed)
         w = what_if(acc, edits) if edits else None
         res = (w or {}).get("res") or None
@@ -425,7 +546,7 @@ def card(acc: str, story: str, fits: set, idx: int):
     why = (w.get("why") if (w and w.get("why")) else
            (r.get("why_this_offer") if isinstance(r.get("why_this_offer"), str) else str(r.get("reason", ""))))
     why_ph.markdown(f"<div class='why'>{html.escape(clean_text(why))}</div>", unsafe_allow_html=True)
-    if not edits and normalize_action(k) not in {normalize_action(x) for x in fits}:
+    if fits and not edits and normalize_action(k) not in {normalize_action(x) for x in fits}:
         warn_ph.error(f"Engine picked **{action_label(k)}**, which doesn't match this card's story ({story}).")
     dec_ph.markdown(f"**Decision: {action_label(k_now)}**" + ("  _(what-if)_" if edits and w and w.get("action") else ""))
     if res is not None:
@@ -434,7 +555,9 @@ def card(acc: str, story: str, fits: set, idx: int):
         tbl, tip = options_table(acc, cand, res.get("message_en"))
     else:
         tbl, tip = options_table(acc)
-    opt_hdr.markdown("**Options we considered**" + ("  _(what-if)_" if res is not None else ""), help=tip or None)
+    opt_hdr.markdown("**Why this offer? Every option we considered**" + ("  _(what-if)_" if res is not None else ""),
+                     help="Net value to us = simulated saved margin − cost − annoyance, using our assumed acceptance "
+                          "rates. Synthetic.")
     if len(tbl):
         # HTML table so long "Why not" text wraps instead of being cut off
         _t = tbl.rename(columns={"Cost to T-Mobile": "Cost to us", "Customer": "Customer saves / pays"})
@@ -444,15 +567,36 @@ def card(acc: str, story: str, fits: set, idx: int):
     with right:
         lang_default = "es" if str(r.get("language", "en")) == "es" else "en"
         lang = st.radio("Text language", ["en", "es"], index=["en", "es"].index(lang_default), horizontal=True,
-                        format_func=lambda x: {"en": "English", "es": "Español"}[x], key=f"lang_{acc}")
+                        format_func=lambda x: {"en": "English", "es": "Español"}[x], key=f"{kp}lang_{acc}")
         msg = res.get(f"message_{lang}") if res is not None else r.get(f"message_{lang}")
         msg = msg.strip() if (k_now != "do_nothing" and isinstance(msg, str) and msg.strip()) else None
         st.markdown(phone(msg, lang), unsafe_allow_html=True)
+        if msg and allow_send and res is None:
+            send_button(msg, f"{kp}{acc}_{lang}")
         st.caption(("What-if text from the offer engine." if res is not None else "The exact text the offer engine wrote.")
                    + " Mockup only, nothing is sent.")
+    sp, _gap = st.columns([2.4, 1])
+    with sp:
+        score_panel(acc, float(r.p_churn_90d), kp)
 
 
 with tab2:
+    st.markdown("### Open any customer")
+    _lk = df.sort_values("risk_rank")
+    _labels = {a: f"Customer {a.rsplit('-', 1)[-1] if a.startswith('ACC-PERSONA') else a.replace('ACC-', '').lstrip('0')}"
+                  f"{' (test persona)' if a.startswith('ACC-PERSONA') else ''} · {seg} · risk {fmt_prob(p)}"
+               for a, seg, p in zip(_lk.account_id, _lk.get("segment", pd.Series("", index=_lk.index)), _lk.p_churn_90d)}
+    SHORTLIST = ["ACC-PERSONA-38", "ACC-PERSONA-04", "ACC-PERSONA-21", "ACC-PERSONA-24", "ACC-PERSONA-39", "ACC-PERSONA-05"]
+    full = st.checkbox(f"Search all {len(_labels):,}", key="lookup_all")
+    opts = list(_labels) if full else [a for a in SHORTLIST if a in _labels]
+    pick = st.selectbox("Customer (type to filter by number, segment or risk)", [None] + opts,
+                        format_func=lambda a: "Pick a customer…" if a is None else _labels[a],
+                        key="lookup_full" if full else "lookup_short")
+    if pick:
+        with st.container(border=True):
+            if pick not in SHORTLIST:
+                st.caption("Not pre-checked for the demo (synthetic).")
+            card(pick, "Customer lookup", set(), 0, kp="lk_", allow_send=pick in SHORTLIST)
     st.markdown("### Four customers, four different right answers")
     st.caption("Same pipeline, different decision for each customer, including staying silent. All synthetic.")
     for i, (acc, story, fits) in enumerate(CARDS, 1):
@@ -485,11 +629,6 @@ with tab2:
 with tab1:
     import plotly.express as px
     import plotly.graph_objects as go
-    st.markdown("<div class='how'><b>How it works:</b> Sandbox data → <b>Churn risk model</b> scores risk + plain reasons → "
-                "<b>Offer engine</b> picks the best offer, or do nothing → a text in English or Spanish. "
-                "All numbers synthetic.<br>One engine: <b>Next Best Moment</b>, plus <b>household plan fit</b>.</div>",
-                unsafe_allow_html=True)
-    st.write("")
     D = df.copy()
     nonp_p = NONP.p_churn_90d
     cut = float(nonp_p.quantile(0.90)) if len(nonp_p) else 1.0
@@ -514,6 +653,125 @@ with tab1:
             auc = roc_auc_score(j.churn_90d, j.p_churn_90d)
         except Exception:  # noqa: BLE001
             auc = None
+    # ================= End-to-end process band (one screen explains the pipeline) =================
+    st.markdown("#### How it works, end to end")
+    n_contact = int(D.contact.sum())
+    _rr = NONP[NONP.p_churn_90d >= cut].risk_reason_1.fillna("").str.replace(r"\d+(\.\d+)?", "N", regex=True)
+    _rr = _rr.str.replace(r"\(score N\)", "", regex=True).str.replace("N unresolved support contact in", "N unresolved support contacts in").str.strip()
+    top_drv = _rr[_rr != ""].value_counts().head(3)
+    mix_top = D[D.contact].action_key.map(action_label).value_counts().head(4) if "action_key" in D else pd.Series(dtype=int)
+
+    def _mini_bar(series, color, key):  # noqa: ARG001 (HTML bars so long labels stay readable)
+        if not len(series):
+            return
+        mx = float(series.max()) or 1.0
+        st.markdown("".join(
+            f"<div class='sub' style='margin:3px 0 0'>{html.escape(str(lbl))} <b>{int(v):,}</b></div>"
+            f"<div style='background:{color}; height:7px; border-radius:4px; width:{max(4, 100 * v / mx):.0f}%'></div>"
+            for lbl, v in series.items()), unsafe_allow_html=True)
+
+    widths = [1, .08, 1, .08, 1, .08, 1, .08, 1]
+    band = st.columns(widths)
+    steps = [band[i] for i in (0, 2, 4, 6, 8)]
+    for i in (1, 3, 5, 7):
+        band[i].markdown("<div class='arrow'>➜</div>", unsafe_allow_html=True)
+    with steps[0], st.container(border=True):
+        st.markdown("<div class='step'>1 · Customer data</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='big'>{n_acc:,}</div><div class='sub'>synthetic accounts</div>", unsafe_allow_html=True)
+        st.markdown("<span class='pill p-com'>Commerce</span> plan, bill, device<br>"
+                    "<span class='pill p-cus'>Customer</span> support, sentiment, tenure<br>"
+                    "<span class='pill p-rt'>Real-time</span> port-out, comparing carriers, app use",
+                    unsafe_allow_html=True)
+    with steps[1], st.container(border=True):
+        st.markdown("<div class='step'>2 · Churn risk score</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='big'>{n_flag:,}</div><div class='sub'>flagged: top 10% most likely to leave in 90 days</div>",
+                    unsafe_allow_html=True)
+        if catch is not None:
+            st.caption(f"Tested on held-out customers, the top 10% catches {catch:.0%} of churners.")
+    with steps[2], st.container(border=True):
+        st.markdown("<div class='step'>3 · Why this score</div>", unsafe_allow_html=True)
+        st.markdown("<div class='sub'>Top drivers among flagged customers</div>", unsafe_allow_html=True)
+        _mini_bar(top_drv, MAGENTA, "band_drv")
+    with steps[3], st.container(border=True):
+        st.markdown("<div class='step'>4 · Offer engine</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='big'>{n_contact:,}</div><div class='sub'>get a text · {n_dn:,} left alone "
+                    "(every eligible action is weighed, including doing nothing)</div>", unsafe_allow_html=True)
+        _mini_bar(mix_top, "#8C959F", "band_mix")
+    with steps[4], st.container(border=True):
+        st.markdown("<div class='step'>5 · Why this offer → message</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='big'>0</div><div class='sub'>actually sent: this is a demo. {n_msg:,} English/Spanish "
+                    "texts are ready, each with a plain-language reason.</div>", unsafe_allow_html=True)
+
+    # ---- follow one customer through it ----
+    FOLLOW = ["ACC-PERSONA-38", "ACC-PERSONA-04", "ACC-PERSONA-21", "ACC-PERSONA-24", "ACC-PERSONA-39", "ACC-PERSONA-05"]
+    FOLLOW = [a for a in FOLLOW if a in set(df.account_id)]
+    if FOLLOW:
+        fa = st.selectbox("Follow one customer through it", FOLLOW, index=0, key="follow",
+                          format_func=lambda a: f"Customer #{a.rsplit('-', 1)[-1]} · {PERSONAS.get(a, '')} (synthetic)")
+        fr = df[df.account_id == fa].iloc[0]
+        row2 = st.columns(widths)
+        fs = [row2[i] for i in (0, 2, 4, 6, 8)]
+        for i in (1, 3, 5, 7):
+            row2[i].markdown("<div class='arrow'>➜</div>", unsafe_allow_html=True)
+
+        def _v(c, kind="int"):
+            v = fr.get(c)
+            try:
+                v = float(v)
+            except (TypeError, ValueError):
+                return "n/a"
+            if pd.isna(v):
+                return "n/a"
+            return {"int": f"{int(round(v))}", "pct": f"{v:+.0%}", "f2": f"{v:.2f}", "usd": f"${v / 100:,.0f}",
+                    "yn": "yes" if v > 0 else "no"}[kind]
+        with fs[0], st.container(border=True):
+            plan = str(fr.get("plan_sku", "")).replace("TMO-STUB-PLAN-", "").replace("-", " ").title()
+            st.markdown(f"<span class='pill p-com'>Commerce</span> {html.escape(plan)} · {_v('n_lines')} lines · bill "
+                        f"{_v('last_bill_cents', 'usd')} ({_v('bill_change_3m_pct', 'pct')}) · phone {_v('max_device_age_months')} mo<br>"
+                        f"<span class='pill p-cus'>Customer</span> {_v('support_270d')} support contacts (270d), "
+                        f"{_v('unresolved_270d')} unresolved · sentiment {_v('avg_sentiment', 'f2')} · {_v('tenure_months')} mo tenure<br>"
+                        f"<span class='pill p-rt'>Real-time</span> port-out {_v('port_out_inquiry', 'yn')} · comparing carriers "
+                        f"{_v('competitor_research_score', 'f2')} · {_v('app_sessions_30d')} app sessions/30d",
+                        unsafe_allow_html=True)
+        with fs[1], st.container(border=True):
+            flagged = float(fr.p_churn_90d) >= cut
+            st.markdown(f"<div class='big'>{fmt_prob(fr.p_churn_90d)}</div><div class='sub'>90-day churn risk · rank "
+                        f"#{int(fr.risk_rank):,} of {n_acc:,} · {'flagged' if flagged else 'not flagged'}</div>",
+                        unsafe_allow_html=True)
+        with fs[2], st.container(border=True):
+            cr, _src = contributions_for(fa)
+            if cr is not None:
+                import numpy as np
+                b0 = float(cr.pop("intercept_logit")); lg = b0 + float(cr.sum()); sg = lambda z: 1 / (1 + np.exp(-z))  # noqa: E731,E702
+                pts = pd.Series({f: (sg(lg) - sg(lg - c)) * 100 for f, c in cr.items()})
+                top = pts.reindex(pts.abs().sort_values(ascending=False).index).head(3)
+                st.markdown("<br>".join(
+                    f"<span class='pill {PILL[FEATURE_LABELS.get(f, ('', 'Commerce'))[1]]}'>{FEATURE_LABELS.get(f, ('', 'Commerce'))[1]}</span>"
+                    f"{html.escape(FEATURE_LABELS.get(f, (f, ''))[0])} <b style='color:{'#CF222E' if v > 0 else '#1A7F37'}'>{v:+.2f} pts</b>"
+                    for f, v in top.items()) + f"<div class='sub'>vs typical customer {fmt_prob(sg(b0))}</div>",
+                    unsafe_allow_html=True)
+            else:
+                st.markdown("<br>".join(chip(x, "risk") for x in [fr.get(f"risk_reason_{i}") for i in (1, 2, 3)]
+                                        if isinstance(x, str) and x), unsafe_allow_html=True)
+        with fs[3], st.container(border=True):
+            tbl_f, _tip = options_table(fa)
+            if len(tbl_f):
+                won = tbl_f[tbl_f.Result.str.contains("Won")]
+                n_el = int((tbl_f.Result != "Blocked").sum())
+                lost = tbl_f[tbl_f.Result == "Lost"].head(1)
+                st.markdown(f"<b>{html.escape(won.Option.iloc[0] if len(won) else action_label(fr.get('action_key')))}</b> wins"
+                            + (f" · net value to us {won['Net value to us (simulated)'].iloc[0]} (simulated)" if len(won) else "")
+                            + f"<div class='sub'>{n_el} eligible options weighed"
+                            + (f"; runner-up {html.escape(lost.Option.iloc[0])}" if len(lost) else "") + "</div>",
+                            unsafe_allow_html=True)
+        with fs[4], st.container(border=True):
+            st.markdown(f"<i>{html.escape(clean_text(fr.get('why_this_offer', '')))}</i>", unsafe_allow_html=True)
+            m_ = fr.get("message_es" if str(fr.get("language")) == "es" else "message_en")
+            if fr.get("action_key") != "do_nothing" and isinstance(m_, str) and m_.strip():
+                st.markdown(f"<div class='bubble' style='font-size:.78rem'>{html.escape(m_.strip())}</div>", unsafe_allow_html=True)
+            else:
+                st.markdown("<div class='sub'>🤫 No message sent: we decided to wait.</div>", unsafe_allow_html=True)
+    st.markdown("#### Whole-base view")
     k = st.columns(6)
     k[0].metric("Accounts", f"{n_acc:,}", help="Judge sandbox accounts incl. 42 personas (synthetic).")
     k[1].metric("Flagged at-risk", f"{n_flag:,}", help=f"Churn risk ≥ {fmt_prob(cut)}: the top 10% of regular accounts (synthetic).")
