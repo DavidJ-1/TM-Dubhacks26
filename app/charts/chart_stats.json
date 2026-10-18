@@ -1,0 +1,279 @@
+{
+ "sources": {
+  "churn_scores": [
+   "real",
+   "/workspace/tmobile/TM-Dubhacks26/harness/out/churn_scores.csv"
+  ],
+  "offers": [
+   "real",
+   "/workspace/tmobile/TM-Dubhacks26/harness/out/offers.csv"
+  ],
+  "features": [
+   "real",
+   "/workspace/tmobile/TM-Dubhacks26/harness/out/features.csv"
+  ],
+  "labels": [
+   "real",
+   "/workspace/tmobile/TM-Dubhacks26/harness/out/labels.csv"
+  ]
+ },
+ "score_note": "Holdout scores: churn_oof_pred.csv.",
+ "quadrant": {
+  "n": 5000,
+  "xcut": 0.052127100000000016,
+  "ycut": 167.0,
+  "save_zone": 248,
+  "mix": {
+   "do_nothing": 3995,
+   "fix_first_callback": 357,
+   "step_up_plan": 350,
+   "care_credit_fix_first": 273,
+   "care_credit_25": 25
+  },
+  "save_zone_offer_share": 0.9838709677419355
+ },
+ "gain": {
+  "n": 5000,
+  "churners": 137,
+  "oracle_top10": 0.6423357664233577,
+  "model_top10": 0.6204379562043796,
+  "model_top20": 0.7737226277372263,
+  "rule_share": 0.2924,
+  "rule_caught": 0.7664233576642335,
+  "rule_rank_top10": 0.5328467153284672,
+  "model_at_rule_share": 0.8175182481751825
+ },
+ "calibration": {
+  "ece": 0.0040260046000000025,
+  "buckets": [
+   {
+    "bucket": 0,
+    "pred": 0.0041,
+    "obs": 0.002,
+    "n": 500
+   },
+   {
+    "bucket": 1,
+    "pred": 0.0056,
+    "obs": 0.006,
+    "n": 500
+   },
+   {
+    "bucket": 2,
+    "pred": 0.0068,
+    "obs": 0.002,
+    "n": 500
+   },
+   {
+    "bucket": 3,
+    "pred": 0.0079,
+    "obs": 0.012,
+    "n": 500
+   },
+   {
+    "bucket": 4,
+    "pred": 0.0093,
+    "obs": 0.006,
+    "n": 500
+   },
+   {
+    "bucket": 5,
+    "pred": 0.0112,
+    "obs": 0.008,
+    "n": 500
+   },
+   {
+    "bucket": 6,
+    "pred": 0.014,
+    "obs": 0.014,
+    "n": 500
+   },
+   {
+    "bucket": 7,
+    "pred": 0.0193,
+    "obs": 0.012,
+    "n": 500
+   },
+   {
+    "bucket": 8,
+    "pred": 0.034,
+    "obs": 0.042,
+    "n": 500
+   },
+   {
+    "bucket": 9,
+    "pred": 0.1629,
+    "obs": 0.17,
+    "n": 500
+   }
+  ]
+ },
+ "qini": {
+  "file": "/workspace/tmobile/TM-Dubhacks26/harness/model_c_artifacts/uplift_curve.csv",
+  "y": "cum_incremental_saves",
+  "auuc_ipw": {
+   "Model C T-learner": 4.495,
+   "Model B EV chooser": 6.898,
+   "Model A risk ranking": 7.587,
+   "3+ calls rule": 6.594,
+   "Random": 2.393,
+   "Oracle (reference)": 7.486
+  },
+  "curves": {
+   "Model B EV chooser": {
+    "at10": 10.45,
+    "at20": 16.45,
+    "max": 17.55
+   },
+   "Model C T-learner": {
+    "at10": 9.9,
+    "at20": 10.75,
+    "max": 11.1
+   },
+   "Model A risk ranking": {
+    "at10": 14.6,
+    "at20": 15.7,
+    "max": 18.0
+   },
+   "3+ calls rule": {
+    "at10": 11.8,
+    "at20": 14.8,
+    "max": 16.8
+   },
+   "Oracle (reference)": {
+    "at10": 13.65,
+    "at20": 15.2,
+    "max": 17.45
+   },
+   "Random": {
+    "at10": 3.4,
+    "at20": 7.2,
+    "max": 16.7
+   }
+  }
+ },
+ "policy": {
+  "file": "/workspace/tmobile/TM-Dubhacks26/harness/model_c_artifacts/policy_eval.csv",
+  "estimator": "doubly_robust",
+  "table": [
+   {
+    "policy": "Model B EV chooser",
+    "label": "Model B EV chooser",
+    "net_value_no_upsell_dr_usd": 24272.0,
+    "net_value_with_upsell_dr_usd": 52064.0,
+    "churners_saved_dr": 14.84,
+    "cost_per_save_dr_usd": 347.82,
+    "n_contacted": 304
+   },
+   {
+    "policy": "Model C uplift policy",
+    "label": "Model C T-learner",
+    "net_value_no_upsell_dr_usd": 20435.0,
+    "net_value_with_upsell_dr_usd": 48348.0,
+    "churners_saved_dr": 12.86,
+    "cost_per_save_dr_usd": 423.46,
+    "n_contacted": 314
+   },
+   {
+    "policy": "offer to everyone (best eligible offer)",
+    "label": "Offer to everyone",
+    "net_value_no_upsell_dr_usd": -12422.0,
+    "net_value_with_upsell_dr_usd": 18412.0,
+    "churners_saved_dr": 14.98,
+    "cost_per_save_dr_usd": 2735.52,
+    "n_contacted": 1186
+   },
+   {
+    "policy": "3+ calls rule -> $25 care credit",
+    "label": "3+ calls rule",
+    "net_value_no_upsell_dr_usd": 714.0,
+    "net_value_with_upsell_dr_usd": 714.0,
+    "churners_saved_dr": 6.17,
+    "cost_per_save_dr_usd": 1568.25,
+    "n_contacted": 387
+   },
+   {
+    "policy": "random (eligible arm)",
+    "label": "Random",
+    "net_value_no_upsell_dr_usd": -22704.0,
+    "net_value_with_upsell_dr_usd": -13611.0,
+    "churners_saved_dr": 9.42,
+    "cost_per_save_dr_usd": 4324.99,
+    "n_contacted": 791
+   },
+   {
+    "policy": "do nothing",
+    "label": "Do nothing",
+    "net_value_no_upsell_dr_usd": 0.0,
+    "net_value_with_upsell_dr_usd": 0.0,
+    "churners_saved_dr": 0.0,
+    "cost_per_save_dr_usd": NaN,
+    "n_contacted": 0
+   },
+   {
+    "policy": "oracle (true effects; reference only)",
+    "label": "Oracle (reference)",
+    "net_value_no_upsell_dr_usd": 23551.0,
+    "net_value_with_upsell_dr_usd": 51404.0,
+    "churners_saved_dr": 14.65,
+    "cost_per_save_dr_usd": 297.35,
+    "n_contacted": 307
+   }
+  ]
+ },
+ "learning": {
+  "file": "/workspace/tmobile/TM-Dubhacks26/harness/bench/out/learning_curve_long.csv",
+  "metric": "auc",
+  "ceiling": 0.8639,
+  "series": {
+   "hgb_sigmoid|real_5k": {
+    "n_min": 250,
+    "auc_min_n": 0.7389,
+    "sd_min_n": 0.1221,
+    "n_max": 3750,
+    "auc_max_n": 0.8223,
+    "sd_max_n": 0.0345
+   },
+   "hgb_sigmoid|synthetic_50k": {
+    "n_min": 1000,
+    "auc_min_n": 0.7524,
+    "sd_min_n": 0.1189,
+    "n_max": 50000,
+    "auc_max_n": 0.8627,
+    "sd_max_n": 0.0012
+   },
+   "logreg_unweighted|real_5k": {
+    "n_min": 250,
+    "auc_min_n": 0.7503,
+    "sd_min_n": 0.0718,
+    "n_max": 3750,
+    "auc_max_n": 0.8107,
+    "sd_max_n": 0.0308
+   },
+   "logreg_unweighted|synthetic_50k": {
+    "n_min": 1000,
+    "auc_min_n": 0.7274,
+    "sd_min_n": 0.0897,
+    "n_max": 50000,
+    "auc_max_n": 0.869,
+    "sd_max_n": 0.0
+   },
+   "logreg_core22|real_5k": {
+    "n_min": 250,
+    "auc_min_n": 0.771,
+    "sd_min_n": 0.0594,
+    "n_max": 3750,
+    "auc_max_n": 0.8438,
+    "sd_max_n": 0.0315
+   },
+   "logreg_core22|synthetic_50k": {
+    "n_min": 1000,
+    "auc_min_n": 0.77,
+    "sd_min_n": 0.0987,
+    "n_max": 50000,
+    "auc_max_n": 0.8652,
+    "sd_max_n": 0.0
+   }
+  }
+ }
+}

@@ -81,3 +81,22 @@ life event, and whether the customer is free to leave (no financing).
 
 No persona is hand-pinned. Every decision comes from the general rules and the config block at the top of
 `offers.py`.
+
+## SMS messages (`offer_messages.py`, columns `message_en`, `message_es`, `message_status`)
+These are deterministic templates, not LLM output. Each message is under 300 characters (current maximum: about 250).
+- It names the top risk reason in plain words with real values (for example "your promo ended and your bill
+  went up 22%"), preferring the reason that the chosen action addresses.
+- It offers **only the chosen action**. Every dollar amount comes from the sandbox: care credit $25
+  (`PROMO-STUB-CARE-CREDIT`), loyalty $5/mo (`PROMO-STUB-LOYALTY-CREDIT`), device credits (`OLD-PHONE-UPGRADE` $150 or
+  `TRADEIN-ANY` $200, with their payout months), and plan price differences computed from `plans.line_prices`.
+- do nothing gets a blank message (`no_contact`). Fix-first gets a callback-to-fix note with no discount.
+- **Keep-your-phone is never messaged.** The adapted credit is not a sandbox promo for existing customers, so it
+  gets a blank message with `message_status = suppressed_adapted_promo`. Under `STRICT_PROMO_RULES=True` it is
+  never chosen.
+- Every message is synthetic: no names ("Hi there" / "Hola") and no phone numbers. Spanish uses *usted* throughout.
+- **Validator:** `validate_messages()` re-derives every allowed amount from the sandbox tables and checks for
+  length, phone-number-like text, and dollar amounts in fix-first messages. Results go to
+  `out/message_validation.csv`, and the pass count is printed on every run.
+
+## Model C
+See `UPLIFT_README.md`. `python harness/uplift.py` is the single command that rebuilds Model B and Model C.

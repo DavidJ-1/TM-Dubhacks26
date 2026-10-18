@@ -19,6 +19,8 @@ import pandas as pd
 # --- where the read-only sandbox lives ------------------------------------------------------
 _SANDBOX_CANDIDATES = [
     os.environ.get("TM_SANDBOX_DB"),
+    os.environ.get("DUBHACKS_DB"),
+    str(Path(__file__).resolve().parents[1] / "vendor" / "dubhacks" / "data" / "sandbox.db"),  # repo Makefile
     str(Path(__file__).resolve().parents[2] / "dubhacks" / "data" / "sandbox.db"),  # /workspace/tmobile/dubhacks
     "/workspace/tmobile/dubhacks/data/sandbox.db",
     "/tmp/dubhacks-ro/data/sandbox.db",
@@ -232,7 +234,7 @@ FEATURES_MAP = {
     "plan_misfit_share": "plan_misfit_share",
     "n_lines_device_36m_plus": "n_lines_device_36m_plus", "n_lines_over_cap_3m": "n_lines_over_cap_3m",
     "n_lines_usage_up_30pct": "n_lines_usage_up_30pct", "n_lines_light_on_premium": "n_lines_light_on_premium",
-    "is_persona": "is_persona",
+    "is_persona": "is_persona", "data_growth_pct": "data_growth_pct",
 }
 
 

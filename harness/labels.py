@@ -32,6 +32,8 @@ from features import find_db  # noqa: E402
 
 FEATURES = HERE / "out" / "features.csv"
 OUT = HERE / "out" / "labels.csv"
+ENRICH = HERE / "out" / "enrichment.csv"  # from enrichment.py; needed by the upgrade recipe
+ENRICH_COLS = ["household_income_usd", "area_median_income_usd", "step_up_cost_pct_income"]
 TARGET_MONTHLY = 0.0099
 SEED_LABEL = "tm-churn-2026-label"
 SEED_TOY = "tm-churn-2026-toy"
@@ -159,6 +161,7 @@ UPGRADE_COEFS = [
     ("tier_standard", 0.50, "plan_tier = standard"),
     ("capped_plan", 0.50, "plan has a data cap"),
     ("top_tier", -1.00, "already on experience_beyond (top) family"),
+    ("premium_nontop", -0.40, "already on a premium non-top plan (experience_more family): less headroom"),
     ("over_cap_share", 1.50, "share of lines over plan cap (last 3 months)"),
     ("near_cap", 0.60, "capped plan and avg data per line >= 80% of cap (last 3 months)"),
     ("usage_growth", 0.80, "data_growth_pct clipped to [-0.5, 1.0] (last 3 vs prior 3 months)"),
@@ -170,6 +173,8 @@ UPGRADE_COEFS = [
     ("student", 0.70, "segment or discount_group = student (life-stage step-up, e.g. graduation; doc lists student as an upgrade moment)"),
     ("bill_increase_pct", -4.00, "bill shock: max(0, last / prior avg - 1)"),
     ("promo_expired_recent", -1.00, "bill shock: promo expired in last 3 bill months"),
+    ("stepup_cost_pct_income", -0.50, "affordability: 12 x monthly step-up cost to the next plan up (sandbox plans) / household income x 100, clipped to [0, 10]; 0 on the top plan (enrichment.csv)"),
+    ("log_income_ratio", 0.30, "log(household income / ACS national median $80,734), clipped to [-2, 2] (enrichment.csv; income is synthetic)"),
     ("churn_risk_z", -0.25, "max(0, z-score of logit(tuned monthly churn hazard)): mild negative for above-average risk only; tuned recipe always"),
 ]
 
@@ -180,6 +185,7 @@ def upgrade_terms(f: pd.DataFrame, churn_logit: np.ndarray, regular: np.ndarray)
     t["tier_standard"] = (f["plan_tier"] == "standard").astype(float)
     t["capped_plan"] = f["plan_data_cap_gb"].notna().astype(float)
     t["top_tier"] = (f["plan_family"] == "experience_beyond").astype(float)
+    t["premium_nontop"] = (f["plan_family"] == "experience_more").astype(float)
     t["over_cap_share"] = f["n_lines_over_cap_3m"] / f["n_lines"]
     util = (f["data_gb_3m_avg"] / f["n_lines"]) / f["plan_data_cap_gb"]
     t["near_cap"] = (util >= 0.8).astype(float)  # NaN cap (unlimited) -> False
@@ -192,6 +198,8 @@ def upgrade_terms(f: pd.DataFrame, churn_logit: np.ndarray, regular: np.ndarray)
     t["student"] = ((f["segment"] == "student") | (f["discount_group"] == "student")).astype(float)
     t["bill_increase_pct"] = f["bill_increase_pct"].fillna(0)
     t["promo_expired_recent"] = f["promo_expired_recent"].astype(float)
+    t["stepup_cost_pct_income"] = f["step_up_cost_pct_income"].fillna(0).clip(0, 10)
+    t["log_income_ratio"] = np.log(f["household_income_usd"] / f["area_median_income_usd"]).clip(-2, 2)
     mu, sd = churn_logit[regular].mean(), churn_logit[regular].std()
     t["churn_risk_z"] = ((churn_logit - mu) / sd).clip(min=0)
     return t[[c for c, _, _ in UPGRADE_COEFS]].astype(float)
@@ -211,11 +219,23 @@ def fit(T: pd.DataFrame, coefs, shrink: float, regular: np.ndarray):
     return w, b0, sigmoid(b0 + score)
 
 
-def build(recipe: str = "tuned"):
-    f = pd.read_csv(FEATURES)
+def toy_from_features(f: pd.DataFrame) -> np.ndarray:
+    """Sandbox toy formula (datagen/reference_model.py) applied to features.csv columns (same definitions;
+    differs from the SQL version only by feature rounding, max abs diff ~1e-4). Used for scaled data."""
+    lg = (-3.9 + 0.45 * f["support_90d"] + 0.8 * (-f["avg_sentiment"].fillna(0)).clip(lower=0)
+          + 4.0 * f["bill_increase_pct"].fillna(0) + 2.2 * f["competitor_research_score"]
+          + 1.2 * f["port_out_inquiry"] - 0.01 * f["tenure_months"].clip(upper=60)
+          + 0.7 * f["plan_misfit_share"].fillna(0))
+    return sigmoid(lg.values.astype(float))
+
+
+def label_frame(f: pd.DataFrame, recipe: str = "tuned", toy_p=None, regular=None):
+    """All label columns for a features frame. b0s are re-solved on `regular` rows (default: non-personas).
+    toy_p: array/Series aligned to f (default: toy formula on features)."""
     coefs = RECIPES[recipe]
     T = terms(f)[[c for c, _, _ in coefs]]
-    regular = (f["is_persona"] == 0).values
+    if regular is None:
+        regular = (f["is_persona"] == 0).values
     if recipe == "tuned":
         shrink = SHRINK
         w, b0, h = fit(T, coefs, shrink, regular)
@@ -231,8 +251,7 @@ def build(recipe: str = "tuned"):
         "churn_90d": (uniform(SEED_LABEL, f["account_id"]) < p90).astype(int),
         "p_true_90d": p90.round(6), "monthly_hazard": h.round(6),
     })
-    toy = toy_probabilities()
-    lab["toy_p"] = lab["account_id"].map(toy).round(6)
+    lab["toy_p"] = np.round(np.asarray(toy_from_features(f) if toy_p is None else toy_p, dtype=float), 6)
     lab["toy_churn"] = (uniform(SEED_TOY, lab["account_id"]) < lab["toy_p"]).astype(int)
     # top-3 label drivers per account (largest positive contributions), for sanity/debug
     contrib = T.values * w
@@ -241,6 +260,11 @@ def build(recipe: str = "tuned"):
     for k in range(3):
         lab[f"label_driver_{k + 1}"] = [names[i] if contrib[r, i] > 0 else "" for r, i in enumerate(top[:, k])]
     # upgrade target: always uses the TUNED churn hazard so --recipe affects churn columns only
+    if not set(ENRICH_COLS) <= set(f.columns):
+        if not ENRICH.exists():
+            raise FileNotFoundError(f"{ENRICH} missing: run python harness/enrichment.py first")
+        e = pd.read_csv(ENRICH)[["account_id"] + ENRICH_COLS]
+        f = f.merge(e, on="account_id", how="left", validate="1:1")
     _, _, h_tuned = fit(terms(f)[[c for c, _, _ in COEFS_TUNED]], COEFS_TUNED, SHRINK, regular)
     U = upgrade_terms(f, np.log(h_tuned / (1 - h_tuned)), regular)
     wu = np.array([c for _, c, _ in UPGRADE_COEFS])
@@ -251,8 +275,15 @@ def build(recipe: str = "tuned"):
     lab["p_upgrade_90d"] = pu.round(6)
     for j, col in enumerate(top_drivers(U, wu)):
         lab[f"upgrade_driver_{j + 1}"] = col
-    lab.attrs["b0_upgrade"] = bu
-    return lab, b0, shrink
+    lab.attrs.update(b0=b0, shrink=shrink, b0_upgrade=bu)
+    return lab
+
+
+def build(recipe: str = "tuned"):
+    f = pd.read_csv(FEATURES)
+    toy = toy_probabilities()  # exact sandbox SQL + formula
+    lab = label_frame(f, recipe, toy_p=f["account_id"].map(toy).values)
+    return lab, lab.attrs["b0"], lab.attrs["shrink"]
 
 
 PERSONAS = {"04": "high", "21": "high", "22": "high", "27": "high", "10": "low", "24": "low",

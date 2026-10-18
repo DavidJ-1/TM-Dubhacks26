@@ -1,0 +1,10 @@
+{
+ "SYNTHETIC": true,
+ "prep": "harness/churn_features.prepare() (imported at run time); features=/workspace/tmobile/TM-Dubhacks26/harness/out/features.csv; labels=/workspace/tmobile/TM-Dubhacks26/harness/out/labels.csv",
+ "dollars_meta": {
+  "n_accounts": 5000,
+  "n_churners": 137,
+  "rule_flag_count": 1462,
+  "dollars": "not modelled here; see harness/model_c_artifacts/policy_eval.csv (tm-offers)"
+ }
+}

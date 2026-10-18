@@ -34,6 +34,7 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import offer_detectors as det  # noqa: E402
+import offer_messages as om  # noqa: E402
 
 OUT_DIR = Path(os.environ.get("TM_OUT_DIR", HERE / "out"))
 
@@ -353,14 +354,20 @@ def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) 
 
     def add(action, eligible, cost, gain=0.0, detail="", why_not=""):
         if not eligible:
+            # "forced" terms let policy simulations (uplift.py) price a blanket offer to ineligible accounts
+            f_ann = C["COMBO_ANNOYANCE"] if action == "care_credit_fix_first" else C["ANNOYANCE"][action]
             res[action] = {"ev": None, "eligible": False, "detail": why_not,
-                           "save_rate": None, "cost": None, "annoyance": None}
+                           "save_rate": None, "cost": None, "annoyance": None,
+                           "forced_save_rate": sr(action), "forced_cost": cost, "forced_annoyance": f_ann,
+                           "forced_gain": gain}
             return
         ann = C["COMBO_ANNOYANCE"] if action == "care_credit_fix_first" else C["ANNOYANCE"][action]
         if action in ("step_up", "device_upgrade") and pain:
             ann += C["UPSELL_AFTER_PAIN_PENALTY"]
         ev = p * sr(action) * value + gain - cost - ann
         res[action] = {"ev": round(ev, 2), "eligible": True, "detail": detail, "save_rate": sr(action),
+                       "forced_save_rate": sr(action), "forced_cost": cost, "forced_annoyance": ann,
+                       "forced_gain": gain,
                        "cost": round(cost, 2), "annoyance": round(ann, 2), "gain": round(gain, 2),
                        "save_value": round(p * sr(action) * value, 2)}
 
@@ -519,10 +526,15 @@ def candidate_reason(a: str, v: dict, chosen: str) -> str:
     return f"Eligible ({v['detail']}): {parts} - cost ${v['cost']:.2f} - annoyance ${v['annoyance']:.2f}; {tail}."
 
 
+DETAILS: dict[str, dict] = {}  # account_id -> evaluate_account() output from the last run (used by uplift.py)
+
+
 def choose(df: pd.DataFrame, promos: pd.DataFrame, plans: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     rows, cands = [], []
+    DETAILS.clear()
     for _, row in df.iterrows():
         ev = evaluate_account(row, promos, plans)
+        DETAILS[row["account_id"]] = ev
         res = ev["res"]
         scored = sorted(((a, v["ev"]) for a, v in res.items() if v["eligible"] and a != "do_nothing"),
                         key=lambda t: (-t[1], ACTIONS.index(t[0])))
@@ -585,11 +597,24 @@ def main() -> pd.DataFrame:
     df["upgrade_moment"] = df[det.UPGRADE_MOMENT_COLS].any(axis=1)
 
     offers, cands = choose(df, cat["promotions"], plans)
+    # deterministic SMS templates for the chosen action (no LLM); see offer_messages.py
+    fx = df.set_index("account_id")
+    for lang in ("en", "es"):
+        offers[f"message_{lang}"] = [
+            om.build_message(fx.loc[a], code, DETAILS[a]["res"], cat["promotions"], plans, lang)
+            for a, code in zip(offers["account_id"], offers["action_code"])]
+    offers["message_status"] = np.where(
+        offers["action_code"] == "keep_your_phone", "suppressed_adapted_promo",
+        np.where(offers["action_code"] == "do_nothing", "no_contact", "ok"))
+    val = om.validate_messages(offers, df, cat["promotions"], plans)
+    val.to_csv(OUT_DIR / "message_validation.csv", index=False)
+    print(f"messages: {int(val.passed.sum())}/{len(val)} accounts pass the sandbox-amount validator "
+          f"({int((offers.message_en != '').sum())} with a message)")
     offers = offers.merge(df[["account_id", "upgrade_moment"] + det.UPGRADE_MOMENT_COLS], on="account_id")
     offers["churn_source"] = "real" if source.startswith("real") else "mock"
     offers["data_note"] = "synthetic/simulated"
     first = ["account_id", "action", "expected_value", "reason", "runner_up_action", "runner_up_ev",
-             "upgrade_moment"] + det.UPGRADE_MOMENT_COLS
+             "upgrade_moment"] + det.UPGRADE_MOMENT_COLS + ["message_en", "message_es"]
     offers = offers[first + [c for c in offers.columns if c not in first]].sort_values("risk_rank")
     offers.to_csv(OUT_DIR / "offers.csv", index=False)
     cands["data_note"] = "synthetic/simulated"
