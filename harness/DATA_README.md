@@ -6,7 +6,8 @@
 ```bash
 # from the repo root; needs pandas, numpy (scikit-learn for modelling)
 python harness/features.py   # -> harness/out/features.csv
-python harness/labels.py     # -> harness/out/labels.csv (reads features.csv + sandbox for toy_p)
+python harness/labels.py     # -> harness/out/labels.csv (default --recipe tuned; reads features.csv + sandbox for toy_p)
+python harness/labels.py --recipe doc   # plan-doc recipe as written; overwrites out/labels.csv, same columns
 ```
 Requirements: `pandas>=2`, `numpy>=1.26`, `scikit-learn>=1.4` (tested: pandas 3.0.6, numpy 2.5.4). Both scripts are deterministic: no global RNG, and draws come from a per-account sha256 uniform.
 Sandbox path: `$SANDBOX_DB`, else `<repo>/dubhacks/data/sandbox.db`, else `<repo>/../dubhacks/data/sandbox.db`. It is opened **read-only** (`mode=ro` + `PRAGMA query_only`). Nothing ever writes to it. `harness/out/` is gitignored.
@@ -83,7 +84,35 @@ Competitor and port-out terms carry the plan doc's ×1.15 "Verizon loyalty push"
 4. SHRINK 0.5. At doc scale, monthly hazards reach about 0.94 and mean p_90d is only about 2.1%, because hazard is very uneven across accounts. Halving every coefficient changes no account's rank (Spearman 1.0 against the unshrunk score). It caps the maximum monthly hazard at about 0.49 and brings mean p_90d to about 2.74%, close to 1 − (1 − 0.0099)³ = 2.94%. The two can't match exactly while both the mean monthly hazard and heterogeneity are kept.
 5. The doc writes `logit(p_12m)`, but its b0 is solved on monthly hazard. Here the logit is of the monthly hazard directly.
 
-### Results (all synthetic, 5,000 regular accounts)
+### Alternative: `--recipe doc` (plan-doc line 205 as written, no persona tweaks)
+This recipe uses raw support 0.45, app sessions −0.02, an unconditional "4+ contacts" +0.5, and no unresolved, negative, low-app or promo-expired terms. b0 is solved the same way, for a 0.99%/month mean.
+Halving: at full strength the maximum monthly hazard is 0.822 (above the guard `DOC_MAX_HAZARD` = 0.5) and the mean p_90d is 2.47%. So the doc recipe **is halved too** (SHRINK 0.5, b0 = −6.2145). This doesn't change any account's rank.
+
+| term | doc coef | effective (×0.5) | definition |
+|---|---|---|---|
+| `support_90d` | +0.450 | +0.2250 | support contacts, last 90d (toy term) |
+| `neg_sentiment` | +0.800 | +0.4000 | max(0, -avg_sentiment) (toy term) |
+| `bill_increase_pct` | +4.000 | +2.0000 | max(0, last bill / prior avg - 1) (toy term) |
+| `competitor_research_x` | +2.530 | +1.2650 | competitor_research_score x1.15 |
+| `port_out_inquiry_x` | +1.380 | +0.6900 | port_out_inquiry x1.15 |
+| `tenure_capped60` | -0.010 | -0.0050 | min(tenure_months, 60) (toy term) |
+| `plan_misfit_share` | +0.700 | +0.3500 | plan misfit share (toy term) |
+| `early_tenure` | +0.900 | +0.4500 | tenure_months < 12 |
+| `no_financing` | +0.600 | +0.3000 | no financed lines |
+| `no_autopay` | +0.300 | +0.1500 | autopay = 0 |
+| `contacts_4plus` | +0.500 | +0.2500 | 4+ support contacts in 90d (unconditional) |
+| `max_device_age_months_f` | +0.020 | +0.0100 | max device age in months |
+| `extra_lines` | -0.150 | -0.0750 | n_lines - 1 |
+| `app_sessions_30d` | -0.020 | -0.0100 | app sessions last 30d |
+| `billing_contacts_90d` | +0.100 | +0.0500 | billing-topic contacts, 90d |
+| `device_contacts_90d` | +0.050 | +0.0250 | device-topic contacts, 90d |
+| `cancel_inquiries_270d` | +0.250 | +0.1250 | cancellation-inquiry contacts, 270d |
+
+Doc-recipe results (synthetic): mean monthly hazard 0.990%, mean p_true_90d 2.87%, churn_90d 134 / 5,000 (2.68%), maximum monthly hazard 0.271. Spearman against toy_p 0.917; AUC against toy_churn 0.815.
+Doc-recipe persona percentiles: 04 94.2 (OK) · **21 86.2 (miss)** · **22 81.7 (miss)** · **27 88.0 (miss)** · 10 1.6 (OK) · **24 75.8 (miss: 6 contacts read as risk)** · 23 87.4 · 25 77.0 · 26 16.1 · 28 38.6.
+Both recipes print persona percentiles after each run.
+
+### Results, default `tuned` recipe (all synthetic, 5,000 regular accounts)
 - Mean monthly_hazard **0.990%**. Mean p_true_90d **2.74%** (implied monthly ≈ 0.92%). churn_90d positives **137 / 5,000 (2.74%)**; 138 / 5,042 including personas. Max monthly hazard 0.486.
 - toy_p mean 14.65% per 90 days. toy_churn positives 781 / 5,000.
 - Spearman(p_true_90d, toy_p) = 0.879. AUC of p_true_90d against toy_churn = 0.807 (toy_p itself scores 0.827). AUC of p_true_90d against churn_90d = 0.864 (the oracle ceiling for tm-churn).
