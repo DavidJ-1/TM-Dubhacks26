@@ -129,7 +129,7 @@ def _not_configured_reason() -> str:
 
 def mode() -> tuple[str, str]:
     if (os.environ.get("TM_SEND_LIVE") or "").strip() != "1":
-        return "dry-run", "dry run (default): set TM_SEND_LIVE=1 plus a Telegram bot or NTFY_TOPIC to send for real"
+        return "dry-run", "dry run (default): nothing leaves this machine until the presenter arms it"
     b = backends()
     if not b:
         return "dry-run", "TM_SEND_LIVE=1 but no backend is configured -> dry run, nothing sent (" + _not_configured_reason() + ")"
