@@ -1,0 +1,8 @@
+budget,total_ev,expected_saves,customers_contacted,credits_used,paid_actions,data_note,pct_of_unlimited_ev
+0,43240.37,1.3,243,0.0,0,SYNTHETIC / simulated,41.0
+2000,73353.87,14.8,337,1999.0,117,SYNTHETIC / simulated,69.6
+5000,88458.79,25.1,456,4999.0,262,SYNTHETIC / simulated,83.9
+10000,98957.5,33.1,609,9999.0,441,SYNTHETIC / simulated,93.8
+20000,104724.99,40.6,908,19999.9,753,SYNTHETIC / simulated,99.3
+40000,105457.7,41.8,1118,39697.6,964,SYNTHETIC / simulated,100.0
+unlimited,105457.7,41.8,1118,39697.6,964,SYNTHETIC / simulated,100.0
