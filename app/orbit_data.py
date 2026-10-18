@@ -64,6 +64,105 @@ def clean(s) -> str:
     return s
 
 
+# ------------------------------------------------------------------ one selected customer
+# The scroll page has one selected account. The dropdown, the quick picks, a chart dot, and a table row
+# all write it through apply_shared_selection. Widget keys stay in this dict so a test can check them
+# without starting Streamlit.
+DEMO_CODES = tuple(DEMO)
+
+
+def customer_cid(account_id: str) -> str:
+    """Persona codes stay '38'; everyone else is '#02363'."""
+    account_id = str(account_id)
+    return account_id[len(PERSONA):] if account_id.startswith(PERSONA) else account_id.replace("ACC-", "#")
+
+
+def format_risk_pct(risk: float) -> str:
+    """Probability (0–1) as a short percent. 0.87 → '87%'."""
+    x = float(risk) * 100
+    if x >= 10:
+        return f"{x:.0f}%"
+    if x >= 1:
+        return f"{x:.1f}%"
+    return f"{x:.2f}%"
+
+
+def format_monthly_bill(bill_cents) -> str | None:
+    """Customer monthly bill, cents in and dollars out. Missing stays blank (never a made-up amount)."""
+    if bill_cents is None:
+        return None
+    try:
+        if pd.isna(bill_cents):
+            return None
+    except TypeError:
+        return None
+    return f"${float(bill_cents) / 100:,.0f}/mo"
+
+
+def customer_menu_label(account_id: str, risk: float, bill_cents=None) -> str:
+    """Dropdown line, e.g. 'Customer #02363, 87% risk, $142/mo'."""
+    bill = format_monthly_bill(bill_cents)
+    tail = f", {bill}" if bill else ""
+    return f"Customer {customer_cid(account_id)}, {format_risk_pct(risk)} risk{tail}"
+
+
+def customers_by_risk(rows) -> list[str]:
+    """Account ids, highest 90-day churn risk first. Ties break on the id so the order is stable."""
+    if isinstance(rows, pd.DataFrame):
+        d = rows.loc[:, ["account_id", "p_churn_90d"]].copy()
+        d["_id"] = d["account_id"].astype(str)
+        d = d.sort_values(["p_churn_90d", "_id"], ascending=[False, True], kind="mergesort")
+        return d["_id"].tolist()
+    items = [(str(a), float(r)) for a, r in rows]
+    items.sort(key=lambda t: (-t[1], t[0]))
+    return [a for a, _ in items]
+
+
+def resolve_typed_id(query: str, ids, persona_prefix: str = PERSONA) -> str | None:
+    """Match a typed id ('38', '01607', 'ACC-01607') to a real account id."""
+    q = str(query).strip().upper().lstrip("#")
+    if not q:
+        return None
+    idset = set(ids)
+    for cand in (q, f"ACC-{q}", f"{persona_prefix}{q.zfill(2)}", f"ACC-{q.zfill(5)}"):
+        if cand in idset:
+            return cand
+    return None
+
+
+def apply_shared_selection(state: dict, account_id: str, *, key: str = "acc") -> dict:
+    """Point every scroll-page control at one account.
+
+    state['acc'] is the customer the walk-through and the deal example show.
+    state['customer_pick'] is the dropdown. state['seg'] is a demo quick pick
+    ('38', '04', '21', '24') or None. state['orbit_deal_quick'] mirrors that
+    pick in the deal section, and is None when the customer is not one of those four.
+    """
+    account_id = str(account_id)
+    state[key] = account_id
+    state["customer_pick"] = account_id
+    code = account_id[len(PERSONA):] if account_id.startswith(PERSONA) else ""
+    state["seg"] = code if code in DEMO_CODES else None
+    state["orbit_deal_quick"] = account_id if code in DEMO_CODES else None
+    return state
+
+
+def account_from_point_selection(points) -> str | None:
+    """First clicked scatter point's account id, from customdata (a string or a list whose first item is the id)."""
+    if not points:
+        return None
+    pt = points[0]
+    if isinstance(pt, dict):
+        cd = pt.get("customdata")
+    else:
+        cd = getattr(pt, "customdata", None)
+    if isinstance(cd, (list, tuple)):
+        return str(cd[0]) if len(cd) else None
+    if cd is None or cd == "":
+        return None
+    return str(cd)
+
+
 # ------------------------------------------------------------------ frames
 @st.cache_data(show_spinner=False)
 def merged() -> pd.DataFrame:

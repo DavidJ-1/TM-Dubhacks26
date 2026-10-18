@@ -353,7 +353,8 @@ def render_deal_engine(df: pd.DataFrame, account_id: str, options: pd.DataFrame 
     options: options.csv (account_id, option_label, verdict picked/not_sent/ruled_out, reason, net_mid_usd; do nothing first).
     decisions: decisions.csv (decision, channel, offer_label, decision_reason) for the closing sentence.
     candidates (optional, every account): fallback for the per-customer averages when options is missing.
-    demo_ids: account ids for the small picker (default: the demo accounts in df); account_id is the default pick.
+    demo_ids: optional quick-pick account ids (the four demo personas). They do not replace account_id;
+    the cards are always for the shared selection. Picking one writes _pending_acc for the next run.
     show_money=False: no net figures; weighing is described without cost. Returns the account shown."""
     st.markdown(f"<style>{CSS_DEAL}</style>", unsafe_allow_html=True)
     _act("04 / 05", "How we pick the deal", "the same five steps for every customer")
@@ -375,17 +376,23 @@ def render_deal_engine(df: pd.DataFrame, account_id: str, options: pd.DataFrame 
     st.markdown(f"<div class='o-flow'>{flow}</div>" + (f"<div class='o-lbl' style='margin-bottom:22px'>{esc(cap)}</div>" if cap else ""),
                 unsafe_allow_html=True)
 
-    ids = demo_ids or list(df[df.is_demo].account_id)
-    ids = [a for a in ids if a in set(df.account_id)]
-    pk = f"{key}_deal_pick"
+    # The live example is whoever is selected above. demo_ids are quick-pick suggestions only
+    # (they write _pending_acc; they are not a second customer list).
+    ids = [a for a in (demo_ids or []) if a in set(df.account_id)]
+    acc = account_id
+    st.markdown(f"<div class='o-lbl'>Live example · the customer selected above</div>"
+                f"<div style='font:500 22px/1.2 SG,sans-serif;margin:4px 0 12px'>Customer {esc(cid(acc))}</div>",
+                unsafe_allow_html=True)
     if ids:
-        if st.session_state.get(pk) not in ids:
-            st.session_state[pk] = account_id if account_id in ids else ids[0]
-        a, _ = st.columns([2, 3])
-        a.segmented_control("Live example", ids, key=pk, format_func=lambda x: f"Customer {cid(x)}")
-        acc = st.session_state.get(pk) or account_id
-    else:
-        acc = account_id
+        pk = f"{key}_deal_quick"
+        st.session_state[pk] = acc if acc in ids else None
+
+        def _on_quick(pick_key=pk):
+            v = st.session_state.get(pick_key)
+            if v:
+                st.session_state["_pending_acc"] = v
+
+        st.segmented_control("Demo quick picks", ids, key=pk, format_func=lambda x: f"Customer {cid(x)}", on_change=_on_quick)
     if acc not in set(df.account_id):
         return acc
     r = df[df.account_id == acc].iloc[0]

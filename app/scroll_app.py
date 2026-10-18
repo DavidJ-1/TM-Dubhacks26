@@ -46,38 +46,42 @@ _call(O.render_hero, df)
 
 dec = D.offer_decisions(df)   # next-version decisions (offers team's decisions.csv; ledger fallback)
 
-# ---- open a customer: four demo buttons, search, or a click in the riskiest-ten table (render_dashboard returns it)
+# ---- one selected customer. The dropdown, a quick pick, a table row, and (later) a chart dot all write
+# st.session_state["acc"] through D.apply_shared_selection, before the widgets are created.
 st.session_state.setdefault("acc", f"{D.PERSONA}38")
+if "customer_pick" not in st.session_state:
+    D.apply_shared_selection(st.session_state, st.session_state["acc"])
 pending = st.session_state.pop("_pending_acc", None)
-if pending:  # a row click from the last run: apply it before the picker widgets exist, then clear them
-    st.session_state["acc"] = pending
-    st.session_state["seg"] = None
-    st.session_state["q"] = ""
+if pending and pending in set(df.account_id):
+    D.apply_shared_selection(st.session_state, pending)
+
+_menu_ids = D.customers_by_risk(df)
+_menu_labels = {
+    a: D.customer_menu_label(a, p, b)
+    for a, p, b in zip(df.account_id, df.p_churn_90d, df["last_bill_cents"] if "last_bill_cents" in df.columns else [None] * len(df))
+}
+if st.session_state["acc"] not in _menu_labels and len(_menu_ids):
+    D.apply_shared_selection(st.session_state, _menu_ids[0])
 
 
 def _from_seg():
     v = st.session_state.get("seg")
     if v:
-        st.session_state["acc"] = f"{D.PERSONA}{v}"
-        st.session_state["q"] = ""
+        D.apply_shared_selection(st.session_state, f"{D.PERSONA}{v}")
 
 
-def _from_search():
-    q = str(st.session_state.get("q", "")).strip().upper().lstrip("#")
-    if not q:
-        return
-    ids = set(df.account_id)
-    for cand in (q, f"ACC-{q}", f"{D.PERSONA}{q.zfill(2)}", f"ACC-{q.zfill(5)}"):
-        if cand in ids:
-            st.session_state["acc"] = cand
-            st.session_state["seg"] = None
-            return
+def _from_pick():
+    v = st.session_state.get("customer_pick")
+    if v:
+        D.apply_shared_selection(st.session_state, v)
 
 
 st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-a, b = st.columns([2, 1])
-a.segmented_control("Open a customer", D.DEMO, key="seg", format_func=lambda d: f"Customer {d}", on_change=_from_seg)
-b.text_input("Find a customer", key="q", placeholder="e.g. 38 or 01607", on_change=_from_search)
+a, b = st.columns([1, 2])
+a.segmented_control("Quick picks", D.DEMO, key="seg", format_func=lambda d: f"Customer {d}", on_change=_from_seg)
+b.selectbox("Find a customer", _menu_ids, key="customer_pick", format_func=lambda i: _menu_labels.get(i, i), on_change=_from_pick)
+st.markdown("<div class='o-lbl' style='text-transform:none;letter-spacing:0;margin:6px 0 0'>Scroll the list or type to search. "
+            "Highest risk is first. The walk-through and the deal below follow this customer.</div>", unsafe_allow_html=True)
 acc = st.session_state["acc"]
 # the walk-through: decisions/options from the offers team's files (ledger/outreach fallbacks), today's candidates for eligibility
 opts = D.offer_options(df, acc)
@@ -98,10 +102,11 @@ if clicked and clicked != st.session_state.get("_last_row_pick"):
     st.rerun()
 if not clicked:
     st.session_state["_last_row_pick"] = None
-# section 4: how we pick the deal (live example defaults to customer 04); order per David: hero, customer, book, deal, considered
+# section 4: how we pick the deal, for the same customer selected above. Demo personas are quick picks only.
 if hasattr(O, "render_deal_engine"):
     allo = D.all_options()
-    _call(O.render_deal_engine, df, f"{D.PERSONA}04", options=allo if SHOW_MONEY else D.strip_money(allo),
-          decisions=dec_all if SHOW_MONEY else D.strip_money(dec_all))
+    _call(O.render_deal_engine, df, acc, options=allo if SHOW_MONEY else D.strip_money(allo),
+          decisions=dec_all if SHOW_MONEY else D.strip_money(dec_all),
+          demo_ids=[f"{D.PERSONA}{d}" for d in D.DEMO])
 _call(O.render_considered, D.considerations() if SHOW_MONEY else D.considerations_no_money(D.considerations()),
       summary=D.considered_summary() if SHOW_MONEY else None)
