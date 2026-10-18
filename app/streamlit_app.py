@@ -382,8 +382,8 @@ def what_if(acc: str, edits: dict) -> dict:
 
 
 def key_facts(r, edits=None) -> str:
-    edits = edits or {}
     """Verifiable facts straight from features.csv (synthetic), so the why-line can be checked on screen."""
+    edits = edits or {}
     def n(c):
         try:
             return float(r.get(c))
