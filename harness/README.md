@@ -84,3 +84,19 @@ The harness never writes `uplift.csv` or `policy_eval.csv`.
 - The upgrade rule is a proxy for "near the cap 2+ months", because features.csv has no monthly near-cap count.
 - The Orange Belgium uplift data (CC BY-NC-ND) is read in place from `/workspace/tmobile/raw/` and is never
   committed.
+
+## End-to-end pipeline summary (`harness/pipeline.py`)
+
+One command, data → features → Model A → EV offer engine → message, reusing the other lanes' code
+(features.py, churn_model.py, offers.py, app/messages.py) without editing it. Writes
+`harness/out/pipeline_stages.json` (stages accounts → scored → flagged → offered / wait → messaged, plus a
+one-account trace). Invariant: offered + wait == flagged. A stage whose source isn't available gets
+`count: null` and a `note`. All numbers are synthetic.
+
+```bash
+PY=/workspace/tmobile/harness/.venv/bin/python
+$PY harness/pipeline.py                         # summarise the lanes' latest outputs in harness/out/
+$PY harness/pipeline.py --run                   # recompute every stage into harness/out/pipeline_run/sandbox_5k/
+$PY harness/pipeline.py --trace ACC-PERSONA-04 --lang es --segment risk_band
+$PY harness/pipeline.py --data scaled_50k       # only accounts is filled in; later stages are null + note
+```
