@@ -23,8 +23,8 @@ Groups 1a-1c are the complete list of inputs the risk model and offer engine rea
 | 8. Fairness audit (simulated) | 5 |
 | 9. Privacy and compliance | 8 |
 | 10. Left out on purpose | 11 |
-| 11. Known limits | 10 |
-| **total** | **129** |
+| 11. Known limits | 11 |
+| **total** | **130** |
 
 ## 1. Signals used
 
@@ -83,7 +83,7 @@ Groups 1a-1c are the complete list of inputs the risk model and offer engine rea
 
 - **Churn score**: A standardized logistic regression scores 90-day churn on 20 inputs; the 42 hand-built demo accounts are scored but never trained on. *Source: `harness/churn_model.py; harness/out/churn_model_card.md`*
 - **How good it is (simulated)**: Out-of-fold AUC 0.853; its riskiest 10% hold about 62% of leavers. This shows the pipeline works, not real accuracy. *Source: `harness/out/churn_model_card.md; docs/strategy/DEVPOST.md`*
-- **Who is flagged**: The riskiest 10% of the 5,000 regular accounts: 500 flagged (504 if the demo accounts are mixed in). *Source: `demo_data/churn_scores.csv (recounted)`*
+- **Who is flagged**: The riskiest 10% of the 5,000 regular accounts: 500 flagged; 505 across all 5,042 once the demo accounts are scored against the same cutoff. *Source: `demo_data/churn_scores.csv (recounted); app funnel (e576627)`*
 - **Why this score**: Each account gets up to 3 reasons to leave and 3 reasons to stay, written from its own fields, e.g. '6 unresolved support contacts in 90 days'. *Source: `demo_data/churn_scores.csv risk_reason_1..3, stay_reason_1..3`*
 - **How reasons are computed**: Each input's push on the score vs an average account, grouped; a reason must move the score by at least 0.05 and a risk-raising value is never shown as a stay reason. *Source: `harness/out/churn_model_card.md (29 reasons blocked by the direction guard)`*
 - **Common-sense check on inputs**: Inputs whose effect pointed the wrong way were removed and the model refit (AutoPay, no financing). *Source: `harness/out/churn_model_card.md`*
@@ -95,11 +95,11 @@ Groups 1a-1c are the complete list of inputs the risk model and offer engine rea
 
 - **Doing nothing is always an option**: It is priced at $0 and every offer has to beat it. *Source: `harness/offers.py; docs/strategy/DEVPOST.md`*
 - **Expected value**: Chance of churn x chance the action saves them x value of the account, minus the offer cost and a contact cost. *Source: `harness/offers.py; scratch_models/economics/RESULTS.md Task 1`*
-- **Value of a kept customer: $1,478**: About $76.46 a month margin over 24 months, weighted for the chance they leave anyway (0.99% a month) and discounted 10% a year. *Source: `RESEARCH.md §13b; scratch_models/economics/RESULTS.md P1`*
+- **Value of a saved account**: We value a saved account at its own monthly margin times 19.3 months, about $1,500 for an average account and about $2,000 for the ones we message. *Source: `experiments/ledger/LEDGER_SCHEMA.md (27c2870, per-account margin × 19.34 months); RESEARCH.md §13b`*
 - **Save rate assumption**: The next version picks at a 10% save rate, scaling each action's rate down to match. *Source: `docs/outreach/inputs/guardrail_summary.txt (scale 0.2254)`*
-- **Contact costs**: A fix-first callback costs $15, a check-in $2, plus an annoyance cost of $2 to $6 per contact. *Source: `harness/offers.py FIX_FIRST_CALLBACK_COST, CHECK_IN_COST, ANNOYANCE`*
+- **Contact costs**: An open support issue takes agent time to fix, so every fix-first contact costs about $15 ($10.75 agent time plus $4.25 escalation), plus the channel's own sending cost; a call is charged the $15 once. A check-in costs $2, plus an annoyance cost of $2 to $6 per contact. *Source: `experiments/ledger/ledger_summary.json channel_cost_usd (27c2870); harness/offers.py CHECK_IN_COST, ANNOYANCE`*
 - **Retention picks**: 202 accounts are worth contacting at 10%; 184 remain after the do-not-contact rules. *Source: `docs/outreach/inputs/guardrail_summary.txt`*
-- **What the 184 get**: Fix first 126, care credit plus fix 29, perk reminder 26, check-in 2, bill-shock credit 1. *Source: `docs/outreach/inputs/guardrail_summary.txt`*
+- **What the 184 get**: Fix first 151, care credit plus fix 29, check-in 2, bill-shock credit 1, perk reminder 1 (25 perk reminders became fix-first because of an open ticket). *Source: `experiments/ledger/ledger_summary.json fix_first_contacts_by_channel (27c2870); docs/outreach/inputs/guardrail_summary.txt`*
 - **No credits at low risk**: No bill or goodwill credit below 5% churn risk. *Source: `harness/offers.py MIN_CREDIT_P_CHURN = 0.05`*
 - **Same features, lower price wins**: An eligible cheaper plan with the same features beats upsells and check-ins. *Source: `harness/offers.py SAME_COVERAGE_RULE`*
 - **Prices checked**: Every dollar figure in a message is checked against the sandbox plan and promotion tables, or the run fails. *Source: `docs/outreach/OUTREACH_PLAYBOOK.md §8`*
@@ -134,11 +134,11 @@ Groups 1a-1c are the complete list of inputs the risk model and offer engine rea
 
 ## 6. Money honesty (simulated)
 
-- **Result at a 10% save rate**: 184 messages come out $4,109 ahead (simulated). *Source: `scratch_models/economics/RESULTS.md HEADLINE; headline_1478.csv`*
-- **Break-even about 4.8%**: Below a 4.80% save rate it loses money; at 5% it is $161 ahead, a coin flip. *Source: `scratch_models/economics/RESULTS.md HEADLINE`*
+- **Result at a 10% save rate**: 184 messages come out +$3,938 ahead at our central assumption (simulated). Two rules shape it: customers with an open ticket get a fix-your-issue-first message instead of a perk reminder, and every fix-first contact is charged about $15 of agent time. *Source: `experiments/ledger/ledger_summary.json total_mid (27c2870)`*
+- **Break-even 5.17%**: Below a 5.17% save rate it loses money; at 5% it comes out ahead only 41% of the time. *Source: `experiments/ledger/ledger_summary.json breakeven_save_rate, p_net_pos_at_5 (27c2870)`*
 - **Measured campaigns run 2% to 11%**: Published retention results run about 2% to 11% relative, so this pays in the stronger campaigns and loses in the weakest. *Source: `docs/strategy/DEVPOST.md`*
-- **Bootstrap**: 2,000 account resamples (seed 2026): at 10% it comes out ahead 82% of the time (mean $3,953, range -$2,805 to $13,292); at 5%, 44%. *Source: `scratch_models/economics/RESULTS.md HEADLINE`*
-- **Do saves stick?**: If each saved customer stays as risky as before, only 58 are worth contacting, break-even rises to 7.6%, and it is ahead only 43% of the time at 10%. A holdout test is the only way to know. *Source: `scratch_models/economics/RESULTS.md HEADLINE, P2`*
+- **Bootstrap**: 2,000 account resamples: an 80% chance of coming out ahead at our central 10% assumption (41% at 5%); mean +$3,817, 95% range -$3,186 to +$13,148. *Source: `experiments/ledger/ledger_summary.json; LEDGER_SCHEMA.md (27c2870)`*
+- **Do saves stick?**: On our 184 contacts, if each saved customer keeps their own risk, they are worth -$1,307 at 10%, only 36 of the 184 are worth contacting, break-even rises to 14.5%, and it is ahead 22% of the time at 10%. A holdout is built in so a rollout can measure saves. *Source: `tm-models rerun on 27c2870 (on our 184 contacts)`*
 - **The shipped demo engine**: The earlier engine contacts 1,314 accounts and is -$71,838 at a 10% save rate in full dollars. That is why the next version contacts far fewer. *Source: `scratch_models/chart_check/RESULTS.md §3`*
 - **Blanket discount rule**: A $25 credit to the top 10% by risk is -$4,116 at 10%. *Source: `scratch_models/chart_check/RESULTS.md §3`*
 - **Not statistically proven**: At about 5,000 accounts, no 5% result is distinguishable from zero. *Source: `scratch_models/economics/RESULTS.md Circularity`*
@@ -187,7 +187,8 @@ Groups 1a-1c are the complete list of inputs the risk model and offer engine rea
 ## 11. Known limits
 
 - **No real churn outcomes**: Labels are simulated from a formula we wrote, so the model's accuracy is partly by construction. *Source: `harness/out/churn_model_card.md; scratch_models/economics/RESULTS.md Circularity`*
-- **Save rate unknown**: Every dollar figure rests on an assumed save rate; only a holdout test can measure it. *Source: `scratch_models/economics/RESULTS.md`*
+- **Save rate unknown**: Every dollar figure rests on an assumed save rate; a holdout is built in so a rollout can measure saves. *Source: `scratch_models/economics/RESULTS.md`*
+- **Saves may not stick**: If a saved customer stays as risky as before, most of the money disappears. That's the first thing a real rollout tests. *Source: `tm-models rerun on 27c2870 (on our 184 contacts)`*
 - **Holdout size**: A reliable read needs about 12,800 accounts per group; at our ~5,000 only very large effects show. *Source: `docs/strategy/DEVPOST.md (power estimate)`*
 - **Contacts lean on bill changes**: Only 35 of the 184 have no recent bill change, because bill changes are churn terms in our own generator. *Source: `scratch_models/economics/RESULTS.md GUARDRAIL weak spot`*
 - **No outreach log, opt-out field or time zone**: Quarterly cap, opt-out and send hours are hooks, untested on this data. *Source: `docs/outreach/OUTREACH_PLAYBOOK.md §1, §4`*

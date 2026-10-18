@@ -1,0 +1,75 @@
+{
+ "central": 3938.341676640092,
+ "breakeven": {
+  "central": 0.05168368796314645,
+  "reasonable_worst": 0.22805043700529962,
+  "full_worst": 0.530554584208736
+ },
+ "dro_cvar10": -7099.0,
+ "dro_cvar10_net_effect": -2661.0,
+ "cvar": [
+  {
+   "prior": "team (save mode 10%)",
+   "mean": -1237.0,
+   "median": -1152.0,
+   "p05": -4276.0,
+   "VaR10": -3593.0,
+   "CVaR10": -4464.0,
+   "P_net_pos": 0.259
+  },
+  {
+   "prior": "field (save mode 6%)",
+   "mean": -2119.0,
+   "median": -2101.0,
+   "p05": -4936.0,
+   "VaR10": -4300.0,
+   "CVaR10": -5072.0,
+   "P_net_pos": 0.102
+  },
+  {
+   "prior": "team (save mode 10%), net-effect",
+   "mean": 245.0,
+   "median": 329.0,
+   "p05": -2186.0,
+   "VaR10": -1707.0,
+   "CVaR10": -2287.0,
+   "P_net_pos": 0.583
+  },
+  {
+   "prior": "field (save mode 6%), net-effect",
+   "mean": -594.0,
+   "median": -675.0,
+   "p05": -2597.0,
+   "VaR10": -2230.0,
+   "CVaR10": -2661.0,
+   "P_net_pos": 0.314
+  },
+  {
+   "prior": "uniform (reasonable box)",
+   "mean": -2157.0,
+   "median": -2199.0,
+   "p05": -4636.0,
+   "VaR10": -4171.0,
+   "CVaR10": -4727.0,
+   "P_net_pos": 0.09
+  },
+  {
+   "prior": "adverse skew (save mode 3%)",
+   "mean": -4967.0,
+   "median": -5055.0,
+   "p05": -7024.0,
+   "VaR10": -6685.0,
+   "CVaR10": -7099.0,
+   "P_net_pos": 0.0
+  },
+  {
+   "prior": "uniform (full box)",
+   "mean": -10743.0,
+   "median": -10194.0,
+   "p05": -19514.0,
+   "VaR10": -17295.0,
+   "CVaR10": -20120.0,
+   "P_net_pos": 0.0
+  }
+ ]
+}

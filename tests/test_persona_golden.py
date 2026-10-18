@@ -11,10 +11,41 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import sys
+
 import pandas as pd
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "harness"))
+import offers as _eng  # noqa: E402  (CONFIG only)
+
+# v2: with the Ascarza et al. 2016 plan-fit backfire ON (default), an unprompted right-size never beats silence
+# (its net save rate is negative), so the right-size personas (05, 37) deliberately become do-nothing with the
+# "plan_fit_held" reason. With RIGHT_SIZE_BACKFIRE off they must still be right-size.
+BACKFIRE_ON = _eng.right_size_backfire_rel() > 0
+RS_OR_HELD = {"right_size", "do_nothing"} if BACKFIRE_ON else {"right_size"}
+# v2 spec: plan moves are receipt-only (no SMS); a persona expecting a plan move passes when the move is on the
+# receipt (receipt_action / receipt_skus) and the text action is not a plan move.
+RECEIPT = bool(_eng.CONFIG.get("PLAN_MOVES_RECEIPT_ONLY"))
+PLAN_MOVES = {"variant_switch", "right_size"}
+# v2: at the field save rate (FIELD_SAVE_RATE 0.10 < base anchor) a $15 fix-first callback / $25 relief no longer
+# pays for personas 22 and 27 (open ticket); fix-first is not a forced rule in the engine, so they go silent.
+# Deliberate, flagged for David. With the base table (FIELD_SAVE_RATE == anchor) they must act.
+FIELD_LOW = _eng.CONFIG["FIELD_SAVE_RATE"] < _eng.CONFIG["SAVE_RATE_ANCHOR"]
+FIELD_SENSITIVE = {22, 27}
+# v2 (merge round): three more deliberate switches, each with its own allowance below.
+#   PORT_OUT_CONTACT=off (default, pending David): persona 21 (port-out inquiry) gets no outreach -> do_nothing.
+#   Open ticket -> fix-first is the only allowed type (FIX_FIRST_FORCE ev_positive: contact only if its EV > 0) ->
+#   persona 22 gets fix_first or silence; persona 21 (port-out, PORT_OUT_CONTACT=all) gets its one save attempt.
+#   KEPT_VALUE_MONTHS 19.338 (~$1,478 survival-discounted): persona 04's $25 credit no longer adds enough on top of
+#   the fix-first callback, so fix_first alone may win.
+PO_OFF = not _eng.port_out_allowed()
+FF_FORCED = _eng.CONFIG.get("FIX_FIRST_FORCE") == "all_open"
+FF_ONLY = True   # v2: open ticket -> fix-first types only (both FIX_FIRST_FORCE modes)
+VALUE_DISC = _eng.CONFIG.get("KEPT_VALUE_MONTHS", 24) < _eng.CONFIG["VALUE_HORIZON_MONTHS"]
+V2_EXTRA = {21: {"do_nothing"} if PO_OFF else set(), 22: {"fix_first", "care_credit_fix_first", "do_nothing"},
+            4: {"fix_first"} if VALUE_DISC else set()}
 OUT = Path(os.environ.get("TM_OUT_DIR", ROOT / "harness" / "out"))   # scratch runs: TM_OUT_DIR
 DEMO = ROOT / "demo_data"   # tracked copies; used when harness/out has not been generated (fresh clone)
 CREDITS = {"care_credit", "loyalty_credit", "keep_your_phone", "care_credit_fix_first", "bill_shock_price_lock"}
@@ -34,7 +65,7 @@ EXPECT = {
     2: ("household, 5 lines on unlimited: plan fit or leave alone, no credit", QUIET, None),
     3: ("timekeeper, paid-off 3+ yr phone: upgrade-now math, no push", {"do_nothing", "device_upgrade"}, ("line", {"upgrade_now"})),
     4: ("NBM bill jump + calls: fix + credit", {"care_credit_fix_first"}, None),
-    5: ("household on premium plan barely used: right-size", {"right_size"}, None),
+    5: ("household on premium plan barely used: right-size (v2: held, backfire)", RS_OR_HELD, None),
     6: ("household SMB, heavy line over cap: step-up", {"step_up"}, None),
     7: ("timekeeper, upgraded 3 months ago: keep (corrected wait math)", {"do_nothing"}, ("line", {"keep"})),
     8: ("household retired light users: cheaper fit or leave alone", QUIET, None),
@@ -69,7 +100,8 @@ EXPECT = {
          ("line", {"wait_until_promo"})),
     35: ("timekeeper, year-old budget phone paid off: keep", {"do_nothing"}, ("line", {"keep"})),
     36: ("timekeeper, 5-yr phone, light user: nothing to wait for", {"do_nothing", "device_upgrade"}, ("line", {"upgrade_now", "keep"})),
-    37: ("household family of 4 on unlimited, light use: cheaper fit", {"right_size", "variant_switch"}, None),
+    37: ("household family of 4 on unlimited, light use: cheaper fit (v2: held, backfire)",
+         RS_OR_HELD | {"variant_switch"}, None),
     38: ("household 55+ couple: variant to More 55+", {"variant_switch"}, ("sku", "TMO-STUB-PLAN-MORE-55")),
     39: ("household 5 lines on entry plan: many-line offer", {"variant_switch", "right_size"}, None),
     40: ("household partner-eligible: variant to Beyond Partner", {"variant_switch"}, ("sku", "TMO-STUB-PLAN-BEYOND-PARTNER")),
@@ -82,13 +114,19 @@ def check(pid: int, offers: pd.DataFrame, lt: pd.DataFrame | None) -> tuple[bool
     """Pure check, usable on any offers.csv (before/after comparisons)."""
     acc = f"ACC-PERSONA-{pid:02d}"
     direction, allowed, extra = EXPECT[pid]
+    allowed = set(allowed) | V2_EXTRA.get(pid, set())
     r = offers.set_index("account_id").loc[acc]
     code = r["action_code"]
-    if code not in allowed:
+    via_receipt = bool(RECEIPT and code not in PLAN_MOVES and str(r.get("receipt_action", "")) in allowed
+                       and str(r.get("receipt_action", "")) in PLAN_MOVES)
+    if code not in allowed and not via_receipt:
+        if FIELD_LOW and pid in FIELD_SENSITIVE and code == "do_nothing":
+            return True, "do_nothing (field save rate; flagged)"
         return False, f"{code} not in {sorted(allowed)}"
     if extra:
         kind, arg = extra
-        if kind == "sku" and arg not in str(r.get("promo_skus", "")):
+        skus = str(r.get("receipt_skus", "")) if via_receipt else str(r.get("promo_skus", ""))
+        if kind == "sku" and arg not in skus:
             return False, f"promo_skus {r.get('promo_skus')} lacks {arg}"
         if kind == "no_text":
             import re
@@ -106,7 +144,8 @@ def check(pid: int, offers: pd.DataFrame, lt: pd.DataFrame | None) -> tuple[bool
 def _src() -> Path:
     if (OUT / "offers.csv").exists():
         return OUT
-    if (DEMO / "offers.csv").exists():
+    # the tracked demo_data copy is frozen (pre-v2); use it only if it carries the v2 schema, never stale outputs
+    if (DEMO / "offers.csv").exists() and "in_headline" in pd.read_csv(DEMO / "offers.csv", nrows=1).columns:
         return DEMO
     pytest.skip("run harness/offers.py first (no harness/out or demo_data offers.csv)")
 
@@ -137,7 +176,8 @@ PINS = {
     28: ("do_nothing", ""), 10: ("do_nothing", ""),
     6: ("step_up", "TMO-STUB-PLAN-MORE"), 19: ("step_up", "TMO-STUB-PLAN-MORE"),
     21: ("check_in", None), 4: ("care_credit_fix_first", "PROMO-STUB-CARE-CREDIT"),
-    37: ("right_size", "TMO-STUB-PLAN-ESSENTIALS-4LINE"), 24: ("do_nothing", ""),
+    37: ("right_size", "TMO-STUB-PLAN-ESSENTIALS-4LINE"),   # v2: do_nothing when held for backfire (see below)
+    24: ("do_nothing", ""),
 }
 
 
@@ -145,6 +185,15 @@ PINS = {
 def test_persona_pin(pid, outputs):
     o = outputs[0].set_index("account_id").loc[f"ACC-PERSONA-{pid:02d}"]
     code, sku = PINS[pid]
+    if o["action_code"] in V2_EXTRA.get(pid, set()):
+        code, sku = o["action_code"], None   # deliberate v2 switch (see V2_EXTRA)
+    if pid == 37 and BACKFIRE_ON and o.get("do_nothing_reason") == "plan_fit_held":
+        code, sku = "do_nothing", ""   # v2: right-size held (Ascarza 2016 backfire); frozen demo_data still pins right_size
+    if RECEIPT and code in PLAN_MOVES and "receipt_action" in o and o["action_code"] not in PLAN_MOVES:
+        assert o["receipt_action"] == code, f"persona {pid:02d}: receipt {o['receipt_action']} != {code}"
+        if sku:
+            assert sku in str(o["receipt_skus"]).split(";"), f"persona {pid:02d}: receipt_skus {o['receipt_skus']!r}"
+        return
     assert o["action_code"] == code, f"persona {pid:02d}: {o['action_code']} != {code}"
     if sku is not None:
         got = o["promo_skus"] if isinstance(o["promo_skus"], str) else ""
@@ -156,6 +205,11 @@ def test_persona_38_saves_40_a_month():
     if c is None or "customer_monthly_delta" not in c:
         pytest.skip("no offer_candidates with customer_monthly_delta")
     r = c[(c.account_id == "ACC-PERSONA-38") & (c.action_code == "variant_switch")].iloc[0]
+    o = pd.read_csv(_src() / "offers.csv").set_index("account_id").loc["ACC-PERSONA-38"]
+    if RECEIPT and "receipt_action" in o:   # v2: receipt-only plan move, still computed in the candidates
+        assert o["receipt_action"] == "variant_switch" and abs(o["receipt_monthly_saving"] - 40) < 1e-6
+        assert bool(r["eligible"]) and abs(r["customer_monthly_delta"] + 40) < 1e-6
+        return
     assert bool(r["is_chosen"]) and abs(r["customer_monthly_delta"] + 40) < 1e-6
 
 
@@ -194,6 +248,13 @@ def test_open_ticket_wording(outputs):
     if "do_nothing_reason" not in o:
         pytest.skip("older offers.csv")
     t = o[o.do_nothing_reason == "open_ticket"]
+    if FF_ONLY:   # v2: open ticket -> fix-first types only; silent ones carry the open_ticket_ev_le0 reason
+        assert (o.loc[o.pick_override.fillna("").isin(["open_ticket", "open_ticket_fix_only"]), "action_code"]
+                .isin(["fix_first", "care_credit_fix_first"])).all()
+        s = o[o.do_nothing_reason == "open_ticket_ev_le0"]
+        assert len(s) and (s.why_this_offer == "Stay silent: open ticket, fix-first expected to cost more than it "
+                                               "saves.").all()
+        return
     assert len(t) and (t.why_this_offer == "Open ticket with support; no marketing until it's closed.").all()
 
 
@@ -213,7 +274,9 @@ def api():
 def test_api_persona_21_port_out_off_still_check_in(api):
     row = api.prepared_row("ACC-PERSONA-21")
     row["port_out_inquiry"] = 0
-    assert api.choose_offer(row, p_churn=0.035)["action_code"] == "check_in"
+    got = api.choose_offer(row, p_churn=0.035)["action_code"]
+    # v2: at FIELD_SAVE_RATE 0.10 a no-offer check-in at 3.5% risk no longer pays once port-out is off
+    assert got in ({"check_in", "do_nothing"} if FIELD_LOW else {"check_in"}), got
 
 
 def test_api_persona_21_port_out_and_shopping_off_do_nothing(api):
@@ -225,6 +288,8 @@ def test_api_persona_21_port_out_and_shopping_off_do_nothing(api):
 
 def test_api_matches_offers_csv(api, outputs):
     o = outputs[0].set_index("account_id")
+    if RECEIPT and "receipt_action" not in o:
+        pytest.skip("offers.csv predates v2 (frozen demo_data copy); regenerate with harness/offers.py")
     for pid in (38, 21, 24, 4):
         acc = f"ACC-PERSONA-{pid:02d}"
         got = api.choose_offer(api.prepared_row(acc))["action_code"]
@@ -238,3 +303,20 @@ def test_api_persona_21_toggled_reason_low_risk(api):
     out = api.choose_offer(row, p_churn=0.017)
     assert out["why_this_offer"].startswith("Risk is low") and "nothing needs fixing" in out["why_this_offer"], \
         out["why_this_offer"]
+
+
+def test_v2_right_size_personas_held_for_backfire(outputs):
+    """v2: plan-fit personas 05 / 08 / 37 are held with the honest backfire reason, and the saving is still computed."""
+    if not BACKFIRE_ON:
+        pytest.skip("RIGHT_SIZE_BACKFIRE off")
+    o = outputs[0].set_index("account_id")
+    if "do_nothing_reason" not in o or not (o["do_nothing_reason"] == "plan_fit_held").any():
+        pytest.skip("outputs predate v2 (e.g. the frozen demo_data copy); regenerate with harness/offers.py")
+    c = _cands(_src())
+    for pid in (5, 8, 37):
+        r = o.loc[f"ACC-PERSONA-{pid:02d}"]
+        assert r["action_code"] == "do_nothing" and r["do_nothing_reason"] == "plan_fit_held", (pid, r["action_code"])
+        assert "6% to 10%" in r["why_this_offer"]
+        if c is not None:
+            rs = c[(c.account_id == f"ACC-PERSONA-{pid:02d}") & (c.action_code == "right_size")].iloc[0]
+            assert bool(rs["eligible"]) and rs["expected_value"] < 0

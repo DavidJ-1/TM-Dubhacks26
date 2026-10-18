@@ -53,23 +53,57 @@ CONFIG = {
                                      # version using the same $20/mo value (see KYP_* below).
 
     # --- customer value (synthetic)
-    "VALUE_HORIZON_MONTHS": 24,      # how many months of service margin a save is worth
-    "SERVICE_MARGIN": 0.50,          # share of monthly service revenue (bill minus device installments) kept
+    "VALUE_HORIZON_MONTHS": 24,      # how many months of service margin a save is worth (upsell / lock horizon)
+    "KEPT_VALUE_MONTHS": 19.338,     # v2: value of a KEPT account = monthly margin x this. Survival-discounted 24
+                                     # months (tm-research RESEARCH.md s13; tm-models' guardrail uses value x
+                                     # 19.338/24 -> ~$1,478 mean on demo_data). Env TM_KEPT_VALUE_MONTHS; 24 = the old
+                                     # undiscounted ~$1.8-1.9K. ASSUMPTION.
+    "SERVICE_MARGIN": 0.50,          # share of monthly service revenue (bill minus device installments) kept.
+                                     # v2: anchored, UPPER BOUND: TMUS Q2'26 Core Adj. EBITDA / service revenue
+                                     # $9.537B / $19.0B ~ 50% (pre-capex), SEC Ex 99.1
+                                     # https://www.sec.gov/Archives/edgar/data/1283699/000128369926000100/tmus06302026ex991.htm
+                                     # (RESEARCH.md section 12, derived). Assumption.
 
     # --- base save rates: P(customer stays | they would have churned, we take the action). Synthetic.
     #     Each action has a rate when it addresses the customer's churn driver and a lower "off-target" rate.
-    "SAVE_RATE": {
+    #     Benchmark (v2, not used to set these): best controlled retention figure we have is a 1.9-point churn
+    #     cut from targeted retention calls off a 17.2% baseline (17.2% -> ~15.3%), i.e. ~11% relative, in a
+    #     telecom (pay-TV) RCT. Ascarza et al., Marketing Science 2018, https://doi.org/10.1287/mksc.2018.1099
+    #     (tm-research, research-notes/notes_upsell.md). Our on-target rates (0.12-0.35) are 1-3x that
+    #     benchmark; off-target rates (0.03-0.10) are at or below it. ASSUMPTION / SYNTHETIC.
+    # v2: FIELD_SAVE_RATE. The table below is the BASE (relative) table; the engine uses SAVE_RATE = base x
+    #     FIELD_SAVE_RATE / SAVE_RATE_ANCHOR, so per-action ratios (on/off target, action vs action) are preserved
+    #     and only the overall level is pinned to field evidence. Anchor 0.45 = the risk-weighted mean save rate
+    #     of the engine's chosen contacts under the base table (the "~44%" tm-efficacy measured). Field evidence:
+    #     5-15% (tm-research: Ascarza et al. Marketing Science 2018, 17.2% -> ~15.3% = ~11% relative; Verhelst et
+    #     al. 2023, https://arxiv.org/abs/2312.07206). ASSUMPTION; env TM_FIELD_SAVE_RATE for sensitivity
+    #     (0.05 / 0.10 / 0.22). Scaling replaces nothing else: the right-size backfire is a separate field effect
+    #     and is NOT scaled.
+    "FIELD_SAVE_RATE": 0.10,
+    # field-unit save rates NOT scaled by FIELD_SAVE_RATE (already field-level numbers). perk_reminder: the old
+    # 0.08 / 0.03 were unsourced; RESEARCH.md section 12 (dev 685d42b): 2% when the perk fits (range 0-5%), 1%
+    # otherwise, below field retention-offer effects because there is no incentive; a telecom perk-salience RCT
+    # (McKenzie, U. Reading thesis, https://centaur.reading.ac.uk/115294/1/McKenzie_thesis.pdf) found no causal
+    # effect of a "perceived value" treatment. ASSUMPTION.
+    "SAVE_RATE_ABSOLUTE": {"perk_reminder": {"on_target": 0.02, "off_target": 0.01}},
+    "PERK_REMINDER_COST": 0.50,   # $ in-app/SMS; Gartner self-service $0.10 (2019) to $1.84 (~2024 median),
+                                  # https://www.gartner.com/en/newsroom/press-releases/2019-09-25-gartner-says-only-9--of-customers-report-solving-thei
+                                  # (was $0). Assumption.
+    "SAVE_RATE_ANCHOR": 0.45,
+    "SAVE_RATE_BASE": {
         "care_credit":      {"on_target": 0.25, "off_target": 0.05},  # billing / service pain
         "loyalty_credit":   {"on_target": 0.12, "off_target": 0.05},  # price / competitor shopping
         "keep_your_phone":  {"on_target": 0.20, "off_target": 0.05},  # price, phone paid off (free to leave)
         "right_size":       {"on_target": 0.30, "off_target": 0.10},  # overpaying / bill shock
-        "step_up":          {"on_target": 0.15, "off_target": 0.03},  # plan too small / life event
-        "device_upgrade":   {"on_target": 0.22, "off_target": 0.06},  # old or paid-off phone / device issues
+        # v2 upsell fix (tm-models, scratch_models/family15/RESULTS.md): upsells earn take x margin only, no
+        # churn-save credit (was 0.15/0.03, 0.18/0.05, 0.22/0.06; the device term did not even depend on take).
+        "step_up":          {"on_target": 0.0, "off_target": 0.0},  # plan too small / life event
+        "device_upgrade":   {"on_target": 0.0, "off_target": 0.0},  # old or paid-off phone / device issues
         "variant_switch":   {"on_target": 0.30, "off_target": 0.10},  # same plan for less
-        "family_upgrade":   {"on_target": 0.18, "off_target": 0.05},  # outgrowing / old phones on a family plan
+        "family_upgrade":   {"on_target": 0.0, "off_target": 0.0},  # outgrowing / old phones on a family plan
         "bill_shock_price_lock": {"on_target": 0.30, "off_target": 0.08},  # promo-end bill shock on More/Beyond
         "check_in":         {"on_target": 0.12, "off_target": 0.04},  # shopping / port-out / went quiet
-        "perk_reminder":    {"on_target": 0.08, "off_target": 0.03},  # streams a lot, perk unused
+        "perk_reminder":    {"on_target": 0.08, "off_target": 0.03},  # superseded by SAVE_RATE_ABSOLUTE (v2)
         "home_internet_bundle": {"on_target": 0.03, "off_target": 0.03},  # bundles are stickier
         "fix_first":        {"on_target": 0.35, "off_target": 0.04,   # network / unresolved service issue
                              "billing_only": 0.15},                   # a callback can explain a price rise,
@@ -87,11 +121,73 @@ CONFIG = {
     "BILL_SHOCK_RELIEF": {                      # POLICY OVERRIDE, not a sandbox rule: in that same window the
         "enabled": True,                        # care credit's 3-contact minimum is relaxed so bill-shocked
         "care_credit_min_contacts": 1,          # customers who did reach out can get it (tenure >= 6 still applies)
-        "credit_save_boost": 0.05,              # credits directly offset the price rise: +5 pts save rate
+        "credit_save_boost_base": 0.05,         # credits directly offset the price rise: +5 pts (base table scale;
+                                                # scaled by FIELD_SAVE_RATE like SAVE_RATE_BASE)
     },
-    # --- probability the customer takes the offer (only matters for upsell gain / conditional costs)
-    "P_ACCEPT": {"right_size": 0.45, "variant_switch": 0.70, "step_up": 0.25, "device_upgrade": 0.15,
-                 "family_upgrade": 0.20, "home_internet_bundle": 0.04},
+    # --- v2 expected-profit gate: never contact a NON-forced account whose chosen action has EV <= 0. Forced rules
+    #     (PORT_OUT_ALWAYS_CONTACT, SAME_COVERAGE_RULE, BILL_SHOCK_RELIEF_OVERRIDE) are not overridden; their
+    #     EV <= 0 contacts are counted in offers.csv (pick_override + expected_value) for David to decide.
+    "PROFIT_GATE": True,
+    # --- v2 spec (Grok Bot): plan moves (right_size, variant_switch) no longer produce an SMS. They are still
+    #     computed and shown on the RECEIPT only (offers.csv receipt_* columns, channel='receipt'); the text
+    #     decision is made among the other actions on company-side EV (customer savings weighted zero: only plan
+    #     moves carry customer benefit, and they are excluded from texts). SAME_COVERAGE_RULE now forces the
+    #     cheaper same-features variant onto the receipt (always shown when eligible) instead of into a text.
+    "PLAN_MOVES_RECEIPT_ONLY": True,
+    # --- probability the customer takes the offer (only matters for upsell gain / conditional costs).
+    #     ONE TABLE, every figure an ASSUMPTION / SYNTHETIC. No carrier publishes offer-acceptance rates.
+    #     v2 (honest acceptance): the closest real numbers are overall postpaid upgrade rates, which INCLUDE
+    #     organic upgrades, so ~4%/quarter is a CEILING on offer-driven acceptance, not its measured effect:
+    #       AT&T postpaid upgrade rate 3.0-4.7%/quarter (1Q26 3.5%; FY 14.0% 2024, 15.6% 2025), AT&T 1Q26
+    #       Trending Schedule https://investors.att.com/~/media/Files/A/ATT-IR-V2/financial-reports/quarterly-earnings/2026/1Q-2026/T_1Q26_Trending_Schedule.pdf
+    #       Verizon retail postpaid upgrade rate 2.6% (2Q26), https://www.verizon.com/about/sites/default/files/2026-07/vz_2q2026_foi_072426.pdf
+    #     (RESEARCH.md sections 5 and 9). The old 0.25 / 0.15 / 0.20 overstated upsell value ~2.5-6x.
+    "P_ACCEPT": {
+        "step_up":              0.04,  # cited ceiling (upgrade-rate proxy above); was 0.25. tm-models (family15
+                                       # RESULTS.md s.A) suggests 0.03, range 0.01-0.06; we keep the cited 4% ceiling
+        "device_upgrade":       0.04,  # cited ceiling (upgrade-rate proxy above); was 0.15
+        "family_upgrade":       0.04,  # cited ceiling (upgrade-rate proxy above); was 0.20 (tm-models: 0.03, 0.01-0.06)
+        "home_internet_bundle": 0.04,  # UNCITED assumption (unchanged; no public bundle take-rate found)
+        "right_size":           0.03,  # ASSUMPTION, cited base (was 0.45, no public support). Randomized trials
+                                       # land 1-13%: Ascarza et al. 2016 wireless trial (54,089 customers, call +
+                                       # $15/mo credit) 1.5% accepted, 9.6% changed plans vs 6.5% control (Table 4,
+                                       # https://evaascarza.com/papers/ascarza_iyengar_schleicher_16.pdf); Ofgem
+                                       # cheaper-deal letters 1.0% -> 2.4-3.4%, 2.9% -> 6.8-7.5% with a reminder
+                                       # (https://www.ofgem.gov.uk/sites/default/files/docs/2017/11/cmol_report_0.pdf,
+                                       # https://www.ofgem.gov.uk/sites/default/files/docs/2019/09/cmoc_report_final_updated_template_0.pdf);
+                                       # 3+ yr default-tariff customers 6.8% -> 12-13%. Range: RIGHT_SIZE_P_ACCEPT_RANGE.
+        "variant_switch":       0.10,  # TEAM ASSUMPTION (no public take rate for this offer; was 0.70, uncited). Customer-has-to-act framing
+                                       # (our texts ask them to switch; nothing auto-applies). Ascarza et al. 2016
+                                       # 1.5% (https://evaascarza.com/papers/ascarza_iyengar_schleicher_16.pdf);
+                                       # Ofgem 2017 cheaper-deal letters 3.4%
+                                       # (https://www.ofgem.gov.uk/sites/default/files/docs/2017/11/cmol_report_0.pdf);
+                                       # Ofgem 2018 collective switch 27% as the upper bound
+                                       # (https://www.ofgem.gov.uk/press-release/eight-times-many-people-get-better-deal-ofgems-collective-switch-trial).
+                                       # Still forced by SAME_COVERAGE_RULE, so this moves reported value, not picks.
+    },
+    "VARIANT_SWITCH_P_ACCEPT_RANGE": (0.03, 0.27),   # sensitivity range (sources above)
+    "RIGHT_SIZE_P_ACCEPT_RANGE": (0.02, 0.13),   # sensitivity range for right_size acceptance (sources above)
+    # --- v2 upsell guardrail: no upsell (step-up, device / family upgrade, Home Internet bundle) for the
+    #     riskiest customers or those who keep contacting support. They need care, not a sales pitch.
+    "UPSELL_RISK_GUARDRAIL": True,      # named switch, default ON. Env TM_UPSELL_RISK_GUARDRAIL=0 to turn off.
+    "UPSELL_GUARD_TOP_RISK_SHARE": 0.10,  # top churn decile by p_churn_90d (same cut as the Top-10% baseline)
+    "UPSELL_GUARD_MIN_SUPPORT_90D": 3,    # 3+ support contacts in the engine's 90-day lookback (support_90d)
+    # --- v2 plan-fit backfire (right_size only). Ascarza, Iyengar & Schleicher, JMR 53(1):46-60, 2016,
+    #     https://doi.org/10.1509/jmr.13.0483 : in a 65,000-customer wireless field experiment, proactive
+    #     "cheaper plan" outreach raised 3-month churn from 6% (control) to 10% (treated). We model it as a
+    #     relative churn increase of 10/6 - 1 = +66.7% on p_churn_90d, charged in EV as
+    #     p_churn x rel x scale x customer_value and netted into right_size's save rate. EXPLICIT ASSUMPTION:
+    #     the field effect is applied on top of our own (optimistic) gross save rate, so it is conservative.
+    #     Customers with volatile or declining usage (where the paper's effect was concentrated) are excluded.
+    "RIGHT_SIZE_BACKFIRE": {
+        "enabled": True,
+        "control_churn": 0.06, "treated_churn": 0.10,   # Ascarza et al. 2016 field test
+        "scale": 1.0,                                   # sensitivity knob (1.0 = full field effect)
+        "exclude_volatile_or_declining": True,
+        "volatile_cv": 0.25,       # SYNTHETIC threshold: CV of monthly account data use (12 months) above this
+        "declining_ratio": 0.80,   # SYNTHETIC threshold: last-3-month avg < 0.80 x first-3-month avg
+        "min_usage_months": 6,
+    },
     # --- annoyance: dollar-equivalent cost of contacting (agent time, message fatigue, sleeping-dog risk)
     "ANNOYANCE": {
         "care_credit": 3.0, "loyalty_credit": 3.0, "keep_your_phone": 3.0, "right_size": 2.0,
@@ -101,7 +197,9 @@ CONFIG = {
     },
     "UPSELL_AFTER_PAIN_PENALTY": 25.0,   # extra annoyance for upsells right after bill shock / unresolved issues
     # --- costs not in the sandbox (synthetic)
-    "FIX_FIRST_CALLBACK_COST": 15.0,     # agent callback + ticket escalation, $
+    "FIX_FIRST_CALLBACK_COST": 15.0,     # agent callback + ticket escalation, $ (env TM_FIX_FIRST_CALLBACK_COST;
+                                         # sensitivity $8). v2: plausible vs Gartner assisted
+                                         # contact $8.01 (2019) / $13.50 median (~2024), ~1-2 contacts (RESEARCH.md s12)
     "LOYALTY_CREDIT_MONTHS": 12,         # open-ended $/mo credit valued over 12 months (sandbox API uses 12 too)
     "KYP_MONTHS": 6,                     # adapted keep-your-phone credit length (real promo pays 36 months
                                          # on a NEW line; we cap the retention version at 6 months)
@@ -111,9 +209,32 @@ CONFIG = {
     "SAVER_MAX_LINE_PEAK_GB": 10.0,      # Essentials -> Essentials Saver only for light users (every line's peak
                                          # <= 10 GB): Saver is the basic tier (max 2 lines, no watch/tablet lines)
     "PORT_OUT_ALWAYS_CONTACT": True,     # batch 7: a port-out inquiry never gets "do nothing": check-in (or the
-                                         # fix-first callback when an issue is open)
-    "STEP_UP_MARGIN": 0.80,              # share of incremental plan revenue that is margin
-    "DEVICE_UPGRADE_MARGIN": 80.0,       # $ margin on a device sale + new 24-month financing (synthetic)
+                                         # fix-first callback when an issue is open). v2: only when PORT_OUT_CONTACT
+                                         # allows it (see below).
+    # v2 PORT_OUT_CONTACT in {"off", "self_initiated_only", "all"}. OPEN DECISION (David); default "off".
+    #   The FCC's 2008 Verizon ruling (47 U.S.C. 222(b)) bars using ANOTHER CARRIER's port request to retain a
+    #   customer. Sandbox signal: account_signals.port_out_inquiry, "1 if the account asked about porting its number
+    #   away" (vendor/dubhacks/docs/data-dictionary.md: a customer-initiated inquiry proxy, NOT a carrier port
+    #   request; the sandbox has no carrier port-request field). So PORT_OUT_SIGNAL_ORIGIN = "self_initiated".
+    #   Default "all" (the signal is the customer's own port_out_inquiry). off: port-out accounts get no outreach. self_initiated_only / all: one save attempt, reported in
+    #   already_leaving_save_attempt, NEVER in the headline count or net (in_headline=False).
+    "PORT_OUT_CONTACT": "all",       # v2 default 'all' (Grok Bot): the sandbox signal is the customer's own inquiry
+    "PORT_OUT_SIGNAL_ORIGIN": "self_initiated",
+    # v2: an open unresolved support ticket (unresolved_90d >= 1) makes fix-first (or care credit + fix-first) the
+    #   ONLY allowed message type for the account (no upsell / other offers). FIX_FIRST_FORCE (David can flip):
+    #     "ev_positive" (default): contact only when the best fix-first option's own EV > 0, else silent with reason
+    #                              open_ticket_ev_le0 ("open ticket, fix-first expected to cost more than it saves").
+    #     "all_open":              contact every open-ticket account (forced; EV <= 0 contacts reported separately).
+    #   A port-out save attempt (when PORT_OUT_CONTACT allows) on an open-ticket account uses fix-first regardless.
+    "FIX_FIRST_FORCE": "ev_positive",
+    "STEP_UP_MARGIN": 0.50,              # share of incremental plan revenue that is margin. v2: 0.80 -> 0.50 = the
+                                         # service-margin upper bound (tm-models, scratch_models/family15/RESULTS.md
+                                         # s.A; RESEARCH.md s12-13). Gain = p_accept x delta x margin x
+                                         # KEPT_VALUE_MONTHS (19.338 discounted months, the $1,478 basis) instead of
+                                         # x 24 x (1 - p). ASSUMPTION.
+    "DEVICE_UPGRADE_MARGIN": 0.0,        # $ margin on a device sale. v2: 80 -> 0 (tm-models family15 s.B: equipment
+                                         # margin is ~0 or negative; sandbox device upgrades never pay). ASSUMPTION.
+    # No auto add-a-line: the engine has no add-a-line action (ACTIONS) and never adds lines on its own.
     # --- batch 4/5 (tm-strategy proposals + prompt-fit audit). All synthetic.
     "ENRICHMENT_IN_DECISIONS": False,   # PERMANENTLY OFF (tm-strategy A/B, strategy/ab_enrichment/RESULTS.md):
                                         # simulated enrichment (job change, income, kid age band, likely_kid_flag)
@@ -132,10 +253,13 @@ CONFIG = {
     "SAME_COVERAGE_RULE": True,         # an eligible same-features cheaper variant (55+/partner/community/4-line)
                                         # beats do-nothing, upsells, check-ins and cross-sells (restraint =
                                         # no upsell, not hiding savings). Problem-solving actions still win.
-    "LOCK_CUT": 0.50,                   # hazard cut while new promo credits / financing are paying out
-    "CHECK_IN_COST": 2.0,               # $ (message + light agent follow-up)
+    "LOCK_CUT": 0.25,                   # hazard cut while new promo credits / financing are paying out. v2: 0.50 ->
+                                        # 0.25 = research base (tm-models family15 s.B; RESEARCH.md s15). ASSUMPTION.
+    "CHECK_IN_COST": 2.0,               # $ (message + light agent follow-up). v2: only holds if digital: between
+                                        # Gartner self-service $0.10-1.84 and assisted $8-13.50 (RESEARCH.md s12)
     "PERK_MIN_STREAMING_HOURS": 20.0,   # streaming_hours_3m_avg that makes an unused perk relevant
-    "HINT_MARGIN": 0.30,                # share of Home Internet revenue that is margin
+    "HINT_MARGIN": 0.30,                # share of Home Internet revenue that is margin. TEAM ASSUMPTION (unsourced;
+                                        # bundle is off in v2, so it moves no pick)
     "QUIET_APP_SESSIONS": 3,            # app_sessions_30d at or below = went quiet
     # --- mock churn model (used only when real churn_scores.csv is missing)
     "MOCK_MEAN_MONTHLY_HAZARD": 0.0099,  # calibrate mock to 0.99%/month like tm-data's synthetic labels
@@ -144,6 +268,35 @@ if os.environ.get("TM_BILL_SHOCK_RELIEF_OVERRIDE") is not None:
     CONFIG["BILL_SHOCK_RELIEF_OVERRIDE"] = os.environ["TM_BILL_SHOCK_RELIEF_OVERRIDE"] not in ("0", "false", "False", "")
 if os.environ.get("TM_UPGRADE_GATE") is not None:
     CONFIG["UPGRADE_GATE"] = os.environ["TM_UPGRADE_GATE"] not in ("0", "false", "False", "")
+if os.environ.get("TM_FIELD_SAVE_RATE") is not None:
+    CONFIG["FIELD_SAVE_RATE"] = float(os.environ["TM_FIELD_SAVE_RATE"])
+if os.environ.get("TM_FIX_FIRST_CALLBACK_COST") is not None:
+    CONFIG["FIX_FIRST_CALLBACK_COST"] = float(os.environ["TM_FIX_FIRST_CALLBACK_COST"])
+if os.environ.get("TM_KEPT_VALUE_MONTHS") is not None:
+    CONFIG["KEPT_VALUE_MONTHS"] = float(os.environ["TM_KEPT_VALUE_MONTHS"])
+if os.environ.get("TM_PORT_OUT_CONTACT") is not None:
+    CONFIG["PORT_OUT_CONTACT"] = os.environ["TM_PORT_OUT_CONTACT"]
+if os.environ.get("TM_FIX_FIRST_FORCE") is not None:
+    CONFIG["FIX_FIRST_FORCE"] = os.environ["TM_FIX_FIRST_FORCE"]
+if os.environ.get("TM_PROFIT_GATE") is not None:
+    CONFIG["PROFIT_GATE"] = os.environ["TM_PROFIT_GATE"] not in ("0", "false", "False", "")
+
+
+def apply_field_save_rate(field: float | None = None) -> float:
+    """(Re)derive CONFIG['SAVE_RATE'] and the bill-shock credit boost from the base table. Returns the scale."""
+    if field is not None:
+        CONFIG["FIELD_SAVE_RATE"] = float(field)
+    k = CONFIG["FIELD_SAVE_RATE"] / CONFIG["SAVE_RATE_ANCHOR"]
+    CONFIG["SAVE_RATE"] = {a: {t: round(v * k, 6) for t, v in d.items()} for a, d in CONFIG["SAVE_RATE_BASE"].items()}
+    for a, d in CONFIG.get("SAVE_RATE_ABSOLUTE", {}).items():
+        CONFIG["SAVE_RATE"][a] = dict(d)
+    CONFIG["BILL_SHOCK_RELIEF"]["credit_save_boost"] = round(CONFIG["BILL_SHOCK_RELIEF"]["credit_save_boost_base"] * k, 6)
+    return k
+
+
+apply_field_save_rate()
+if os.environ.get("TM_UPSELL_RISK_GUARDRAIL") is not None:
+    CONFIG["UPSELL_RISK_GUARDRAIL"] = os.environ["TM_UPSELL_RISK_GUARDRAIL"] not in ("0", "false", "False", "")
 if os.environ.get("TM_ENABLE_RIGHT_SIZE") is not None:
     CONFIG["ENABLE_RIGHT_SIZE"] = os.environ["TM_ENABLE_RIGHT_SIZE"] not in ("0", "false", "False", "")
 
@@ -174,6 +327,40 @@ PROMO_FOR_ACTION = {
     "keep_your_phone": "PROMO-STUB-KEEP-YOUR-PHONE",
 }
 UPSELLS = ("step_up", "family_upgrade", "device_upgrade", "home_internet_bundle")
+PLAN_MOVES = ("variant_switch", "right_size")   # receipt-only in v2 (PLAN_MOVES_RECEIPT_ONLY)
+
+
+PLAN_STATUS: dict = {}   # plan sku -> sandbox plans.status (filled by choose())
+
+
+def port_out_allowed() -> bool:
+    """v2: may a port-out inquiry be contacted at all (one save attempt, outside the headline)?"""
+    m = CONFIG["PORT_OUT_CONTACT"]
+    assert m in ("off", "self_initiated_only", "all"), m
+    return m == "all" or (m == "self_initiated_only" and CONFIG["PORT_OUT_SIGNAL_ORIGIN"] == "self_initiated")
+
+
+def receipt_item(res: dict) -> dict:
+    """v2: the plan move shown on the receipt (no SMS). Same-features variant first (SAME_COVERAGE_RULE), else an
+    eligible right-size. Expected revenue given up = saving x P_ACCEPT (company side, customer benefit weight 0)."""
+    for a in PLAN_MOVES:
+        v = res.get(a, {})
+        if v.get("eligible"):
+            save = float(v.get("save", 0) or 0)
+            why = ("same plan features for less (same-coverage rule: always shown)" if a == "variant_switch"
+                   else "a smaller plan that fits their usage (shown, not texted: cheaper-plan outreach can backfire)")
+            # v2: limited-time target plans (sandbox plans.status). Neither plans nor promotions has an end-date
+            # field, so the engine cannot check the end date: the receipt says so.
+            lim = [k for k in str(v.get("skus", "")).split(";") if PLAN_STATUS.get(k.strip()) == "limited_time"]
+            tag = (" Limited-time plan: the end date isn't in our data, so check it's still offered before switching."
+                   if lim else "")
+            return {"receipt_action": a, "receipt_skus": v.get("skus", ""), "receipt_monthly_saving": round(save, 2),
+                    "receipt_expected_revenue_given_up_mo": round(save * CONFIG["P_ACCEPT"].get(a, 0.0), 2),
+                    "receipt_limited_time": bool(lim), "receipt_plan_end_date": "",
+                    "receipt_reason": f"Receipt only: {why}; saves ${save:.0f}/mo (synthetic).{tag}"}
+    return {"receipt_action": "", "receipt_skus": "", "receipt_monthly_saving": 0.0,
+            "receipt_expected_revenue_given_up_mo": 0.0, "receipt_limited_time": False, "receipt_plan_end_date": "",
+            "receipt_reason": ""}
 CREDIT_ACTIONS = ("care_credit", "loyalty_credit", "keep_your_phone", "care_credit_fix_first",
                   "bill_shock_price_lock")
 PROBLEM_ACTIONS = ("fix_first", "care_credit_fix_first", "care_credit", "bill_shock_price_lock")
@@ -482,12 +669,64 @@ def lock_value(p90: float, lock_months: float, existing_months: float, monthly_m
     return p_accept * gap * monthly_margin
 
 
+def right_size_backfire_rel() -> float:
+    """Relative churn increase from proactive cheaper-plan outreach (Ascarza et al. 2016: 6% -> 10%), x scale.
+    ASSUMPTION: applied to p_churn_90d in EV via right_size's (net) save rate."""
+    bf = CONFIG["RIGHT_SIZE_BACKFIRE"]
+    if not bf["enabled"]:
+        return 0.0
+    return (bf["treated_churn"] / bf["control_churn"] - 1.0) * bf["scale"]
+
+
+def upsell_risk_guard_reason(row: pd.Series) -> str:
+    """v2 guardrail (UPSELL_RISK_GUARDRAIL): plain-language reason no upsell is allowed, or ''."""
+    C = CONFIG
+    if not C["UPSELL_RISK_GUARDRAIL"]:
+        return ""
+    why = []
+    if bool(row.get("top_churn_decile", False)):
+        why.append(f"they are in our highest-risk {C['UPSELL_GUARD_TOP_RISK_SHARE']:.0%} of customers, "
+                   "so they get care, not a sales pitch")
+    n_sup = int(row.get("support_90d", 0) or 0)
+    if n_sup >= C["UPSELL_GUARD_MIN_SUPPORT_90D"]:
+        why.append(f"they contacted support {n_sup} times in 90 days, so we fix the experience before selling")
+    return ("upsell guardrail: " + " and ".join(why)) if why else ""
+
+
+def usage_unstable_reason(row: pd.Series) -> str:
+    """'' unless the account's monthly data use is volatile or declining (sandbox usage_monthly, read-only)."""
+    bf = CONFIG["RIGHT_SIZE_BACKFIRE"]
+    cv, ratio = row.get("usage_cv"), row.get("usage_trend_ratio")
+    if cv is not None and pd.notna(cv) and cv > bf["volatile_cv"]:
+        return f"their data use swings a lot month to month (variation {cv:.0%})"
+    if ratio is not None and pd.notna(ratio) and ratio < bf["declining_ratio"]:
+        return f"their data use is falling (last 3 months at {ratio:.0%} of the first 3)"
+    return ""
+
+
+def usage_stability(conn) -> pd.DataFrame:
+    """Account-level monthly data use (sum over lines) -> usage_cv, usage_trend_ratio. Needs
+    RIGHT_SIZE_BACKFIRE.min_usage_months months with data; else NaN (not excluded). Sandbox read-only."""
+    u = pd.read_sql("SELECT l.account_id, u.month, u.data_gb FROM usage_monthly u "
+                    "JOIN lines l ON l.line_id = u.line_id", conn)
+    a = u.groupby(["account_id", "month"])["data_gb"].sum().reset_index().sort_values(["account_id", "month"])
+    g = a.groupby("account_id")["data_gb"]
+    n = g.size()
+    mean = g.mean()
+    cv = g.std() / mean.replace(0, np.nan)
+    first3 = g.apply(lambda s: s.head(3).mean())
+    last3 = g.apply(lambda s: s.tail(3).mean())
+    ratio = last3 / first3.replace(0, np.nan)
+    ok = n >= CONFIG["RIGHT_SIZE_BACKFIRE"]["min_usage_months"]
+    return pd.DataFrame({"usage_cv": cv.where(ok), "usage_trend_ratio": ratio.where(ok)}).reset_index()
+
+
 def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) -> dict:
     C = CONFIG
     d = drivers(row)
     p = float(row["p_churn_90d"])
     margin_mo = row["service_revenue_cents"] / 100 * C["SERVICE_MARGIN"]
-    value = margin_mo * C["VALUE_HORIZON_MONTHS"]
+    value = margin_mo * C["KEPT_VALUE_MONTHS"]
     W = C["CUSTOMER_BENEFIT_WEIGHT"]
     plan_idx = plans.set_index("sku")
     cur_plan = plan_idx.loc[row["plan_sku"]]
@@ -520,6 +759,8 @@ def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) 
             r = rates["off_target"]
         if action in ("care_credit", "loyalty_credit", "keep_your_phone") and shock_relief:
             r += relief["credit_save_boost"]
+        if action == "right_size":
+            r -= right_size_backfire_rel()   # v2: Ascarza 2016 backfire, netted (can go negative)
         return r
 
     def add(action, eligible, cost, gain=0.0, detail="", why_not="", benefit=0.0, lock=0.0, lock_gross=0.0,
@@ -592,7 +833,12 @@ def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) 
         add("variant_switch", False, 0, why_not="disabled by ENABLE_RIGHT_SIZE" if not C["ENABLE_RIGHT_SIZE"]
             else "no cheaper discount variant / 4-line offer they qualify for")
     rs = right_size_option(row, plans) if C["ENABLE_RIGHT_SIZE"] else None
-    if rs is not None and (d["unresolved"] or d["network_pain"]):
+    bf = C["RIGHT_SIZE_BACKFIRE"]
+    usage_unstable = usage_unstable_reason(row) if (bf["enabled"] and bf["exclude_volatile_or_declining"]) else ""
+    if rs is not None and usage_unstable:
+        add("right_size", False, 0, why_not=(f"backfire guardrail: {usage_unstable}; a cheaper-plan nudge is most "
+                                             "likely to backfire here (Ascarza et al. 2016)"))
+    elif rs is not None and (d["unresolved"] or d["network_pain"]):
         # batch 7: a plan move is marketing; while a ticket / network issue is open we fix first
         add("right_size", False, 0, why_not="open support or network issue: fix first, plan savings after it closes")
     elif rs is not None:
@@ -608,6 +854,9 @@ def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) 
 
     # ---- upsell guardrails
     blocks = []
+    guard = upsell_risk_guard_reason(row)
+    if guard:
+        blocks.append(guard)
     if d["bill_shock_recent"]:
         blocks.append(f"bill-shock guardrail (bill rose {int(row['days_since_bill_shock'])} days ago, "
                       f"window {C['UPSELL_BLOCK_DAYS_AFTER_BILL_SHOCK']} days)")
@@ -632,7 +881,7 @@ def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) 
         add("step_up", False, 0, why_not=upsell_block or afford_block(su[1]))
     elif su is not None:
         plan, delta = su
-        gain = pa("step_up") * delta * C["STEP_UP_MARGIN"] * C["VALUE_HORIZON_MONTHS"] * (1 - p)
+        gain = pa("step_up") * delta * C["STEP_UP_MARGIN"] * C["KEPT_VALUE_MONTHS"]
         add("step_up", True, 0.0, gain=gain, detail=f"move to {plan['name']} (+${delta:.0f}/mo)", skus=plan["sku"])
         res["step_up"].update(plan_name=plan["name"], plan_sku=plan["sku"], delta=delta)
     else:
@@ -651,7 +900,7 @@ def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) 
     elif fam_ok:
         plan, delta = su
         paf = pa("family_upgrade")
-        gain = paf * delta * C["STEP_UP_MARGIN"] * C["VALUE_HORIZON_MONTHS"] * (1 - p)
+        gain = paf * delta * C["STEP_UP_MARGIN"] * C["KEPT_VALUE_MONTHS"]
         add("family_upgrade", True, 0.0, gain=gain,
             detail=f"move the family to {plan['name']} (+${delta:.0f}/mo; usage need; no trade-in bundled)",
             skus=plan["sku"])
@@ -666,7 +915,9 @@ def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) 
         add("step_up", False, 0, why_not="family plan with a child/teen line: the same move is the family upgrade")
 
     # ---- device upgrade (paid-off, trade-in eligible, 12+ months); lock-in = promo payout months
-    if row["n_upgrade_ready_lines"] > 0 and not gate_ok:
+    if row["n_upgrade_ready_lines"] > 0 and guard:
+        add("device_upgrade", False, 0, why_not=upsell_block)
+    elif row["n_upgrade_ready_lines"] > 0 and not gate_ok:
         add("device_upgrade", False, 0, why_not=gate_why)
     elif row["n_upgrade_ready_lines"] > 0 and upsell_block:
         add("device_upgrade", False, 0, why_not=upsell_block)
@@ -721,7 +972,7 @@ def evaluate_account(row: pd.Series, promos: pd.DataFrame, plans: pd.DataFrame) 
     # ---- perk reminder (no $, no brand names)
     ok = bool(d["streaming"] and isinstance(cur_plan["perks"], str) and "streaming-video-ads" in cur_plan["perks"]
               and p >= C["MIN_CREDIT_P_CHURN"])
-    add("perk_reminder", ok, 0.0, detail="remind them their plan includes a streaming video perk",
+    add("perk_reminder", ok, C["PERK_REMINDER_COST"], detail="remind them their plan includes a streaming video perk",
         why_not="no unused streaming perk / risk below 5%", skus=row["plan_sku"])
     # ---- Home Internet bundle (BUNDLE-HINT $15/mo with Home Internet Basic)
     hint = promos.loc["PROMO-STUB-BUNDLE-HINT"]
@@ -796,6 +1047,17 @@ def do_nothing_reason(row: pd.Series, ev: dict) -> tuple[str, str]:
     pct = _pct(row)
     if row["unresolved_90d"] > 0 or (row.get("network_unresolved_90d", 0) or 0) > 0:
         return "open_ticket", "Open ticket with support; no marketing until it's closed."
+    vsv = r.get("variant_switch", {})
+    if CONFIG["PLAN_MOVES_RECEIPT_ONLY"] and vsv.get("eligible"):
+        return "receipt_variant", (f"They qualify for the same plan features for ${vsv.get('save', 0):.0f}/month less; "
+                                   "it's on their receipt, so no text is needed.")
+    rsv = r.get("right_size", {})
+    if rsv.get("eligible") and (rsv.get("ev") or 0) <= 0 and right_size_backfire_rel() > 0:
+        bf = CONFIG["RIGHT_SIZE_BACKFIRE"]
+        return "plan_fit_held", (f"They could save ${rsv.get('save', 0):.0f}/month on a smaller plan, but unprompted "
+                                 f"cheaper-plan offers tend to backfire (a carrier field test saw churn rise from "
+                                 f"{bf['control_churn']:.0%} to {bf['treated_churn']:.0%}), so we don't text it; "
+                                 "it's on their receipt.")
     happy_caller = bool(row["avg_sentiment_90d"] > 0.2 and (row.get("support_90d", 0) or 0) > 0
                         and not d["shopping"] and not d["bill_shock_recent"])
 
@@ -946,7 +1208,7 @@ DETAILS: dict[str, dict] = {}  # account_id -> evaluate_account() output from th
 PICK_OVERRIDE = [""]  # override applied by the last pick(): "", "same_coverage" or "port_out"
 
 
-def pick(res: dict, key: str = "ev", exclude: tuple = (), port_out: bool = False
+def pick(res: dict, key: str = "ev", exclude: tuple = (), port_out: bool = False, open_ticket: bool = False
          ) -> tuple[str, float, tuple | None, tuple | None]:
     """Chooser: best eligible EV > 0 else do nothing; then the same-coverage rule. Returns
     (action, ev, runner_up, best_other)."""
@@ -964,11 +1226,27 @@ def pick(res: dict, key: str = "ev", exclude: tuple = (), port_out: bool = False
             and action not in PROBLEM_ACTIONS and action not in ("variant_switch", "right_size")):
         action, evv, override = "variant_switch", vs[key], "same_coverage"
     # batch 7: a port-out inquiry never gets silence: check-in, or fix-first when a ticket is open
-    if port_out and CONFIG["PORT_OUT_ALWAYS_CONTACT"] and action == "do_nothing":
+    po_forced = bool(port_out and CONFIG["PORT_OUT_ALWAYS_CONTACT"] and port_out_allowed())
+    if po_forced and action == "do_nothing":
         for alt in ("check_in", "fix_first"):
             if res.get(alt, {}).get("eligible") and alt not in exclude:
                 action, evv, override = alt, res[alt][key], "port_out"
                 break
+    # v2: open unresolved ticket -> fix-first types are the ONLY allowed message (FIX_FIRST_FORCE decides forcing)
+    if open_ticket:
+        mode = CONFIG["FIX_FIRST_FORCE"]
+        assert mode in ("ev_positive", "all_open"), mode
+        ff = [(a, res[a][key]) for a in ("care_credit_fix_first", "fix_first")
+              if res.get(a, {}).get("eligible") and a not in exclude]
+        best_ff = max(ff, key=lambda t: t[1]) if ff else None
+        if best_ff is not None and (best_ff[1] > 0 or mode == "all_open" or po_forced):
+            if best_ff[1] <= 0:     # forced: all_open, or the port-out save attempt
+                override = "port_out" if (po_forced and mode == "ev_positive") else "open_ticket"
+            elif best_ff[0] != action:   # EV > 0, but the open ticket restricted the message type
+                override = "open_ticket_fix_only"
+            action, evv = best_ff
+        else:
+            action, evv, override = "do_nothing", 0.0, "open_ticket_ev_le0"
     rest = [s for s in scored if s[0] != action]
     runner = ("do_nothing", 0.0) if action != "do_nothing" and (not rest or rest[0][1] < 0) else \
         (rest[0] if rest else None)
@@ -979,27 +1257,47 @@ def pick(res: dict, key: str = "ev", exclude: tuple = (), port_out: bool = False
 def choose(df: pd.DataFrame, promos: pd.DataFrame, plans: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     rows, cands = [], []
     DETAILS.clear()
+    PLAN_STATUS.clear()
+    PLAN_STATUS.update(dict(zip(plans["sku"], plans["status"])) if "status" in plans.columns else {})
     for _, row in df.iterrows():
         ev = evaluate_account(row, promos, plans)
         DETAILS[row["account_id"]] = ev
         res = ev["res"]
         po = bool(row["port_out_inquiry"] == 1)
+        ot = bool((row.get("unresolved_90d", 0) or 0) >= 1)
         # balance-netting check: winner if lock-in were NOT netted against existing financing
         gross_res = {a: ({**v, "ev": v.get("ev_gross_lock", v["ev"])} if v["eligible"] else v) for a, v in res.items()}
-        gross_action = pick(gross_res, port_out=po)[0]
-        action, evv, runner, best_other = pick(res, port_out=po)
+        pm = PLAN_MOVES if CONFIG["PLAN_MOVES_RECEIPT_ONLY"] else ()
+        gross_action = pick(gross_res, port_out=po, exclude=pm, open_ticket=ot)[0]
+        action, evv, runner, best_other = pick(res, port_out=po, exclude=pm, open_ticket=ot)
         override = PICK_OVERRIDE[0]
+        save_attempt = ""
+        if po and not port_out_allowed():     # v2 PORT_OUT_CONTACT=off: no outreach on a port-out inquiry
+            runner, action, evv, override = (action, evv), "do_nothing", 0.0, "port_out_off"
+        elif po and action != "do_nothing":   # one save attempt, never in the headline
+            save_attempt = ACTION_LABEL[action]
+        gated = bool(CONFIG["PROFIT_GATE"] and action != "do_nothing" and not override and evv <= 0)
+        if gated:   # defensive: pick() already returns do nothing when no EV > 0, so this should never fire
+            runner, action, evv = (action, evv), "do_nothing", 0.0
         row = row.copy()
         row["_variant_ok"] = res["variant_switch"]["eligible"]
         out = {
             "account_id": row["account_id"], "action": ACTION_LABEL[action], "action_code": action,
             "expected_value": round(evv, 2), "reason": reason_text(action, row, ev, best_other),
-            "offer_segment": SEGMENT[action], "why_this_offer": why_this_offer(action, row, ev),
+            "offer_segment": SEGMENT[action],
+            "why_this_offer": ("Stay silent: expected to cost more than it saves." if gated
+                               else ("Stay silent: they asked about porting their number out; we don't contact on "
+                                     "that signal until the port-out policy is decided (PORT_OUT_CONTACT=off).")
+                               if override == "port_out_off"
+                               else "Stay silent: open ticket, fix-first expected to cost more than it saves."
+                               if override == "open_ticket_ev_le0" else why_this_offer(action, row, ev)),
             "lock_in_months": int(res[action].get("lock_in_months", 0) or 0) if res[action]["eligible"] else 0,
             "drivers": driver_list(row, ev["drivers"]),
             "promo_skus": res[action].get("skus", "") if action != "do_nothing" else "",
             "action_detail": res[action]["detail"],
-            "do_nothing_reason": do_nothing_reason(row, ev)[0] if action == "do_nothing" else "",
+            "do_nothing_reason": ("profit_gate" if gated else override if override in ("port_out_off",
+                                  "open_ticket_ev_le0") else do_nothing_reason(row, ev)[0])
+                                 if action == "do_nothing" else "",
             "pick_override": override,
             "customer_monthly_delta": customer_monthly_delta(action, res[action]),
             "runner_up_action": ACTION_LABEL[runner[0]] if runner else "",
@@ -1012,7 +1310,16 @@ def choose(df: pd.DataFrame, promos: pd.DataFrame, plans: pd.DataFrame) -> tuple
             "days_since_bill_shock": row["days_since_bill_shock"],
             "eligible_actions": ";".join(a for a in ACTIONS if res[a]["eligible"]),
             "action_if_lock_not_netted": gross_action,
+            "channel": ("save_attempt" if save_attempt else "sms") if action != "do_nothing" else "none",
+            "already_leaving_save_attempt": (f"already leaving, one save attempt: {save_attempt}"
+                                             if save_attempt else ""),
+            # headline contacts: texted, not a port-out save attempt (forced EV<=0 rows are counted separately)
+            "in_headline": bool(action != "do_nothing" and not po),
         }
+        out.update(receipt_item(res) if pm else {"receipt_action": "", "receipt_skus": "", "receipt_monthly_saving": 0.0,
+                                                 "receipt_expected_revenue_given_up_mo": 0.0,
+                                                 "receipt_limited_time": False, "receipt_plan_end_date": "",
+                                                 "receipt_reason": ""})
         for a in ACTIONS[1:]:
             out[f"ev_{a}"] = res[a]["ev"]
         rows.append(out)
@@ -1058,6 +1365,13 @@ def prepare(write_line_tradein: bool = True):
         df["p_churn_90d"] = df["p_churn_90d"].fillna(df["p_churn_90d"].median())
     print(f"churn scores: {source}")
     _CACHE["source"] = source
+
+    # v2: top churn decile (upsell guardrail) and usage stability (right-size backfire exclusion)
+    k = int(round(CONFIG["UPSELL_GUARD_TOP_RISK_SHARE"] * len(df)))
+    df["top_churn_decile"] = df["account_id"].isin(
+        df.sort_values(["p_churn_90d", "account_id"], ascending=[False, True])["account_id"].head(k))
+    df = df.drop(columns=[c for c in ("usage_cv", "usage_trend_ratio") if c in df.columns]) \
+        .merge(usage_stability(conn), on="account_id", how="left")
 
     plans = cat["plans"]
     df["all_low_use_premium_any"] = df["um_plan_overpay"]  # sandbox misfit rule (all lines < 5 GB on premium)
@@ -1121,7 +1435,39 @@ def main() -> pd.DataFrame:
     assert chosen.index.is_unique and len(chosen) == len(offers), "candidates: not exactly one chosen per account"
     assert (chosen.reindex(offers["account_id"]).values == offers["action"].values).all(), "candidates != offers"
     cands.to_csv(OUT_DIR / "offer_candidates.csv", index=False)
+    run_engine_rules()
     return offers
+
+
+def run_engine_rules(out_dir: Path | None = None) -> bool:
+    """tm-models' engine rules (experiments/engine_rules: guardrail, timing, holdout flag) on this run's outputs,
+    then the one-decision column and the UI file. Never breaks offers.py: any import/run error logs a warning.
+    Holdout is a FLAG only unless env TM_HOLDOUT (e.g. 0.2) is set (one_decision.py). decisions.csv / options.csv
+    come from decisions_out.py (contact set = the policy guardrail's 184, tm-models' ledger joined)."""
+    out_dir = Path(out_dir or OUT_DIR)
+    try:
+        if str(HERE.parent) not in sys.path:
+            sys.path.insert(0, str(HERE.parent))
+        from experiments.engine_rules.apply_rules import run as engine_rules_run
+        kw = {"holdout_share": float(os.environ["TM_HOLDOUT"])} if os.environ.get("TM_HOLDOUT") else {}
+        ow, rules, _ = engine_rules_run(engine_dir=out_dir, policy="engine", save_rate_scale=1.0, value_scale=1.0,
+                                        **kw)
+        ow.to_csv(out_dir / "offers_with_rules.csv", index=False)
+        rules[["account_id", "contact_ok", "block_reason", "why_line", "timing", "wait_until", "holdout",
+               "holdout_note", "text_send"]].to_csv(out_dir / "guardrail.csv", index=False)
+        rules.to_csv(out_dir / "guardrail_detail.csv", index=False)
+    except Exception as e:  # noqa: BLE001  (missing module, missing inputs, ...)
+        print(f"WARNING: engine rules skipped ({type(e).__name__}: {e}); offers.csv is unchanged")
+        return False
+    try:
+        import one_decision as od
+        import decisions_out as dout
+        od.main(["--out", str(out_dir)])
+        dout.main(["--out", str(out_dir)])
+    except Exception as e:  # noqa: BLE001
+        print(f"WARNING: one-decision / UI file skipped ({type(e).__name__}: {e})")
+        return False
+    return True
 
 
 if __name__ == "__main__":

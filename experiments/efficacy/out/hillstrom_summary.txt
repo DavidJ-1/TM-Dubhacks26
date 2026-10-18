@@ -1,0 +1,249 @@
+
+=== Hillstrom outcome: visit (REAL randomized retail e-mail data, n=64000) ===
+arm means: none 0.1062, mens 0.1828, womens 0.1514
+outcome    arm                                model    qini   ci_lo  ci_hi  diff_vs_response_lo  diff_vs_response_hi
+  visit   mens                               random -0.0007 -0.0139 0.0138              -0.0478              -0.0076
+  visit   mens response ranking (ignores treatment)  0.0285  0.0143 0.0448               0.0000               0.0000
+  visit   mens                         T-learner LR  0.0083 -0.0081 0.0221              -0.0355              -0.0047
+  visit   mens          S-learner LR (interactions)  0.0084 -0.0081 0.0223              -0.0357              -0.0040
+  visit   mens                        T-learner GBM  0.0119 -0.0023 0.0275              -0.0356               0.0000
+  visit   mens                        X-learner GBM -0.0007 -0.0147 0.0151              -0.0473              -0.0124
+  visit womens                               random  0.0023 -0.0103 0.0177              -0.0309               0.0076
+  visit womens response ranking (ignores treatment)  0.0128 -0.0039 0.0292               0.0000               0.0000
+  visit womens                         T-learner LR  0.0587  0.0440 0.0731               0.0246               0.0656
+  visit womens          S-learner LR (interactions)  0.0599  0.0450 0.0738               0.0268               0.0670
+  visit womens                        T-learner GBM  0.0585  0.0467 0.0713               0.0241               0.0631
+  visit womens                        X-learner GBM  0.0594  0.0468 0.0728               0.0254               0.0670
+outcome        model                      policy  value  ci_lo  ci_hi  diff_vs_single_best_lo  diff_vs_single_best_hi  share_mens  share_womens  share_skip
+  visit T-learner LR                   no e-mail 0.1060 0.1016 0.1100                 -0.0837                 -0.0707      0.0000        0.0000      1.0000
+  visit T-learner LR                men's to all 0.1825 0.1769 0.1878                  0.0000                  0.0000      1.0000        0.0000      0.0000
+  visit T-learner LR              women's to all 0.1518 0.1466 0.1564                 -0.0375                 -0.0231      0.0000        1.0000      0.0000
+  visit T-learner LR         single best message 0.1825 0.1769 0.1878                  0.0000                  0.0000      1.0000        0.0000      0.0000
+  visit T-learner LR             matched message 0.1830 0.1778 0.1877                 -0.0045                  0.0049      0.6764        0.3236      0.0000
+  visit T-learner LR matched or skip if negative 0.1830 0.1778 0.1877                 -0.0045                  0.0049      0.6764        0.3236      0.0000
+  visit T-learner LR                  random arm 0.1458 0.1405 0.1506                 -0.0441                 -0.0312      0.3328        0.3329      0.3343
+
+=== Hillstrom outcome: conversion (REAL randomized retail e-mail data, n=64000) ===
+arm means: none 0.0057, mens 0.0125, womens 0.0088
+   outcome    arm                                model    qini   ci_lo  ci_hi  diff_vs_response_lo  diff_vs_response_hi
+conversion   mens                               random -0.0180 -0.0769 0.0358              -0.1618              -0.0013
+conversion   mens response ranking (ignores treatment)  0.0535  0.0116 0.1191               0.0000               0.0000
+conversion   mens                         T-learner LR -0.0228 -0.0908 0.0362              -0.1643              -0.0144
+conversion   mens          S-learner LR (interactions) -0.0087 -0.0740 0.0547              -0.1400              -0.0120
+conversion   mens                        T-learner GBM  0.0502 -0.0135 0.1185              -0.0725               0.0745
+conversion   mens                        X-learner GBM  0.0108 -0.0555 0.0780              -0.1092               0.0278
+conversion womens                               random -0.0404 -0.1082 0.0171              -0.1269               0.0532
+conversion womens response ranking (ignores treatment) -0.0117 -0.0824 0.0530               0.0000               0.0000
+conversion womens                         T-learner LR  0.0856  0.0106 0.1481              -0.0149               0.1907
+conversion womens          S-learner LR (interactions)  0.0760 -0.0017 0.1437              -0.0253               0.1848
+conversion womens                        T-learner GBM  0.0638 -0.0032 0.1273              -0.0155               0.1630
+conversion womens                        X-learner GBM  0.0707 -0.0009 0.1346              -0.0196               0.1769
+   outcome        model                      policy  value  ci_lo  ci_hi  diff_vs_single_best_lo  diff_vs_single_best_hi  share_mens  share_womens  share_skip
+conversion T-learner LR                   no e-mail 0.0057 0.0046 0.0068                 -0.0086                 -0.0052      0.0000        0.0000      1.0000
+conversion T-learner LR                men's to all 0.0125 0.0112 0.0141                  0.0000                  0.0000      1.0000        0.0000      0.0000
+conversion T-learner LR              women's to all 0.0089 0.0076 0.0099                 -0.0060                 -0.0019      0.0000        1.0000      0.0000
+conversion T-learner LR         single best message 0.0125 0.0112 0.0141                  0.0000                  0.0000      1.0000        0.0000      0.0000
+conversion T-learner LR             matched message 0.0123 0.0110 0.0137                 -0.0011                  0.0007      0.8022        0.1978      0.0000
+conversion T-learner LR matched or skip if negative 0.0121 0.0107 0.0134                 -0.0013                  0.0005      0.7972        0.1973      0.0056
+conversion T-learner LR                  random arm 0.0090 0.0079 0.0104                 -0.0049                 -0.0019      0.3328        0.3329      0.3343
+
+Sleeping dogs:
+[
+ {
+  "outcome": "visit",
+  "model": "T-learner LR",
+  "share_negative_best_msg": 0.0,
+  "share_ci": [
+   0.0,
+   0.0
+  ],
+  "n_flagged": 0,
+  "share_negative_for_some_msg": 0.090875,
+  "observed_uplift_in_flagged": null,
+  "observed_uplift_ci": null,
+  "wrong_msg_obs_uplift": {
+   "mens": null,
+   "womens": 0.01837274078198975
+  },
+  "wrong_msg_share": {
+   "mens": 0.0,
+   "womens": 0.090875
+  }
+ },
+ {
+  "outcome": "visit",
+  "model": "S-learner LR (interactions)",
+  "share_negative_best_msg": 0.0,
+  "share_ci": [
+   0.0,
+   0.0
+  ],
+  "n_flagged": 0,
+  "share_negative_for_some_msg": 0.09684375,
+  "observed_uplift_in_flagged": null,
+  "observed_uplift_ci": null,
+  "wrong_msg_obs_uplift": {
+   "mens": null,
+   "womens": 0.01370444573641788
+  },
+  "wrong_msg_share": {
+   "mens": 0.0,
+   "womens": 0.09684375
+  }
+ },
+ {
+  "outcome": "visit",
+  "model": "X-learner GBM",
+  "share_negative_best_msg": 0.0,
+  "share_ci": [
+   0.0,
+   0.0
+  ],
+  "n_flagged": 0,
+  "share_negative_for_some_msg": 0.031828125,
+  "observed_uplift_in_flagged": null,
+  "observed_uplift_ci": null,
+  "wrong_msg_obs_uplift": {
+   "mens": null,
+   "womens": 0.009432280945634058
+  },
+  "wrong_msg_share": {
+   "mens": 0.0,
+   "womens": 0.031828125
+  }
+ },
+ {
+  "outcome": "visit",
+  "model": "T-learner GBM",
+  "share_negative_best_msg": 0.0035,
+  "share_ci": [
+   0.0030773437500000002,
+   0.003937890625
+  ],
+  "n_flagged": 224,
+  "share_negative_for_some_msg": 0.1209375,
+  "observed_uplift_in_flagged": 0.03125,
+  "observed_uplift_ci": [
+   -0.0499471816846191,
+   0.1156435612353833
+  ],
+  "wrong_msg_obs_uplift": {
+   "mens": 0.051854319342660465,
+   "womens": 0.019503603273855696
+  },
+  "wrong_msg_share": {
+   "mens": 0.00446875,
+   "womens": 0.11996875
+  }
+ },
+ {
+  "outcome": "conversion",
+  "model": "T-learner LR",
+  "share_negative_best_msg": 0.0055625,
+  "share_ci": [
+   0.004983984375,
+   0.006205078125000001
+  ],
+  "n_flagged": 356,
+  "share_negative_for_some_msg": 0.18975,
+  "observed_uplift_in_flagged": 0.020689686130862597,
+  "observed_uplift_ci": [
+   0.005294210648884014,
+   0.03999351170403802
+  ],
+  "wrong_msg_obs_uplift": {
+   "mens": 0.03496503496503497,
+   "womens": -0.0007787497411749899
+  },
+  "wrong_msg_share": {
+   "mens": 0.006734375,
+   "womens": 0.188578125
+  }
+ },
+ {
+  "outcome": "conversion",
+  "model": "S-learner LR (interactions)",
+  "share_negative_best_msg": 0.002125,
+  "share_ci": [
+   0.001765625,
+   0.00253125
+  ],
+  "n_flagged": 136,
+  "share_negative_for_some_msg": 0.167890625,
+  "observed_uplift_in_flagged": 0.04124149659863945,
+  "observed_uplift_ci": [
+   0.016795977011494254,
+   0.06751912489133584
+  ],
+  "wrong_msg_obs_uplift": {
+   "mens": 0.03278688524590164,
+   "womens": -0.0007901972680603598
+  },
+  "wrong_msg_share": {
+   "mens": 0.002703125,
+   "womens": 0.1673125
+  }
+ },
+ {
+  "outcome": "conversion",
+  "model": "X-learner GBM",
+  "share_negative_best_msg": 0.005171875,
+  "share_ci": [
+   0.00459296875,
+   0.00570390625
+  ],
+  "n_flagged": 331,
+  "share_negative_for_some_msg": 0.07221875,
+  "observed_uplift_in_flagged": 0.009952366474105606,
+  "observed_uplift_ci": [
+   -0.006472259848159547,
+   0.031279534056033044
+  ],
+  "wrong_msg_obs_uplift": {
+   "mens": -0.0007494145199063232,
+   "womens": 0.0003516631652981713
+  },
+  "wrong_msg_share": {
+   "mens": 0.00796875,
+   "womens": 0.069421875
+  }
+ },
+ {
+  "outcome": "conversion",
+  "model": "T-learner GBM",
+  "share_negative_best_msg": 0.037390625,
+  "share_ci": [
+   0.035950390625,
+   0.038720703125000006
+  ],
+  "n_flagged": 2393,
+  "share_negative_for_some_msg": 0.186375,
+  "observed_uplift_in_flagged": 0.0047217128964538455,
+  "observed_uplift_ci": [
+   -0.0028472608651275875,
+   0.010441320132813384
+  ],
+  "wrong_msg_obs_uplift": {
+   "mens": 0.005510694807027809,
+   "womens": -4.6624326749863595e-05
+  },
+  "wrong_msg_share": {
+   "mens": 0.045734375,
+   "womens": 0.17803125
+  }
+ }
+]
+
+Segments (T-learner LR, threshold 2 points):
+{
+ "visit": {
+  "persuadable": 1.0
+ },
+ "conversion": {
+  "lost cause": 0.4999,
+  "sure thing": 0.4913,
+  "persuadable": 0.0088
+ }
+}
+
+runtime 70s, B=200

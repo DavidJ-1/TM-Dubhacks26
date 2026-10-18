@@ -7,16 +7,35 @@ DubHacks '26, T-Mobile track. A Python console that ranks who is likely to leave
 ## Run
 
 ```bash
-make run
+make setup && .venv/bin/streamlit run app/scroll_app.py --server.port 8501
 ```
 
-That creates a virtualenv, installs the Python dependencies, clones the judge sandbox if it is not already in `vendor/dubhacks`, and starts Streamlit at <http://localhost:8501>.
+On Windows, from the repo root:
+
+```bat
+.venv\Scripts\pip install -r requirements.txt -r app/requirements.txt
+.venv\Scripts\streamlit run app/scroll_app.py
+```
+
+This is the app: the scroll page at <http://localhost:8501> (money shown; add `?money=0` to hide company dollars). `make setup` creates a virtualenv, installs the Python dependencies and clones the judge sandbox if it is not already in `vendor/dubhacks`. `make run` starts the same scroll page.
+
+The older chart page (`app/streamlit_app.py`) is retired; its figures are out of date. The Retention Console (`app/console_app.py`) is still in the repo.
 
 ```bash
 make test
 ```
 
 Python 3.11 or newer. The stack is pandas, scikit-learn, and Streamlit. There is no JavaScript frontend.
+
+## Live what-if (this branch)
+
+Open the scroll page and press **Live what-if** (customer #02363). Each **Next event** press adds one scripted event
+(app login, dropped call with an open coverage chat, competitor-site visit, question about moving their number); **Reset**
+clears it. The risk, the reason that moved and the decision come from `data/live_events/live_events.csv`, precomputed
+offline by `scripts/live_events.py`: the same Model A rescoring the app uses, the offer engine rerun on the edited row,
+and the do-not-contact guardrail rerun over the whole book with only this customer swapped (save-rate scale frozen, so
+no other account moves; the week's 184 messages and dollars stay as they are). Rebuild with
+`DUBHACKS_DB=vendor/dubhacks/data/sandbox.db python3 scripts/live_events.py --write` (sandbox opened read-only).
 
 ## Where the data comes from
 
