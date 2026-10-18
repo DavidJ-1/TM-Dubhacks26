@@ -179,7 +179,9 @@ Persona golden tests: `tests/test_persona_golden.py` (42 personas).
 - **Honest upsell acceptance.** `P_ACCEPT` step_up / device_upgrade / family_upgrade 0.25 / 0.15 / 0.20 -> **0.04**.
   No carrier publishes offer-acceptance rates; the closest real figures are overall postpaid upgrade rates (AT&T
   3.0-4.7%/quarter, Verizon 2.6% 2Q26), which include organic upgrades, so 4% is a **ceiling**, not a measured
-  effect. right_size 0.45, variant_switch 0.70, home_internet_bundle 0.04 stay as **uncited assumptions**.
+  effect. right_size 0.45 -> **0.03** (cited trials 1-13%: Ascarza 2016 Table 4, Ofgem CMOL/CMOC; range 0.02-0.13).
+  variant_switch 0.70 -> **0.10** (customer has to act; Ascarza 2016 1.5%, Ofgem 2017 3.4%, Ofgem 2018 collective
+  switch 27% upper; range 0.03-0.27; still forced by SAME_COVERAGE_RULE). home_internet_bundle 0.04 stays uncited.
   Effect: chosen-upsell gain $24.9k -> $4.5k; the action mix does not change (upsells cost nothing but annoyance).
 - **Upsell risk guardrail** (`UPSELL_RISK_GUARDRAIL`, default ON; env `TM_UPSELL_RISK_GUARDRAIL=0`): no step-up,
   device / family upgrade or Home Internet bundle for the top churn decile (by p_churn_90d) or 3+ support contacts in

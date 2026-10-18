@@ -107,9 +107,25 @@ CONFIG = {
         "device_upgrade":       0.04,  # cited ceiling (upgrade-rate proxy above); was 0.15
         "family_upgrade":       0.04,  # cited ceiling (upgrade-rate proxy above); was 0.20
         "home_internet_bundle": 0.04,  # UNCITED assumption (unchanged; no public bundle take-rate found)
-        "right_size":           0.45,  # UNCITED assumption (unchanged; RESEARCH.md: "not benchmarked")
-        "variant_switch":       0.70,  # UNCITED assumption (unchanged; RESEARCH.md: "likely optimistic")
+        "right_size":           0.03,  # ASSUMPTION, cited base (was 0.45, no public support). Randomized trials
+                                       # land 1-13%: Ascarza et al. 2016 wireless trial (54,089 customers, call +
+                                       # $15/mo credit) 1.5% accepted, 9.6% changed plans vs 6.5% control (Table 4,
+                                       # https://evaascarza.com/papers/ascarza_iyengar_schleicher_16.pdf); Ofgem
+                                       # cheaper-deal letters 1.0% -> 2.4-3.4%, 2.9% -> 6.8-7.5% with a reminder
+                                       # (https://www.ofgem.gov.uk/sites/default/files/docs/2017/11/cmol_report_0.pdf,
+                                       # https://www.ofgem.gov.uk/sites/default/files/docs/2019/09/cmoc_report_final_updated_template_0.pdf);
+                                       # 3+ yr default-tariff customers 6.8% -> 12-13%. Range: RIGHT_SIZE_P_ACCEPT_RANGE.
+        "variant_switch":       0.10,  # ASSUMPTION / SYNTHETIC (was 0.70, uncited). Customer-has-to-act framing
+                                       # (our texts ask them to switch; nothing auto-applies). Ascarza et al. 2016
+                                       # 1.5% (https://evaascarza.com/papers/ascarza_iyengar_schleicher_16.pdf);
+                                       # Ofgem 2017 cheaper-deal letters 3.4%
+                                       # (https://www.ofgem.gov.uk/sites/default/files/docs/2017/11/cmol_report_0.pdf);
+                                       # Ofgem 2018 collective switch 27% as the upper bound
+                                       # (https://www.ofgem.gov.uk/press-release/eight-times-many-people-get-better-deal-ofgems-collective-switch-trial).
+                                       # Still forced by SAME_COVERAGE_RULE, so this moves reported value, not picks.
     },
+    "VARIANT_SWITCH_P_ACCEPT_RANGE": (0.03, 0.27),   # sensitivity range (sources above)
+    "RIGHT_SIZE_P_ACCEPT_RANGE": (0.02, 0.13),   # sensitivity range for right_size acceptance (sources above)
     # --- v2 upsell guardrail: no upsell (step-up, device / family upgrade, Home Internet bundle) for the
     #     riskiest customers or those who keep contacting support. They need care, not a sales pitch.
     "UPSELL_RISK_GUARDRAIL": True,      # named switch, default ON. Env TM_UPSELL_RISK_GUARDRAIL=0 to turn off.
