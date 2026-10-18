@@ -981,6 +981,81 @@ def _options_html(r, candidates, nv, stop, options=None) -> str:
     return head + f"<div style='max-height:180px;overflow:auto;border-top:1px solid #111;margin-bottom:16px'>{rows}</div>"
 
 
+CSS_LIVE = """
+.o-live{border:1px solid var(--ink);background:#fff;margin:4px 0 14px}
+.o-live .hd{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--ink);padding:10px 14px}
+.o-live .chips{display:flex;flex-wrap:wrap;gap:8px;padding:12px 14px;border-bottom:1px solid var(--ink);min-height:52px;align-items:center}
+.o-live .chip{border:1px solid var(--ink);padding:5px 10px;font:400 13px 'SM'}
+.o-live .chip.new{background:var(--ink);color:#fff}
+.o-live .chip.todo{border-style:dashed;color:var(--muted);border-color:var(--muted)}
+.o-live .row{display:grid;grid-template-columns:1fr 1.25fr 1.5fr}
+.o-live .cell{padding:12px 14px;border-right:1px solid var(--ink)}
+.o-live .cell:last-child{border-right:0}
+.o-live .num{font:500 44px/1 'SG';letter-spacing:-.02em}
+.o-live .num small{font-size:20px}
+.o-live .delta{font:400 13px 'SM';color:var(--muted);margin-top:6px}
+.o-live .delta.up{color:var(--mag)}
+.o-live .txt{font:400 17px/1.35 'SG';margin-top:6px}
+.o-live .card{padding:0}
+.o-live .card .pk{font:500 26px/1.1 'SG';padding:12px 14px 6px}
+.o-live .card .pk.flip{background:var(--mag);color:#fff;padding:14px 14px 10px}
+.o-live .card .ws{font:400 15px/1.35 'SG';padding:6px 14px 12px}
+.o-live .ft{border-top:1px solid var(--ink);padding:8px 14px;font:400 12px 'SM';color:var(--muted)}
+"""
+
+
+def _live_go(state_key: str, i: int) -> None:
+    st.session_state[state_key] = i
+
+
+def render_live(rows: pd.DataFrame, *, show_money: bool = True, key: str = "orbit") -> None:
+    """'What if this happens next': a manual Next event / Reset strip over precomputed rows (one per event). Each press
+    adds one event; the risk, the reason that moved and the pick come from the rows as given (no math here)."""
+    rows = rows.sort_values("step").reset_index(drop=True)
+    acc = str(rows.account_id.iloc[0])
+    sk = f"{key}_live_{acc}"
+    n = len(rows) - 1
+    i = max(0, min(int(st.session_state.get(sk, 0)), n))
+    cur, first = rows.iloc[i], rows.iloc[0]
+    prev = rows.iloc[i - 1] if i > 0 else cur
+    st.markdown(f"<style>{CSS_LIVE}</style>", unsafe_allow_html=True)
+    chips = "".join(f"<span class='chip{' new' if j == i else ''}'>{j:02d} · {esc(str(rows.event_label[j]))}</span>"
+                    for j in range(1, i + 1))
+    chips += "".join(f"<span class='chip todo'>{j:02d} · ?</span>" for j in range(i + 1, n + 1))
+    r_now, r_prev = float(cur.risk) * 100, float(prev.risk) * 100
+    d = r_now - r_prev
+    delta = ("starting point" if i == 0 else f"{'+' if d >= 0 else '−'}{abs(d):.1f} pts vs before · was {pct(float(first.risk) * 100)} at the start")
+    if i == 0:
+        what = "Nothing new yet. Press Next event to see what happens."
+        moved = "Today's top reason: " + str(cur.reason_1 or "")
+    else:
+        what = str(cur.event_line or "")
+        moved = str(cur.reason_changed or "") or "No single reason stands out."
+    flipped = str(cur.pick) != str(first.pick)
+    pick = "Do nothing. No message is sent." if str(cur.pick) == "silent" else f"Send a {esc(str(cur.pick_label))}."
+    ev = ""
+    if show_money and str(cur.pick) == "message" and pd.notna(cur.get("policy_ev_usd")):
+        ev = f"<div class='ws' style='padding-top:0;color:{MUTED};font-size:13px'>Expected value, this customer only: +${float(cur.policy_ev_usd):,.2f}</div>"
+    note = ("This customer only: the week's totals above don't change."
+            if not show_money else "This customer only: the week's message count and dollars above don't change.")
+    st.markdown(f"""<div class='o-live'><div class='hd'><span class='o-ph' style='margin:0'>What if this happens next</span>
+<span class='o-lbl'>event {i} of {n}</span></div>
+<div class='chips'>{chips}</div>
+<div class='row'>
+<div class='cell'><div class='o-lbl'>90-day churn risk</div><div class='num'>{pct(r_now)[:-1]}<small>%</small></div>
+<div class='delta {"up" if d > 0 else ""}'>{esc(delta)}</div></div>
+<div class='cell'><div class='o-lbl'>{"What happened" if i else "Right now"}</div><div class='txt'>{esc(what)}</div>
+<div class='o-lbl' style='margin-top:10px'>{"Reason that moved" if i else "Why they score this"}</div><div class='txt'>{esc(moved)}</div></div>
+<div class='cell card'><div class='o-lbl' style='padding:12px 14px 0'>{"Decision flipped" if flipped else "What we'd do"}</div>
+<div class='pk{" flip" if flipped else ""}'>{pick}</div><div class='ws'>{esc(str(cur.why or ""))}</div>{ev}</div>
+</div><div class='ft'>{esc(note)}</div></div>""", unsafe_allow_html=True)
+    with st.container(key=f"orbit_live_nav_{key}"):
+        a, b, _ = st.columns([1.2, 1, 5])
+        a.button("Next event →", key=f"{sk}_next", disabled=i >= n, on_click=_live_go, args=(sk, i + 1), width="stretch",
+                 type="primary")
+        b.button("Reset", key=f"{sk}_reset", disabled=i == 0, on_click=_live_go, args=(sk, 0), width="stretch")
+
+
 def _go(state_key: str, i: int) -> None:
     st.session_state[state_key] = i
 
@@ -988,7 +1063,8 @@ def _go(state_key: str, i: int) -> None:
 def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Callable | None = None,
                     candidates: pd.DataFrame | None = None, inputs: pd.DataFrame | None = None,
                     decisions: pd.DataFrame | None = None, options: pd.DataFrame | None = None,
-                    events: pd.DataFrame | None = None, show_money: bool = True, key: str = "orbit") -> None:
+                    events: pd.DataFrame | None = None, show_money: bool = True, key: str = "orbit",
+                    live: pd.DataFrame | None = None) -> None:
     """Act 2. contributions_fn(account_id, edits) -> (intercept_logit, contributions Series, p, standardized-values Series or None).
     candidates: every option row for this account (action, eligible, expected_value, blocked_or_ineligible_reason, is_chosen).
     events (optional): account_id, event_date, event_type[, event_text, timing, wait_until] for the 'Latest on the account' strip
@@ -996,7 +1072,9 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
     decisions / options (optional, engine output): when given they drive step 3's verdicts, step 4's pick, reason
     and money bar; otherwise the outreach columns on df are used. Missing columns degrade quietly.
     inputs: the engine-input rows of the considerations table (groups 1a-1c: group, item); step 1 lists this customer's value for each.
-    show_money=False hides step 4's net-value bar; the customer's own savings (bill lines) stay."""
+    show_money=False hides step 4's net-value bar; the customer's own savings (bill lines) stay.
+    live (optional): precomputed 'what if this happens next' rows (step, event_label, event_line, risk, reason_changed,
+    pick, pick_label, why, policy_ev_usd) for the one account they belong to; renders the Next event / Reset strip."""
     _act("02 / 05", "One customer, step by step", "why this score · why this action")
     if account_id not in set(df.account_id):
         st.markdown(f"<div class='o-lbl'>No customer {esc(account_id)} in this data.</div>", unsafe_allow_html=True)
@@ -1036,6 +1114,8 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
     strip = _strip_html(events_df, _next_version(r, decisions))
     if strip:
         st.markdown(strip, unsafe_allow_html=True)
+    if live is not None and len(live) and account_id in set(live.account_id):
+        render_live(live[live.account_id == account_id], show_money=show_money, key=key)
     with st.container(key=f"orbit_rail_{key}"):
         rc = st.columns(len(STEPS))
         for i, (c, name) in enumerate(zip(rc, STEPS)):

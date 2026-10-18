@@ -657,3 +657,21 @@ def deal_decisions(df: pd.DataFrame, dec: pd.DataFrame | None) -> pd.DataFrame |
     out["decision"] = ["message" if m.get(a) else ("receipt_only" if str(rl).strip() else "silent")
                        for a, rl in zip(out.account_id, out.receipt_line.fillna(""))]
     return out
+
+
+# ------------------------------------------------------------------ live events (scripted what-if strip)
+LIVE_EVENTS = ROOT / "data" / "live_events" / "live_events.csv"
+LIVE_ACC = "ACC-02363"
+
+
+@st.cache_data(show_spinner=False)
+def live_events() -> pd.DataFrame | None:
+    """Precomputed 'what if this happens next' rows (scripts/live_events.py: real Model A rescoring + offer engine +
+    guardrail, one customer, cumulative events). Read-only; None if the file is missing."""
+    if not LIVE_EVENTS.exists():
+        return None
+    e = pd.read_csv(LIVE_EVENTS)
+    for c in ("event_label", "event_line", "reason_1", "reason_2", "reason_3", "reason_changed", "why", "pick_label"):
+        if c in e:
+            e[c] = e[c].fillna("").astype(str).map(clean)
+    return e

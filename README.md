@@ -20,6 +20,16 @@ make test
 
 Python 3.11 or newer. The stack is pandas, scikit-learn, and Streamlit. There is no JavaScript frontend.
 
+## Live what-if (this branch)
+
+Open the scroll page and press **Live what-if** (customer #02363). Each **Next event** press adds one scripted event
+(app login, dropped call with an open coverage chat, competitor-site visit, question about moving their number); **Reset**
+clears it. The risk, the reason that moved and the decision come from `data/live_events/live_events.csv`, precomputed
+offline by `scripts/live_events.py`: the same Model A rescoring the app uses, the offer engine rerun on the edited row,
+and the do-not-contact guardrail rerun over the whole book with only this customer swapped (save-rate scale frozen, so
+no other account moves; the week's 184 messages and dollars stay as they are). Rebuild with
+`DUBHACKS_DB=vendor/dubhacks/data/sandbox.db python3 scripts/live_events.py --write` (sandbox opened read-only).
+
 ## Where the data comes from
 
 `make setup` clones <https://github.com/mageshkumarj/dubhacks> into `vendor/dubhacks` (gitignored). The console reads `vendor/dubhacks/data/sandbox.db` directly. It does not need the sandbox API process.

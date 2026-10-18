@@ -74,10 +74,20 @@ def _from_search():
             return
 
 
+def _from_live():
+    st.session_state["acc"] = D.LIVE_ACC
+    st.session_state["seg"] = None
+    st.session_state["q"] = ""
+
+
 st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-a, b = st.columns([2, 1])
+a, b, c = st.columns([2, 1, 0.8])
 a.segmented_control("Open a customer", D.DEMO, key="seg", format_func=lambda d: f"Customer {d}", on_change=_from_seg)
 b.text_input("Find a customer", key="q", placeholder="e.g. 38 or 01607", on_change=_from_search)
+live = D.live_events()
+if live is not None and D.LIVE_ACC in set(df.account_id):
+    c.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+    c.button("Live what-if", key="open_live", on_click=_from_live, width="stretch")
 acc = st.session_state["acc"]
 # the walk-through: decisions/options from the offers team's files (ledger/outreach fallbacks), today's candidates for eligibility
 opts = D.offer_options(df, acc)
@@ -89,7 +99,8 @@ dec_all = dec
 if not SHOW_MONEY:   # backstop: no company dollars in anything handed to the sections module
     cand, econ, dec, opts = D.strip_money(cand), D.economics_no_money(econ), D.strip_money(dec), D.strip_money(opts)
 _call(O.render_customer, df if SHOW_MONEY else D.strip_money(df), acc, contributions_fn=D.contributions, candidates=cand,
-      inputs=D.engine_inputs(), events=D.events(), decisions=dec, options=opts)
+      inputs=D.engine_inputs(), events=D.events(), decisions=dec, options=opts,
+      live=live if SHOW_MONEY or live is None else live.drop(columns=["policy_ev_usd"], errors="ignore"))
 clicked = _call(O.render_dashboard, df if SHOW_MONEY else D.strip_money(df), econ, typical_risk=D.typical_risk(),
                 decisions=dec, summary=D.dashboard_summary() if SHOW_MONEY else None)
 if clicked and clicked != st.session_state.get("_last_row_pick"):
