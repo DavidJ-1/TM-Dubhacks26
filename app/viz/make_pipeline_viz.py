@@ -7,7 +7,8 @@ Writes (all numbers SYNTHETIC; counts computed from harness/out/*.csv at run tim
   app/viz/pipeline_customer.png  1600x900 slide (follow-one-customer, final step)
   app/viz/pipeline_stats.json    every count used, with definitions and source file mtimes
 
-Run:  /workspace/tmobile/harness/.venv/bin/python app/viz/make_pipeline_viz.py
+Run:  python app/viz/make_pipeline_viz.py   (from the repo root, with the project venv active)
+Inputs: REPO/harness/out first, falling back to REPO/demo_data (tracked precomputed outputs; .csv or .csv.gz).
 Env:  TM_OUT_DIR (default harness/out), TM_VIZ_ACCOUNT (default ACC-PERSONA-04), SANDBOX_DB.
 """
 from __future__ import annotations
@@ -23,20 +24,34 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 
+sys_path_added = __import__("sys").path.insert(0, str(Path(__file__).resolve().parent))
+
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 OUT = Path(os.environ.get("TM_OUT_DIR", REPO / "harness" / "out"))
+DEMO = REPO / "demo_data"
+
+
+def find(rel) -> Path:
+    """Repo-relative input lookup: harness/out first, then demo_data (plain or .gz). Returns the first hit
+    (or the harness/out path if none exists, so callers can report it as missing)."""
+    rel = Path(rel)
+    for root in (OUT, DEMO):
+        for cand in (root / rel, root / rel.with_name(rel.name + ".gz")):
+            if cand.exists():
+                return cand
+    return OUT / rel
 ACCOUNT = os.environ.get("TM_VIZ_ACCOUNT", "ACC-PERSONA-04")
 
 MAGENTA = "#E20074"   # ours
-BG = "#1A1220"        # console dark plum
-PANEL = "#251A2C"
+BG = "#0D0810"        # near-black plum (v4 retro)
+PANEL = "#1A1220"     # console dark plum
 EDGE = "#3A2C3E"      # console phone-bar
 INK = "#F7F1EA"       # console cream
 PINK = "#FF8FBF"      # console pink
 MUTED = "#B9A9B5"
 GREY = "#5A4A5E"
-FONT = "Inter, Helvetica Neue, Arial, sans-serif"
+FONT = "ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', 'DejaVu Sans Mono', monospace"
 SYN = "All customers and numbers are synthetic"
 
 # Held-out Model A figures the team agreed to quote (chart_stats.json overrides 62/64/53 if present).
@@ -62,7 +77,9 @@ SEG_LABEL = {"family": "Family", "single": "Single", "couple": "Couple", "studen
 
 
 def is_standin(code: str) -> bool:
-    return any(k in str(code) for k in STANDIN)
+    txt = ACTION_TEXT.get(code, "").lower()
+    return (any(k in str(code) for k in STANDIN) or ("care_credit" in STANDIN and ("$25" in txt or "care credit" in txt))
+            or ("loyalty_credit" in STANDIN and "loyalty credit" in txt))
 
 
 def alabel(code: str, dagger=True) -> str:
@@ -73,7 +90,8 @@ def alabel(code: str, dagger=True) -> str:
 
 def standin_text(action_text: str) -> str:
     t = str(action_text)
-    if ("care credit" in t.lower() and "care_credit" in STANDIN) or ("loyalty credit" in t.lower() and "loyalty_credit" in STANDIN):
+    tl = t.lower()
+    if (("care credit" in tl or "$25 credit" in tl) and "care_credit" in STANDIN) or ("loyalty credit" in tl and "loyalty_credit" in STANDIN):
         return t + " (judge-provided stand-in)"
     return t
 
@@ -92,7 +110,7 @@ def fmt_pct(p: float) -> str:
 
 # ----------------------------------------------------------------------------------------------- data
 def load():
-    paths = {k: OUT / f"{k}.csv" for k in ("churn_scores", "offers", "offer_candidates", "features", "enrichment")}
+    paths = {k: find(f"{k}.csv") for k in ("churn_scores", "offers", "offer_candidates", "features", "enrichment")}
     missing = [str(p) for p in paths.values() if not p.exists()]
     if missing:
         raise SystemExit(f"missing inputs: {missing}")
@@ -131,6 +149,8 @@ def sandbox_tables():
 def funnel(d):
     cs, of, fe = d["churn_scores"], d["offers"], d["features"]
     seg_col = next((c for c in ("offer_segment", "strategy_segment", "segment") if c in of.columns), None)
+    if seg_col and of.groupby("action_code")[seg_col].nunique().max() <= 1:
+        seg_col = None  # offer segment is 1:1 with the action, so column 4 shows household type instead
     of = of.rename(columns={seg_col: "offer_seg"}) if seg_col else of.assign(offer_seg=pd.NA)
     m = of[["account_id", "action_code", "message_status", "offer_seg"]].merge(
         cs[["account_id", "p_churn_90d"]], on="account_id", how="left").merge(
@@ -176,7 +196,7 @@ def sankey_spec(m):
     for flag, i_src in ((True, i_flag), (False, i_nflag)):
         sub = m[m["flagged"] == flag]
         n_off, n_dn = int(sub["offered"].sum()), int((~sub["offered"]).sum())
-        lab = "Retention offer (from flagged)" if flag else "Upgrade / fix offer (from the rest, EV-positive)"
+        lab = "Retention offer (from flagged)" if flag else "Upgrade / fix offer (from the rest, worth making)"
         split[(flag, True)] = node(f"{lab}  {n_off:,}", 2, MAGENTA if flag else "#7FD1FF", n_off)
         split[(flag, False)] = node(f"Do nothing ({'flagged' if flag else 'rest'})  {n_dn:,}", 2, EDGE, n_dn)
         links.append((i_src, split[(flag, True)], n_off, 2, "rgba(226,0,116,0.45)" if flag else "rgba(127,209,255,0.30)"))
@@ -282,8 +302,8 @@ def sankey_trace(nodes, links, stage, domain=None, font_size=13):
 STAGE_TITLES = [
     "1 · Every sandbox account",
     "2 · Model A flags the riskiest 10%",
-    "3 · Offer or not: offered = any EV-positive action, not only flagged",
-    "4 · Which offer the EV engine picked",
+    "3 · Offer or not: offered = any action worth making, not only flagged",
+    "4 · Which offer Model B picked",
     "5 · Who gets an offer",
     "6 · Message drafted in their language",
 ]
@@ -345,9 +365,9 @@ def strip_shapes(stats, y0, y1, x0=0.0, x1=1.0, highlight=None, compact=False, p
          f"p(churn in 90 days) per account<br>top-3 reasons at risk / to stay<br>"
          f"held-out: top 10% catches {st['heldout']['top10_caught']:.0%}<br>"
          f"of churners (oracle {st['heldout']['oracle_top10']:.0%}, rule {st['heldout']['rule_rank_top10']:.0%}) · AUC {st['heldout']['auc']:.3f}"),
-        ("EV ENGINE", "Offers vs do nothing (Model B)",
-         f"{st['ev']['n_actions']} actions scored per account<br>EV = save value − cost − annoyance<br>"
-         f"offered = any EV-positive action,<br>not only flagged · do nothing wins for {st['funnel']['do_nothing']:,}"),
+        ("MODEL B", "Offers vs do nothing",
+         f"{st['ev']['n_actions']} options weighed per account<br>vs doing nothing (hover for details)<br>"
+         f"offered = any option worth making,<br>not only flagged · do nothing wins for {st['funnel']['do_nothing']:,}"),
         ("MESSAGE", "Personalized text, EN / ES",
          f"{st['funnel']['messaged']:,} messages drafted + validated<br>amounts re-checked vs sandbox<br>"
          f"no income, job or kid details in text<br>reply STOP to opt out"),
@@ -425,8 +445,8 @@ def phone_shapes(px0, py0, pw, ph, bubbles, header="T-Mobile", lang_tags=None, p
 
 
 # ----------------------------------------------------------------------------------------------- customer
-def customer_story(d, m, cut):
-    a = ACCOUNT
+def customer_story(d, m, cut, account=None):
+    a = account or ACCOUNT
     cs = d["churn_scores"].set_index("account_id").loc[a]
     of = d["offers"].set_index("account_id").loc[a]
     fe = d["features"].set_index("account_id").loc[a]
@@ -490,10 +510,15 @@ def customer_story(d, m, cut):
         stay=[cs[f"stay_reason_{i}"] for i in (1, 2, 3) if pd.notna(cs.get(f"stay_reason_{i}"))],
         signals=signals, enrich=enrich, drivers=drivers, household=household,
         elig=[(standin_text(r["action"]), float(r["expected_value"]), bool(r["is_chosen"])) for _, r in elig.iterrows()],
+        elig_reason={standin_text(r["action"]): str(r["reason"]) for _, r in elig.iterrows()},
         inel=[(r["action"], str(r["reason"]).replace("Not eligible: ", "")) for _, r in inel.iterrows()],
         chosen=standin_text(of["action"]), chosen_code=str(of["action_code"]), ev=float(of["expected_value"]),
         runner=standin_text(of["runner_up_action"]), runner_ev=float(of["runner_up_ev"]) if pd.notna(of["runner_up_ev"]) else None,
-        reason=str(of["reason"]), message_en=str(of["message_en"]) if pd.notna(of["message_en"]) else "",
+        reason=str(of["reason"]),
+        why=str(of["why_this_offer"]) if "why_this_offer" in of.index and pd.notna(of["why_this_offer"]) else "",
+        segment_label=str(of["segment"]) if "segment" in of.index and pd.notna(of["segment"]) else "",
+        action_detail=str(of["action_detail"]) if "action_detail" in of.index and pd.notna(of["action_detail"]) else "",
+        message_en=str(of["message_en"]) if pd.notna(of["message_en"]) else "",
         message_es=str(of["message_es"]) if pd.notna(of["message_es"]) else "", message_status=str(of["message_status"]),
         language=str(fe["language"]), contact_pref=str(fe["contact_preference"]),
         customer_value=float(of["customer_value_usd"]),
@@ -501,7 +526,7 @@ def customer_story(d, m, cut):
     return story
 
 
-CUST_STEPS = ["Signals", "Household", "Model A", "EV engine", "Message"]
+CUST_STEPS = ["Signals", "Household", "Model A", "Model B", "Message"]
 
 
 def customer_frame(story, step):
@@ -579,7 +604,7 @@ def customer_frame(story, step):
                         text="<br>".join(f"• {wrap(t, 38)}" for t in s["stay"]), showarrow=False, align="left",
                         font=dict(color=INK, size=13, family=FONT)))
     elif step == 3:
-        head("EV engine: every eligible offer vs doing nothing", "simulated $, synthetic")
+        head("Model B: every eligible offer vs doing nothing", "synthetic")
         show_bars = True
         if s["inel"]:
             ann.append(dict(xref="paper", yref="paper", x=0.035, y=0.24, xanchor="left", yanchor="top",
@@ -587,10 +612,10 @@ def customer_frame(story, step):
                                 f"{a}: {wrap(r, 70 - len(a)).replace('<br>', ' ')}" for a, r in s["inel"]),
                             showarrow=False, align="left", font=dict(color=MUTED, size=11, family=FONT)))
     else:
-        head(f"Chosen: {s['chosen']}", f"EV ${s['ev']:,.2f} (simulated)")
-        lines([wrap(s["reason"], 86).replace("<br>", " ")], size=14)
+        head(f"Chosen: {s['chosen']}", "Model B pick (simulated)")
+        lines([s["why"] or s["reason"].split(" EV =")[0]], size=14, width=70)
         ann.append(dict(xref="paper", yref="paper", x=0.035, y=0.44, xanchor="left", yanchor="top",
-                        text=(f"Runner-up: {s['runner']} (EV ${s['runner_ev']:,.2f})<br>" if s["runner_ev"] is not None else "")
+                        text=(f"Runner-up: {s['runner']}<br>" if s["runner_ev"] is not None else "")
                         + f"Message status: <b>{s['message_status']}</b> (dollar amounts re-checked vs sandbox)<br>"
                           f"Channel preference: {s['contact_pref']} · language {s['language'].upper()}<br>"
                           f"Nothing about income, job or kids appears in the text.",
@@ -598,7 +623,7 @@ def customer_frame(story, step):
         recap = [f"Signals: {s['risk'][0] if s['risk'] else 'n/a'}",
                  f"Model A: {fmt_pct(s['p'])} chance of leaving, rank {s['rank']:,} of {s['n']:,}"
                  + (" → flagged (top 10%)" if s["flagged"] else " → not flagged"),
-                 f"EV engine: {len(s['elig']) - 1} eligible offers scored; chosen EV ${s['ev']:,.2f} vs do nothing $0.00",
+                 f"Model B: {len(s['elig']) - 1} eligible offers weighed against doing nothing",
                  "Message: the exact offers.csv text, shown on the phone →"]
         ann.append(dict(xref="paper", yref="paper", x=0.035, y=0.27, xanchor="left", yanchor="top",
                         text="<b>The whole path</b><br>" + "<br>".join(f"{i + 1}. {t}" for i, t in enumerate(recap)),
@@ -612,7 +637,7 @@ def customer_frame(story, step):
         bub, tags = [], None
     ps, pa = phone_shapes(0.70, 0.04, 0.26, 0.86, bub, lang_tags=tags, plot_w=1540, plot_h=708)
     if not bub:
-        pa.append(dict(xref="paper", yref="paper", x=0.83, y=0.47, xanchor="center", yanchor="middle", align="center", text="waiting for<br>the EV engine…",
+        pa.append(dict(xref="paper", yref="paper", x=0.83, y=0.47, xanchor="center", yanchor="middle", align="center", text="waiting for<br>Model B…",
                        showarrow=False, font=dict(color=MUTED, size=13, family=FONT)))
     return shapes + ps, ann + pa, show_bars
 
@@ -621,10 +646,12 @@ def bars_trace(story, visible):
     labels = ["do nothing"] + [a for a, ev, c in story["elig"] if a != "do nothing"]
     evs = [0.0] + [ev for a, ev, c in story["elig"] if a != "do nothing"]
     colors = [GREY] + [MAGENTA if c else "#7FD1FF" for a, ev, c in story["elig"] if a != "do nothing"]
-    return go.Bar(x=evs if visible else [0] * len(evs), y=labels, orientation="h", marker_color=colors,
+    hov = ["Baseline: no contact, no cost (EV 0)"] + [wrap(story.get("elig_reason", {}).get(a, ""), 70)
+                                                      for a, ev, c in story["elig"] if a != "do nothing"]
+    return go.Bar(x=evs if visible else [0] * len(evs), y=labels, orientation="h", marker_color=colors, customdata=hov,
                   text=[f"${v:,.2f}" for v in evs] if visible else [""] * len(evs), textposition="outside",
                   textfont=dict(color=INK, size=12, family=FONT), cliponaxis=False,
-                  hovertemplate="%{y}: EV $%{x:,.2f} (simulated)<extra></extra>", xaxis="x", yaxis="y",
+                  hovertemplate="%{customdata}<extra>simulated</extra>", xaxis="x", yaxis="y",
                   showlegend=False, opacity=1 if visible else 0)
 
 
@@ -709,7 +736,7 @@ def funnel_fig(nodes, links, stats, animated=True):
     title = ("Who we text, and why: 5,042 synthetic accounts through the pipeline "
              f"<span style='font-size:15px;color:{MUTED}'>(synthetic)</span>")
     foot = footnote(f"Flagged = Model A p(churn 90d) ≥ {stats['funnel']['flag_cut']:.4f}, the top 10% of the 5,000 regular "
-                    "accounts (churn lane's cut; 42 personas scored on the same cut). Offered = any EV-positive action, not only flagged (offers.csv action ≠ do nothing).<br>"
+                    "accounts (churn lane's cut; 42 personas scored on the same cut). Offered = any action worth making, not only flagged (offers.csv action ≠ do nothing).<br>"
                     "Message ready = message_status 'ok' (drafted + validated, nothing sent). Language = account preference.<br>"
                     f"Model A = tm-churn churn_scores.csv · actions = Model B (tm-offers offers.csv) · column 4 = {stats['funnel']['col3_source']} · "
                     "† judge-provided stand-in credit (sandbox promo source 'stub'). " + OTHER_LANG_LONG + ".")
@@ -763,7 +790,7 @@ def slide_fig(nodes, links, stats, story):
                                "left" if c == 0 else ("right" if c == len(XS) - 1 else "center"), h)
                               for c, h in enumerate(col_heads(stats))]]
     foot = footnote(f"Synthetic. Model A = tm-churn churn_scores.csv; flagged = its top 10% (p ≥ {stats['funnel']['flag_cut']:.3f}). Actions = Model B (tm-offers). "
-                    "Offered = any EV-positive action, not only flagged. Message ready = drafted + validated, nothing sent. † stand-in credit. "
+                    "Offered = any action worth making, not only flagged. Message ready = drafted + validated, nothing sent. † stand-in credit. "
                     "* other language: English default, no template.<br>Held-out Model A: top 10% catches 62% of "
                     "churners (oracle 64%, 3+ calls rule 53%), AUC 0.853.")
     lay.update(shapes=sh + ps + arrow_shapes(0.725, 0.79, 0.31), annotations=an + pa + heads + banner() + [foot])
@@ -985,45 +1012,120 @@ def main():
     stats["standin_actions"] = sorted(STANDIN)
     wi = whatif_data(d, m)
     stats["whatif"] = wi
-    story = customer_story(d, m, cut)
-    story["household_in_decisions"] = household_in_decisions(d["offers"])
-    stats["household_in_decisions"] = story["household_in_decisions"]
-    stats["traced_customer"] = {k: v for k, v in story.items() if k not in ("signals", "enrich")}
-    stats["traced_customer"]["signals_shown"] = story["signals"]
-    stats["traced_customer"]["enrichment_shown"] = story["enrich"]
+    import viz_v4 as V4
+    from plotly.offline import get_plotlyjs
+
+    hid = household_in_decisions(d["offers"])
+    stats["household_in_decisions"] = hid
+    happy_id, happy_detail = V4.pick_happy(d)
+    stats["happy_pick"] = happy_detail
+    stats["happy_label_audit"] = V4.happy_audit(d)
+    featured = [f for f in V4.FEATURED if f[0] in set(d["offers"]["account_id"])]
+    if happy_id:
+        featured.append((happy_id, "left alone · verifiably happy", {"do_nothing"}))
+    toggles, has_choose = V4.compute_toggles(REPO, d, [f[0] for f in featured], cut)
+    stats["choose_offer_available"] = has_choose
+    stats["toggles"] = toggles
+    cards, stories, mism = [], {}, {}
+    for acct, title, want in featured:
+        st = customer_story(d, m, cut, account=acct)
+        st["household_in_decisions"] = hid
+        stories[acct] = st
+        mismatch = "" if st["chosen_code"] in want else (
+            f"current action is '{st['chosen_code']}', not the intended '{'/'.join(sorted(want))}' story")
+        if mismatch:
+            mism[acct] = mismatch
+        oc_acc = d["offer_candidates"][d["offer_candidates"]["account_id"] == acct]
+        rows, used = V4.options_rows(oc_acc, standin_text)
+        key = acct.replace("ACC-", "").replace("PERSONA-", "P").lower()
+        btn = f"{acct.replace('ACC-PERSONA-', 'PERSONA ')} · {title.split(' · ')[0]}"
+        cards.append(dict(key=key, acct=acct, btn=btn, html=V4.card_html(st, rows, title, mismatch, st["drivers"]),
+                          rows=rows, used=used))
+    stats["featured"] = {c["acct"]: {"title": t, "action": stories[c["acct"]]["chosen_code"], "why": stories[c["acct"]]["why"],
+                                     "message_en": stories[c["acct"]]["message_en"], "message_es": stories[c["acct"]]["message_es"],
+                                     "options_columns_used": c["used"],
+                                     "options": [{k: v for k, v in r.items() if k != "tip"} for r in c["rows"]]}
+                         for c, (_, t, _) in zip(cards, featured)}
+    stats["story_mismatches"] = mism
+    hero = stories.get("ACC-PERSONA-38") or next(iter(stories.values()))
+    story = stories.get("ACC-PERSONA-04", hero)
+    stats["traced_customer"] = {k: v for k, v in hero.items() if k not in ("signals", "enrich")}
+
+    V4.FIND = find
+    sets = V4.load_datasets(OUT, d, m, cut, alabel)
+    stats["datasets"] = V4.dataset_stats(sets)
 
     # ---- figures
-    f_strip, f_funnel, f_cust = strip_fig(stats), funnel_fig(nodes, links, stats), customer_fig(story)
-    f_whatif = whatif_fig(wi)
-    f_future = future_fig(d["enrichment"])
     cfg = dict(displaylogo=False, responsive=False)
-    parts = [pio.to_html(f_strip, include_plotlyjs="inline", full_html=False, config=cfg, div_id="strip"),
-             pio.to_html(f_funnel, include_plotlyjs=False, full_html=False, config=cfg, div_id="funnel",
-                         auto_play=False),
-             pio.to_html(f_cust, include_plotlyjs=False, full_html=False, config=cfg, div_id="customer",
-                         auto_play=False),
-             pio.to_html(f_future, include_plotlyjs=False, full_html=False, config=cfg, div_id="future"),
-             pio.to_html(f_whatif, include_plotlyjs=False, full_html=False, config=cfg, div_id="whatif",
-                         auto_play=False)]
-    html = f"""<!doctype html><html><head><meta charset="utf-8"><title>TM retention pipeline (synthetic)</title>
-<style>body{{background:{BG};color:{INK};font-family:{FONT};margin:0}}
-.wrap{{width:1600px;margin:0 auto}} .sec{{margin:0 0 28px 0}}
-.top{{background:{MAGENTA};color:#fff;text-align:center;font-weight:700;padding:10px;letter-spacing:.06em;position:sticky;top:0;z-index:9}}
-h2{{font-weight:600;color:{MUTED};font-size:14px;letter-spacing:.12em;margin:22px 30px 4px}}</style></head>
-<body><div class="top">{SYN.upper()} · every count below is computed from synthetic CSVs · policy dollars are PROVISIONAL</div>
-<div class="wrap"><h2>01 · PIPELINE</h2><div class="sec">{parts[0]}</div>
-<h2>02 · FUNNEL (press Play)</h2><div class="sec" id="s-funnel">{parts[1]}</div>
-<h2>03 · FOLLOW ONE CUSTOMER (press Play)</h2><div class="sec" id="s-customer">{parts[2]}</div>
-<h2>04 · WHAT IF (drag the slider)</h2><div class="sec" id="s-whatif">{parts[4]}</div>
-<h2 style="color:#8A7A8E">05 · FUTURE: CONSENTED DATA (simulated, not used)</h2><div class="sec" id="s-future" style="opacity:.85">{parts[3]}</div></div></body></html>"""
+    parts = {"js": f"<script>{get_plotlyjs()}</script><script>{V4.JS}</script>"}
+    parts["funnel"] = V4.div(funnel_fig(nodes, links, stats), "funnel", cfg=cfg)
+    for c in cards:
+        rows = toggles.get(c["acct"]) if isinstance(toggles, dict) else None
+        if rows:
+            keep = [rows[0]] + [r for r in rows[1:] if r["changed"]][:3]
+            if len(keep) < 3:
+                keep += [r for r in rows[1:] if not r["changed"]][: 3 - len(keep)]
+            parts["tog_" + c["key"]] = V4.div(esc_dollars(V4.toggles_fig(c["acct"], keep, cut, has_choose)), "tog_" + c["key"], cfg=cfg)
+        else:
+            parts["tog_" + c["key"]] = "<div class='foot'>toggles unavailable (score_account not importable)</div>"
+    for sset in sets:
+        parts["cloud_" + sset["key"]] = V4.div(V4.cloud_fig(sset), "cloud_" + sset["key"], cfg=dict(displaylogo=False, responsive=True))
+        parts["mini_" + sset["key"]] = V4.div(V4.mini_funnel_fig(sset), "mini_" + sset["key"], cfg=cfg)
+    parts["stack"] = V4.div(V4.stack_fig(stats), "stack", cfg=dict(displaylogo=False, responsive=True))
+    parts["whatif"] = V4.div(whatif_fig(wi), "whatif", cfg=cfg)
+    parts["future"] = V4.div(future_fig(d["enrichment"]), "future", cfg=cfg)
+    side = [stories[a] for a in stories if a != hero["account_id"]]
+    f_slide = slide_fig_v4(nodes, links, stats, hero, side)
+    parts["slide"] = V4.div(f_slide, "slide", cfg=cfg)
+    html = V4.page(parts, sets, cards, stats)
     assert "with autopay" not in html.lower(), "never write 'with AutoPay'"
     (HERE / "pipeline_flow.html").write_text(html, encoding="utf-8")
 
-    pio.write_image(slide_fig(nodes, links, stats, story), HERE / "pipeline_flow.png", width=1600, height=900, scale=1)
-    pio.write_image(customer_fig(story, static_step=4), HERE / "pipeline_customer.png", width=1600, height=900, scale=1)
+    pio.write_image(f_slide, HERE / "pipeline_flow.png", width=1600, height=900, scale=1)
+    pio.write_image(customer_fig(hero, static_step=4), HERE / "pipeline_customer.png", width=1600, height=900, scale=1)
     (HERE / "pipeline_stats.json").write_text(json.dumps(stats, indent=1, default=str), encoding="utf-8")
-    print(json.dumps(stats["funnel"], indent=1, default=str))
-    print("wrote", HERE / "pipeline_flow.html", HERE / "pipeline_flow.png", HERE / "pipeline_customer.png")
+    print(json.dumps({k: stats[k] for k in ("funnel", "happy_pick", "happy_label_audit", "story_mismatches",
+                                             "choose_offer_available")}, indent=1, default=str))
+    print("html MB", round(len(html) / 1e6, 2))
+
+
+def slide_fig_v4(nodes, links, stats, hero, side):
+    """1600x900 static: strip top, funnel left, three contrast cards, hero phone right."""
+    lay = base_layout("[ TM RETENTION PIPELINE ] who we text, what we offer, why we leave most alone "
+                      f"<span style='font-size:13px;color:{MUTED}'>(all synthetic)</span>", top=95)
+    lay.title.font.size = 20
+    sh, an = strip_shapes(stats, 0.70, 0.99, plot_h=733)
+    tr = sankey_trace(nodes, links, N_STAGES - 1, domain=dict(x=[0.0, 0.56], y=[0.0, 0.58]), font_size=9)
+    bub = [wrap(hero["message_en"], 30)] if hero["message_en"] else []
+    ps, pa = phone_shapes(0.81, 0.0, 0.185, 0.62, bub, lang_tags=[f"{hero['account_id']} · hero (synthetic)"], plot_w=1540, plot_h=733, size=11)
+    heads = [dict(xref="paper", yref="paper", x=x, y=0.615, xanchor=xa, yanchor="bottom", text=t, showarrow=False,
+                  font=dict(color=MUTED, size=9, family=FONT))
+             for x, xa, t in [(0.0 if c == 0 else (0.56 if c == len(XS) - 1 else XS[c] * 0.56),
+                               "left" if c == 0 else ("right" if c == len(XS) - 1 else "center"), h)
+                              for c, h in enumerate(col_heads(stats))]]
+    # contrast cards
+    cards_sh, cards_an = [], []
+    n = max(len(side), 1)
+    hgt = 0.62 / n
+    for k, st in enumerate(side):
+        y1 = 0.62 - k * hgt
+        y0 = y1 - hgt + 0.02
+        cards_sh.append(dict(type="rect", xref="paper", yref="paper", x0=0.585, x1=0.795, y0=y0, y1=y1, fillcolor=PANEL,
+                             line=dict(color=EDGE, width=1)))
+        why = st.get("why") or st["reason"].split(" EV =")[0]
+        cards_an.append(dict(xref="paper", yref="paper", x=0.592, y=y1 - 0.012, xanchor="left", yanchor="top", showarrow=False,
+                             align="left", font=dict(color=INK, size=10.5, family=FONT),
+                             text=f"<b><span style='color:{MAGENTA}'>[ {st['account_id']} ]</span></b><br>"
+                                  f"<b>{st['chosen']}</b><br><span style='color:{MUTED}'>{wrap(why, 38)}</span><br>"
+                                  f"<span style='color:{MUTED}'>p(churn) {st['p']:.2%} · {'flagged' if st['flagged'] else 'not flagged'}</span>"))
+    hero_why = hero.get("why") or ""
+    cards_an.append(dict(xref="paper", yref="paper", x=0.81, y=0.655, xanchor="left", yanchor="bottom", showarrow=False, align="left",
+                         font=dict(color=PINK, size=10.5, family=FONT), text=f"<b>HERO · {hero['chosen']}</b><br>{wrap(hero_why, 40)}"))
+    foot = footnote(f"Synthetic. Model A = tm-churn churn_scores.csv; flagged = top 10% (p ≥ {stats['funnel']['flag_cut']:.3f}). Actions = Model B (tm-offers offers.csv). "
+                    "Offered = any action worth making, not only flagged. Message ready = drafted + validated, nothing sent. † stand-in credit.<br>"
+                    "* other language: English default, no template. Held-out Model A: top 10% catches 62% of churners (oracle 64%, 3+ calls rule 53%), AUC 0.853.")
+    lay.update(shapes=sh + ps + cards_sh, annotations=an + pa + heads + cards_an + banner() + [foot])
+    return esc_dollars(go.Figure(data=[tr], layout=lay))
 
 
 if __name__ == "__main__":
