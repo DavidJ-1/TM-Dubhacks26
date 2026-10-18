@@ -185,3 +185,44 @@ Not used as headline facts: "5-25x cheaper to retain" (unsourced, not telecom-sp
 - Verizon 3-year price lock ending: confirmed only by Verizon's AI support assistant (Droid Life). T-Mobile "price-hike churn was temporary" is from search summaries.
 - Recon Analytics LTV ($1,900 financed vs $1,516 BYOD) and "half wait until device fails" (paywalled report abstract); churncost.com SAC/retention costs (unknown site, **do not use**); BTIG Comcast $1,260 per gross add (2018).
 - Becker 2020 arm-level churn numbers and Prince & Greenstein details (abstract/summary only); immigration share of growth (TBR, search summary).
+
+## 8. Further reading & datasets (ranked; free; full notes in research-notes/notes_whitepapers.md)
+Strength: A = peer-reviewed, regulator, or primary dataset; B = industry paper or survey; C = consulting or thesis. Our demo data is synthetic, so external numbers are "industry evidence", not our results.
+1. [Criteo Uplift dataset](https://ailab.criteo.com/criteo-uplift-prediction-dataset/) + [benchmark paper](https://arxiv.org/abs/2111.10106): ~25M randomized rows. Validate uplift-vs-risk ranking and Qini on real data (A).
+2. [Hillstrom MineThatData email test](https://blog.minethatdata.com/2008/03/minethatdata-e-mail-analytics-and-data.html): 64k customers in 3 arms, including no email. A small real "best offer or nothing" check (A).
+3. [MegaFon uplift dataset](https://www.uplift-modeling.com/en/latest/api/datasets/fetch_megafon.html): operator-published synthetic telecom uplift data. Precedent for our synthetic approach (B).
+4. [Ascarza et al. 2018, retention review](https://evaascarza.com/papers/ascarza_et_al_cns_18_author_copy.pdf): 12-author consensus that at-risk ≠ should-target. Core-thesis citation (A).
+5. [LinkedIn email volume, KDD'16](https://www.kdd.org/kdd2016/papers/files/adf0710-guptaA.pdf): send-all drew 45% more unsubscribes and spam reports. Backs our contact cap and annoyance cost (B+).
+6. [EMP metric (R pkg)](https://cran.r-project.org/package=EMP) / [TKDE 2013](https://doi.org/10.1109/tkde.2012.50): a profit metric plus the profit-optimal contact share. Report it next to AUC (A).
+7. [Profit-driven churn trees](https://arxiv.org/abs/1712.08101): profit-trained models pick different customers than accuracy-trained ones (A).
+8. [Booking.com knapsack + uplift](https://arxiv.org/abs/2108.13298): one offer per customer under a budget. Our answer to "what if the budget is capped?" (A-).
+9. [E3IR, RecSys'24](https://arxiv.org/abs/2408.11623): state of the art for budget-constrained incentives. Future-work bullet (A-).
+10. [Multi-treatment revenue uplift](https://arxiv.org/abs/2101.03336): academic precedent for multi-offer EV choice with explanations (A-).
+11. [InterpretML EBM](https://interpret.ml/docs/ebm.html): glass-box model with exact per-feature contributions. Faithfulness check on our reason codes (A-/B).
+12. [EconML customer-segmentation case](https://github.com/py-why/EconML): policy tree that explains who gets the offer, built on synthetic data (B).
+13. [Ofcom 2021, better deals](https://www.ofcom.org.uk/siteassets/resources/documents/consultations/category-2-6-weeks/130197-helping-consumers-get-better-deals-on-their-broadband/associated-documents/helping-customers-get-better-deals-2021.pdf?v=327229): loyal out-of-contract customers pay £9–10/mo more. "Fair retention" slide (A; open in a browser before quoting).
+14. [Ofcom 2019, fair deals](https://www.ofcom.org.uk/siteassets/resources/documents/phones-telecoms-and-internet/information-for-industry/fairness-for-customers/fairness-for-customers-progress-update-june-2019.pdf?v=324004): overpaying after handset term ends. Supports pro-customer payoff timing (A).
+15. [CMA loyalty-penalty super-complaint](https://www.gov.uk/cma-cases/loyalty-penalty-super-complaint): mobile is a named loyalty-penalty market (A).
+16. [Ericsson ConsumerLab 2023](https://www.ericsson.com/en/reports-and-papers/consumerlab/5g/reports/5g-value-turning-performance-into-loyalty): ~half of 5G switchers left over network, not price (B, stated intent).
+17. [McKinsey 2017, telecom churn](https://www.mckinsey.com/industries/technology-media-and-telecommunications/our-insights/reducing-churn-in-telecom-through-advanced-analytics): offer library plus microsegments, 10–15% churn cut (C, self-reported).
+18. [BCRLSP offline RL promotions](https://arxiv.org/abs/2207.07790): sequential retention offers under a per-period budget. Post-hackathon step (B+).
+19. [RecSim (Google)](https://arxiv.org/abs/1909.04847): precedent for comparing strategies in a simulator (A-).
+20. [Guelman et al., uplift RF for insurance retention](http://ub.edu/rfa/research/WP/UBriskcenterWP201406.pdf): real non-telecom retention uplift (A-, working-paper version).
+21. [Telco bandit retention gym (thesis)](http://hdl.handle.net/10400.14/45824): closest analogue to our simulator. **Unverified** (C).
+
+## 9. Live signals: cited base rates (full table in research-notes/notes_live_signals.md)
+Public sources give **direction**, rarely size, and nearly all sizes are survey intent or correlation. **Every effect size in our engine is our assumption**, shown in a sensitivity range. "Real field" = exists in the judge sandbox; everything else is a simulated event.
+
+| Event | Direction | Best public number | Source (strength) | Data |
+|---|---|---|---|---|
+| Bill shock | ↑ | 17% of US mobile users hit; 84% got no warning. Overage raises switching about as much as equal savings | [FCC white paper, Oct 2010](https://transition.fcc.gov/stage/Bill-Shock-White-Paper.pdf) (A); [Genakos et al. 2023](https://researchonline.lse.ac.uk/id/eprint/121294/1/dp1939.pdf) (A-) | real field: `billing_history` |
+| Network problem / dropped calls | ↑ | Dropped calls raise churn (Ahn 2006). T-Mobile leavers had 3x more no-signal time. 24% with >12 problems/100 "definitely will" switch | [Ahn et al. 2006](https://doi.org/10.1016/j.telpol.2006.09.006) (A); [Opensignal, Oct 2022](https://insights.opensignal.com/2022/10/20/how-mobile-network-experience-affects-churn-in-us-wireless-carriers) (B); [J.D. Power 2016](https://www.jdpower.com/business/press-releases/2016-us-wireless-network-quality-performance-study-volume-2/) (B, intent) | simulated |
+| Price-change notice | ↑ (size disputed) | Verizon: "only 2 basis points of churn" from a large Q1'24 hike. Its 2026 CEO blames "blunt price increases". T-Mobile guided elevated Q3'26 churn | [VZ, May 2024](https://www.verizon.com/about/sites/default/files/2024-05/MN_Conference_Transcript_051424.pdf) (A-, exec); [VZ 1Q26, Apr 2026](https://www.verizon.com/about/sites/default/files/2026-06/vz_1q26_transcript_042726rm.pdf) (A-) | simulated |
+| Device payoff month | ↑ after payoff | AT&T: churn +14 bps YoY, partly from customers "reaching the end of device financing periods" | [AT&T CFO via PhoneArena, Oct 2025](https://www.phonearena.com/news/hidden-in-its-q3-report-is-news-that-could-lead-to-big-problems-at-at-t_id175350) (A-, exec) | real field: `lines.financing_months_remaining` |
+| Promo/credit ending | ↑ | Promo expiry is a top FCC bill-shock cause. Ofcom: out-of-contract customers pay £9–10/mo more | FCC 2010 (A); Ofcom 2021, §8 #13 (A) | simulated (no promo end dates in sandbox) |
+| Data cap ≥90% / throttled | weak | Throttling: "no evidence" US subscribers change behavior | [Bauner & Espín 2023](https://doi.org/10.1016/j.telpol.2023.102665) (A) | simulated; treat as an upsell moment, not churn |
+| Unresolved / high-effort support | ↑ (largest gap) | 41% of high-effort resolvers "definitely will" switch vs 5% when easy | [J.D. Power 2017](https://www.jdpower.com/business/press-releases/us-wireless-customer-care-full-service-performance-study/) (B, intent) | real field: `support_interactions` (re-score; don't double-count) |
+| Move / address change | ↑ | Canada: 11% switched cellphone provider in a year; 14% of them cited a move or life change | [Competition Bureau Canada, 2020](https://competition-bureau.canada.ca/en/how-we-foster-competition/promotion-and-advocacy/advocacy-promoting-benefits-competition/consumer-switching-behaviour) (A-) | simulated |
+| Competitor promo in market | ↑ | 21% of Canadian cellphone switchers cited a promo and 44% price. Verizon blamed Q4'25 churn partly on competition | Competition Bureau Canada (A-); [VZ 4Q25](https://www.verizon.com/about/sites/default/files/2026-02/vz_4q25_transcript_013026.pdf) (A-) | simulated; regional multiplier |
+
+Accessed 2026-10-17. Caution: answering bill shock with a cheaper-plan nudge can backfire (Ascarza et al. JMR 2016: churn rose from 6% to 10%; §4a).
