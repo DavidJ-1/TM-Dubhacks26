@@ -1,4 +1,4 @@
-# Data README: features + labels (tm-data lane)
+# Data README: features + labels (data prep)
 
 > **⚠️ ALL LABELS AND RATES ARE SYNTHETIC / SIMULATED.** The judge sandbox has no churn outcomes, and every customer in it is synthetic stub data. `churn_90d`, `p_true_90d`, `monthly_hazard`, `toy_p` and `toy_churn` are generated, not observed. Label any number that comes from them "synthetic" or "simulated" on screen, on Devpost and in charts.
 
@@ -39,7 +39,7 @@ Accounts: 5,000 regular + 42 `ACC-PERSONA-xx`. Persona NN maps to account_id `AC
 - `prior_avg_bill_cents`: blank for 143 accounts with only one bill month. In that case bill_increase_pct = 0.
 - `bill_change_3m_pct`: blank for 370 accounts with no bill 3 months back (new accounts).
 - No support contacts: counts = 0, sentiments = 0, `days_since_last_contact` = 999.
-- Not computed: promotion eligibility (that belongs to tm-offers via the promotions table or `/v1/promotions`) and trade-in values.
+- Not computed: promotion eligibility (that belongs to the offer engine via the promotions table or `/v1/promotions`) and trade-in values.
 
 ## labels.csv: 5,042 rows (personas included, flagged)
 | column | meaning |
@@ -53,7 +53,7 @@ Accounts: 5,000 regular + 42 `ACC-PERSONA-xx`. Persona NN maps to account_id `AC
 | `upgrade_90d` | **SYNTHETIC** 0/1: would accept a plan step-up or device upgrade within 90 days (seed "tm-upgrade-2026") |
 | `p_upgrade_90d` | **SYNTHETIC** true 90-day upgrade probability (**leak column**) |
 | `upgrade_driver_1..3` | the three largest positive upgrade-logit contributions (**leak columns**) |
-| `label_driver_1..3` | the three largest positive logit contributions for the account (debug and sanity aid; tm-churn should derive its own reasons) |
+| `label_driver_1..3` | the three largest positive logit contributions for the account (debug and sanity aid; the churn model should derive its own reasons) |
 
 **Leak columns.** Never use these as model features: `p_true_90d, monthly_hazard, label_driver_*, p_upgrade_90d, upgrade_driver_*, toy_p, toy_churn`. Enrichment columns (enrichment.csv) are legitimate *features* for Model B, but note that `upgrade_90d` is generated partly from `household_income_usd` and `step_up_cost_pct_income`. Train on features.csv against `churn_90d` / `upgrade_90d` only. The upgrade columns come after the churn columns, and the churn columns keep their original order.
 
@@ -123,7 +123,7 @@ Both recipes print persona percentiles after each run.
 ### Results, default `tuned` recipe (all synthetic, 5,000 regular accounts)
 - Mean monthly_hazard **0.990%**. Mean p_true_90d **2.74%** (implied monthly ≈ 0.92%). churn_90d positives **137 / 5,000 (2.74%)**; 138 / 5,042 including personas. Max monthly hazard 0.486.
 - toy_p mean 14.65% per 90 days. toy_churn positives 781 / 5,000.
-- Spearman(p_true_90d, toy_p) = 0.879. AUC of p_true_90d against toy_churn = 0.807 (toy_p itself scores 0.827). AUC of p_true_90d against churn_90d = 0.864 (the oracle ceiling for tm-churn).
+- Spearman(p_true_90d, toy_p) = 0.879. AUC of p_true_90d against toy_churn = 0.807 (toy_p itself scores 0.827). AUC of p_true_90d against churn_90d = 0.864 (the oracle ceiling for the churn model).
 - Personas: p_true_90d, then percentile among the 5,000 regular accounts. Expected high: 04 0.173 (97th), 21 0.061 (92nd), 22 0.051 (90th), 27 0.072 (93rd). Expected low: 10 0.004 (2nd), 24 0.005 (11th). Others: 23 0.089 (94th), 25 0.019 (74th), 26 0.006 (13th), 28 0.009 (42nd).
 
 ## enrichment.csv: 5,042 rows (account_id + 16 columns). SYNTHETIC per-account values
@@ -189,8 +189,8 @@ Judgement calls: churn-risk penalty applies only above average risk; tenure 0.10
 
 ## Caveat: the upgrade lift from income is circular (synthetic)
 
-The synthetic upgrade label (`upgrade_90d`) is generated partly from `household_income_usd` and `step_up_cost_pct_income`, along with an already-on-top-plan flag. Any upgrade model that takes those columns as inputs is partly recovering our own label formula. The AUC gain they add (for example, tm-strategy measured 0.742 to 0.780) is circular and is **not** evidence that income predicts real upgrades. Report upgrade models on base features as the honest number. The churn label uses none of the enrichment or household columns.
+The synthetic upgrade label (`upgrade_90d`) is generated partly from `household_income_usd` and `step_up_cost_pct_income`, along with an already-on-top-plan flag. Any upgrade model that takes those columns as inputs is partly recovering our own label formula. The AUC gain they add (for example, strategy research measured 0.742 to 0.780) is circular and is **not** evidence that income predicts real upgrades. Report upgrade models on base features as the honest number. The churn label uses none of the enrichment or household columns.
 
 ## Caveat: churn personas 21 and 22 are borderline (synthetic)
 
-The persona "high churn" bar is the top 10% (90th percentile). Even using the true synthetic probability, personas 21 and 22 sit right at that line, at the 91.7th and 90.2th percentiles. Across resampled refits they clear it only 45% and 66% of the time (tm-churn's bootstrap). That comes from how the labels are built, not from the models. The labels are deliberately unchanged.
+The persona "high churn" bar is the top 10% (90th percentile). Even using the true synthetic probability, personas 21 and 22 sit right at that line, at the 91.7th and 90.2th percentiles. Across resampled refits they clear it only 45% and 66% of the time (the churn model's bootstrap). That comes from how the labels are built, not from the models. The labels are deliberately unchanged.

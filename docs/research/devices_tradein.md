@@ -1,6 +1,6 @@
 # Devices, financing, trade-in and upgrade offers: real T-Mobile vs judge sandbox
 
-All customer data in this project is synthetic. The real-offer facts below are public information, and every source was accessed **2026-10-17**. The sandbox (`/workspace/tmobile/dubhacks/data/sandbox.db`, `metadata.as_of=2026-10-01`, brand "T-Mobile (stub data, not official)", schema v9) was opened **read-only** (`file:...?mode=ro`, SELECT only). Main rule: **customer texts may quote only $ amounts that exist in the sandbox `promotions`/`plans`/`addons` tables.** Real offers are for strategy, credibility and calibration only.
+All customer data in this project is synthetic. The real-offer facts below are public information, and every source was accessed **2026-10-17**. The sandbox (`vendor/dubhacks/data/sandbox.db`, `metadata.as_of=2026-10-01`, brand "T-Mobile (stub data, not official)", schema v9) was opened **read-only** (`file:...?mode=ro`, SELECT only). Main rule: **customer texts may quote only $ amounts that exist in the sandbox `promotions`/`plans`/`addons` tables.** Real offers are for strategy, credibility and calibration only.
 
 Main brief hook: **Direction #4 Timekeeper** (upgrade now vs wait, a transparent now-vs-later cost, a trade-in value chart, an honest "wait"). This material also supports #3 Next Best Moment (whether a lock-in/upgrade offer is a valid retention action) and #1 Cart Whisperer (trade-in and protection suggestions).
 
@@ -65,7 +65,7 @@ Main brief hook: **Direction #4 Timekeeper** (upgrade now vs wait, a transparent
 4. **Early Upgrade is a retention re-lock (Beyond only):** eligible when `months_since_purchase ≥ 6` and `1 − balance/MSRP ≥ 0.5`. It re-locks for 36 months but costs the carrier the remaining 50%. Count that in offer cost.
 5. **Protection:** suggest the P360 tier that matches `devices.protection_tier` only for financed, high-MSRP devices with no protection add-on. Never for BYOD old phones where the monthly price × 12 > the trade-in value.
 
-## 5. Sandbox gaps / data-quality notes (for tm-offers / tm-strategy)
+## 5. Sandbox gaps / data-quality notes (for the offer engine / strategy research)
 - ⚠️ **`lines.tradein_eligible` = 1 on 6,575 financed lines.** Real T-Mobile requires the trade-in device to be **paid off** (support/devices/promo-trade-in), except through Early Upgrade/JUMP!, where the carrier pays it off. The engine should require `financing_balance_cents = 0` OR an Early-Upgrade path before counting trade-in value.
 - No trade-in **tiers** ($1,000/$700/$500 by trade-in model) in the sandbox: iPhone promos are flat.
 - No BOGO, Early Upgrade, JUMP! or EIP Flex promo rows. `PROMO-STUB-OLD-PHONE-UPGRADE`, `LOYALTY-CREDIT` and `CARE-CREDIT` have `source='stub'` (no public equivalent).

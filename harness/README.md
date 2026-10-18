@@ -7,8 +7,8 @@
 registered model, and backtests it against a simple business rule and an oracle ceiling. It also checks the demo
 personas and writes plain-English reason codes. `uplift_eval.py` evaluates uplift / offer policies (Model C).
 
-Other lanes' docs: [DATA_README.md](DATA_README.md) (features + labels), [UPLIFT_README.md](UPLIFT_README.md)
-(tm-offers' uplift model), [OFFERS_README.md](OFFERS_README.md) (EV offer engine).
+Other docs: [DATA_README.md](DATA_README.md) (features + labels), [UPLIFT_README.md](UPLIFT_README.md)
+(the offer engine's uplift model), [OFFERS_README.md](OFFERS_README.md) (EV offer engine).
 
 ## Rerun everything (one command, from the repo root)
 
@@ -29,8 +29,8 @@ Tests: `.venv/bin/python -m pytest tests/test_model_harness.py -q` (or `make tes
 | churn | `churn_90d` (`p_true_90d`); `toy_churn` (`toy_p`) for ranking checks only | `rule_support3`: 3+ support contacts in 90 days | 04, 21, 22, 27 / 10, 24 |
 | upgrade | `upgrade_90d` (`p_upgrade_90d`) | `rule_near_or_over_data_cap`: a line over its cap, or 3-month use >= 90% of the per-line cap; unlimited plans never flagged | 25, 28 / 22, 24, 27 |
 
-Built-in models: `logreg`, `hgb` (HistGradientBoosting), `rf` (random forest), plus the rules. tm-churn's
-`model_a` self-registers from `churn_model.py` for churn. Features come from tm-churn's
+Built-in models: `logreg`, `hgb` (HistGradientBoosting), `rf` (random forest), plus the rules. the churn model's
+`model_a` self-registers from `churn_model.py` for churn. Features come from the churn model's
 `churn_features.prepare()`, with a fallback if it's missing. Every `labels.csv` column is barred from X.
 
 ## Outputs (`harness/out/`, gitignored)
@@ -39,9 +39,9 @@ Built-in models: `logreg`, `hgb` (HistGradientBoosting), `rf` (random forest), p
   next to the oracle AUC on the same folds, plus a seed-42 25% holdout with the oracle on the same rows.
 - `eval_<target>_<model>[_<label>].json`, `summary_<target>_<model>[...].txt`: metrics (AUC, PR-AUC, Brier, ECE,
   reliability bins, top-10% recall and lift) and the persona check.
-- `harness_scores_churn_<model>.csv`: tm-churn contract columns (`account_id, p_churn_90d, risk_rank,
+- `harness_scores_churn_<model>.csv`: the churn model contract columns (`account_id, p_churn_90d, risk_rank,
   risk_reason_1..3, stay_reason_1..3`). `harness_scores_upgrade_<model>.csv`: `p_upgrade_90d, upgrade_rank,
-  upgrade_reason_1..3, against_upgrade_reason_1..3`. These never overwrite tm-churn's `churn_scores.csv`.
+  upgrade_reason_1..3, against_upgrade_reason_1..3`. These never overwrite the churn model's `churn_scores.csv`.
 - `persona_check_<target>_<label>.csv` (provisional), `harness_near_or_over_data_cap.csv`,
   `eval_scaled_to_real*.{csv,json}`, `uplift_eval_summary.json/.md`.
 
@@ -63,7 +63,7 @@ Uplift models: subclass `mh.UpliftModel` (`fit(X, treatment, y)`, `predict_uplif
 or a DataFrame with one column per action), then call `mh.register_uplift_model("name", factory)`. A two-model
 baseline `TLearner` is built in.
 
-## Data contract: `out/uplift.csv` (written by tm-offers, read by `uplift_eval.load_uplift`)
+## Data contract: `out/uplift.csv` (written by the offer engine, read by `uplift_eval.load_uplift`)
 
 Long format, one row per account x eligible action, including `do nothing`:
 `account_id, action, split (train|test), treated (0/1, exactly one per account), propensity (1/n eligible arms),
@@ -89,7 +89,7 @@ The harness never writes `uplift.csv` or `policy_eval.csv`.
 
 ## End-to-end pipeline summary (`harness/pipeline.py`)
 
-One command, data → features → Model A → EV offer engine → message, reusing the other lanes' code
+One command, data → features → Model A → EV offer engine → message, reusing the other code
 (features.py, churn_model.py, offers.py, app/messages.py) without editing it. Writes
 `harness/out/pipeline_stages.json` (stages accounts → scored → flagged → offered / wait → messaged, plus a
 one-account trace). Invariant: offered + wait == flagged. A stage whose source isn't available gets
@@ -97,7 +97,7 @@ one-account trace). Invariant: offered + wait == flagged. A stage whose source i
 
 ```bash
 PY=.venv/bin/python   # from the repo root, after `make setup`
-$PY harness/pipeline.py                         # summarise the lanes' latest outputs in harness/out/
+$PY harness/pipeline.py                         # summarise the latest outputs in harness/out/
 $PY harness/pipeline.py --run                   # recompute every stage into harness/out/pipeline_run/sandbox_5k/
 $PY harness/pipeline.py --trace ACC-PERSONA-04 --lang es --segment risk_band
 $PY harness/pipeline.py --data scaled_50k       # only accounts is filled in; later stages are null + note

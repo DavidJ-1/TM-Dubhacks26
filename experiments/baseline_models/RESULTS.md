@@ -6,11 +6,11 @@ Written 2026-10-17 ~8:57 PM PT. Nothing in the repo was changed (no edits to dem
 
 ## Rerun
 ```
-cd /workspace/tmobile/scratch_models
-/workspace/tmobile/TM-Dubhacks26/.venv/bin/python folds.py            # checks the folds against demo_data/churn_oof_pred.csv
-/workspace/tmobile/TM-Dubhacks26/.venv/bin/python run_experiments.py  # all models (slow on a loaded box; the HGB grid there did not finish tonight) -> results.csv, oof_predictions.csv, leakage_*.csv
-/workspace/tmobile/TM-Dubhacks26/.venv/bin/python audit_extra.py
-OMP_NUM_THREADS=1 /workspace/tmobile/TM-Dubhacks26/.venv/bin/python quick_hgb.py   # fast HGB + ensemble (paired vs baseline)      # duplicates/groups, correlated pairs, oracle, cancel ablation
+cd ../scratch_models
+.venv/bin/python folds.py            # checks the folds against demo_data/churn_oof_pred.csv
+.venv/bin/python run_experiments.py  # all models (slow on a loaded box; the HGB grid there did not finish tonight) -> results.csv, oof_predictions.csv, leakage_*.csv
+.venv/bin/python audit_extra.py
+OMP_NUM_THREADS=1 .venv/bin/python quick_hgb.py   # fast HGB + ensemble (paired vs baseline)      # duplicates/groups, correlated pairs, oracle, cancel ablation
 ```
 Shared modules for other workers: `folds.py` (`load_raw()`, `get_folds()`, `fold_ids()`) and `metrics.py` (`all_metrics`, `per_fold`, `bootstrap_ci`, `paired_fold_comparison`, `paired_bootstrap_delta`, `single_feature_auc` with leak flag at AUC > 0.95, `top_capture`, which matches `harness/compare_strategies.topk_capture`).
 

@@ -138,7 +138,7 @@ Groups 1a-1c are the complete list of inputs the risk model and offer engine rea
 - **Break-even 5.17%**: Below a 5.17% save rate it loses money; at 5% it comes out ahead only 41% of the time. *Source: `experiments/ledger/ledger_summary.json breakeven_save_rate, p_net_pos_at_5 (27c2870)`*
 - **Measured campaigns run 2% to 11%**: Published retention results run about 2% to 11% relative, so this pays in the stronger campaigns and loses in the weakest. *Source: `docs/strategy/DEVPOST.md`*
 - **Bootstrap**: 2,000 account resamples: an 80% chance of coming out ahead at our central 10% assumption (41% at 5%); mean +$3,817, 95% range -$3,186 to +$13,148. *Source: `experiments/ledger/ledger_summary.json; LEDGER_SCHEMA.md (27c2870)`*
-- **Do saves stick?**: On our 184 contacts, if each saved customer keeps their own risk, they are worth -$1,307 at 10%, only 36 of the 184 are worth contacting, break-even rises to 14.5%, and it is ahead 22% of the time at 10%. A holdout is built in so a rollout can measure saves. *Source: `tm-models rerun on 27c2870 (on our 184 contacts)`*
+- **Do saves stick?**: On our 184 contacts, if each saved customer keeps their own risk, they are worth -$1,307 at 10%, only 36 of the 184 are worth contacting, break-even rises to 14.5%, and it is ahead 22% of the time at 10%. A holdout is built in so a rollout can measure saves. *Source: `model experiments rerun on 27c2870 (on our 184 contacts)`*
 - **The shipped demo engine**: The earlier engine contacts 1,314 accounts and is -$71,838 at a 10% save rate in full dollars. That is why the next version contacts far fewer. *Source: `scratch_models/chart_check/RESULTS.md §3`*
 - **Blanket discount rule**: A $25 credit to the top 10% by risk is -$4,116 at 10%. *Source: `scratch_models/chart_check/RESULTS.md §3`*
 - **Not statistically proven**: At about 5,000 accounts, no 5% result is distinguishable from zero. *Source: `scratch_models/economics/RESULTS.md Circularity`*
@@ -188,7 +188,7 @@ Groups 1a-1c are the complete list of inputs the risk model and offer engine rea
 
 - **No real churn outcomes**: Labels are stand-ins generated from a formula we wrote, so the model's accuracy is partly by construction. *Source: `harness/out/churn_model_card.md; scratch_models/economics/RESULTS.md Circularity`*
 - **Save rate unknown**: Every dollar figure rests on an assumed save rate; a holdout is built in so a rollout can measure saves. *Source: `scratch_models/economics/RESULTS.md`*
-- **Saves may not stick**: If a saved customer stays as risky as before, most of the money disappears. That's the first thing a real rollout tests. *Source: `tm-models rerun on 27c2870 (on our 184 contacts)`*
+- **Saves may not stick**: If a saved customer stays as risky as before, most of the money disappears. That's the first thing a real rollout tests. *Source: `model experiments rerun on 27c2870 (on our 184 contacts)`*
 - **Holdout size**: A reliable read needs about 12,800 accounts per group; at our ~5,000 only very large effects show. *Source: `docs/strategy/DEVPOST.md (power estimate)`*
 - **Contacts lean on bill changes**: Only 35 of the 184 have no recent bill change, because bill changes are churn terms in our own generator. *Source: `scratch_models/economics/RESULTS.md GUARDRAIL weak spot`*
 - **No outreach log, opt-out field or time zone**: Quarterly cap, opt-out and send hours are hooks, untested on this data. *Source: `docs/outreach/OUTREACH_PLAYBOOK.md §1, §4`*

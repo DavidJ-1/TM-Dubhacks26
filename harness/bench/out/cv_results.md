@@ -1,6 +1,6 @@
 # 5-fold CV bench (SYNTHETIC data, SYNTHETIC labels)
 
-- harness/churn_features.prepare() (imported at run time); features=/workspace/tmobile/TM-Dubhacks26/harness/out/features.csv; labels=/workspace/tmobile/TM-Dubhacks26/harness/out/labels.csv
+- harness/churn_features.prepare() (imported at run time); features=harness/out/features.csv; labels=harness/out/labels.csv
 - regular accounts: 5000; personas held out: 42
 - model features from prepare(): 58
 

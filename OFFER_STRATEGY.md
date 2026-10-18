@@ -8,8 +8,8 @@
 > version of the engine; where the two differ, the Devpost draft is the current plan. No real T-Mobile customer data. Public T-Mobile facts
 > were read on 2026-10-17 and promos change; details and links are in the research files below.
 
-Revised Sat 10/17/2026 (PDT) by the offer-strategy lane. Inputs: brief (`strategy/tmobile-brief-summary.md`), plan doc,
-`LANES.md`, `sandbox.db` (read-only), `harness/out/*.csv`, and the research files:
+Revised Sat 10/17/2026 (PDT) by the team. Inputs: brief (`strategy/tmobile-brief-summary.md`), plan doc,
+the team plan, `sandbox.db` (read-only), `harness/out/*.csv`, and the research files:
 
 | File | What it covers |
 |---|---|
@@ -28,7 +28,7 @@ customer, in this situation, at this time." Rules/heuristics allowed; complex ML
 | Direction (brief, verbatim core) | Fit | What answers it | Honest gap (see §2) |
 |---|---|---|---|
 | **3 Next Best Moment (primary):** "churn-risk score (model or rules) -> ranked actions accounting for cost: better-fitting plan, proactive credit, relevant perk, check-in. Inputs: tenure, support interactions, plan fit vs usage, billing changes, synthetic competitor-interest proxies. Convincing = different problems -> different actions; discount not automatic; restraint." | Mostly | Model A `p_churn_90d` + reasons; Model B EV over every action (`offer_candidates.csv`); fix-first for network, credit for billing pain, do nothing for happy customers | Right-size never wins; no perk or check-in action; competitor/port-out raise the score but drive no action; UI shows winner + runner-up only |
-| **4 Timekeeper:** "upgrade now vs wait ... transparent now-vs-later cost comparison + trade-in value chart; honest 'wait'." | Weak | `um_device_paid_off`, `um_payoff_soon`, `um_old_device`; sandbox `tradein_curves` | No now-vs-wait output yet (spec §6g; tm-ui building the chart) |
+| **4 Timekeeper:** "upgrade now vs wait ... transparent now-vs-later cost comparison + trade-in value chart; honest 'wait'." | Weak | `um_device_paid_off`, `um_payoff_soon`, `um_old_device`; sandbox `tradein_curves` | No now-vs-wait output yet (spec §6g; the UI building the chart) |
 | **5 Household Mix:** "2-5 line household ... lowest-cost best-fit config, savings vs current mismatched setup." | Weak | right-size search, kid lines from `lines.member_role` | Savings actions never chosen; 55+/partner variant switch missing. Sandbox has 0 mixed-plan accounts, so "mix" = one plan + add-ons per account |
 | **1 Cart Whisperer / 2 Matchmaker** | Not claimed | – | Don't claim them |
 
@@ -56,16 +56,16 @@ upgrading a phone can mathematically never win (right-size 0/219 chosen, device 
 
 | # | Flaw | Owner | Status (Sat ~8 PM) |
 |---|---|---|---|
-| 1 | No action that saves the customer money or says "upgrade now"; persona 38 (55+) gets an upsell instead of $40/mo savings; 05 and 40 get nothing | tm-offers | **Open.** Spec: §6d customer-first actions + upsell block |
-| 2 | Persona 21 (quiet, port-out, competitor 0.85) gets do nothing | tm-offers | **Open.** Spec: §6d `check_in` |
-| 3 | Clean clone runs the old `console_app.py` / `engine.py`; `out/` is gitignored, so the app falls back to mocks | coordinator + tm-ui | Open |
-| 4 | Insights says 14.6% churn while cards average ~2.7% | tm-ui | Open; pick 0.99%/mo calibration (LANES) |
-| 5 | Inferred details leak into texts (persona 28 "finishing school"); income/job enrichment is a trust risk | tm-offers (validator) + **David** (§6c) | **Open / pending David.** Blocklist spec §6f |
-| 6 | Ranked set + cost not shown; no what-if | tm-ui | Open |
-| 7 | Timekeeper claimed but absent | tm-ui (chart) + tm-offers (`out/line_tradein.csv`) | tm-ui in progress; spec §6g |
-| 8 | Model C / learning curves eat demo time | David + tm-ui | Open (keep in README as "how we'd measure lift") |
-| 9 | Do-nothing reason is internal math ("costs more than it saves") | tm-offers | Open. `why_this_offer` must be customer-facing |
-| 10 | Persona 22 win is fragile (EV $5.41 vs $0.11) | tm-offers | Open. Spec: §6d `bill_shock_relief` + golden tests |
+| 1 | No action that saves the customer money or says "upgrade now"; persona 38 (55+) gets an upsell instead of $40/mo savings; 05 and 40 get nothing | the offer engine | **Open.** Spec: §6d customer-first actions + upsell block |
+| 2 | Persona 21 (quiet, port-out, competitor 0.85) gets do nothing | the offer engine | **Open.** Spec: §6d `check_in` |
+| 3 | Clean clone runs the old `console_app.py` / `engine.py`; `out/` is gitignored, so the app falls back to mocks | coordinator + the UI | Open |
+| 4 | Insights says 14.6% churn while cards average ~2.7% | the UI | Open; pick 0.99%/mo calibration (team plan) |
+| 5 | Inferred details leak into texts (persona 28 "finishing school"); income/job enrichment is a trust risk | the offer engine (validator) + **David** (§6c) | **Open / pending David.** Blocklist spec §6f |
+| 6 | Ranked set + cost not shown; no what-if | the UI | Open |
+| 7 | Timekeeper claimed but absent | the UI (chart) + the offer engine (`out/line_tradein.csv`) | the UI in progress; spec §6g |
+| 8 | Model C / learning curves eat demo time | David + the UI | Open (keep in README as "how we'd measure lift") |
+| 9 | Do-nothing reason is internal math ("costs more than it saves") | the offer engine | Open. `why_this_offer` must be customer-facing |
+| 10 | Persona 22 win is fragile (EV $5.41 vs $0.11) | the offer engine | Open. Spec: §6d `bill_shock_relief` + golden tests |
 
 ### 2c. Persona golden tests (fail CI if they drift)
 
@@ -153,11 +153,11 @@ competitor research, port-out) never appear. Kid lines may shape the offer, but 
 | `ACC-PERSONA-21` | 70 months, 1 line, app use near zero (port-out not mentioned) | **check-in** + loyalty $5/mo | "Hi there. Thanks for nearly 6 years with us. As a thank-you we can add $5/month off your bill. Anything about your plan we can make better? Reply YES for the credit or tell us. Reply STOP to opt out." |
 | `ACC-PERSONA-24` | 9 contacts, all resolved, heavy app use | **do nothing** | (none). Why: "Everything is working for them, so we won't bother them." |
 
-## 6. Proposals for tm-offers (drop-in spec)
+## 6. Proposals for the offer engine (drop-in spec)
 
-Same text: `handoff/tm-offers-proposals.txt`. All rates synthetic.
+All rates are assumptions.
 
-### 6a. `offers.csv` columns (for tm-ui)
+### 6a. `offers.csv` columns (for the UI)
 `segment`, `why_this_offer` (one customer-facing sentence; operator math goes in `reason`), `lock_in_months`,
 `message_en`, `message_es`, `promo_skus` (`;`-list), and **`drivers`**: `;`-list of `group:signal`, groups:
 - `commerce:` plans, promos, devices, financing, trade-in (e.g. `commerce:device_paid_off`, `commerce:cheaper_variant_eligible`)
@@ -261,7 +261,7 @@ equivalents): `school, graduat, job, promot, income, kid, child, competitor, swi
 Match `port` and `job` as whole words or prefixes (`\bport`), otherwise "support" and "report" in fix-first texts
 fail. "promo credit" passes (`promo` ≠ `promot`); "promotion" fails, as intended.
 
-### 6g. Timekeeper now-vs-wait (tm-offers writes `out/line_tradein.csv`; tm-ui draws the chart)
+### 6g. Timekeeper now-vs-wait (the offer engine writes `out/line_tradein.csv`; the UI draws the chart)
 Columns: `account_id, line_id, device_sku, age_months, financing_balance_cents, financing_months_remaining,
 monthly_installment_cents, tradein_value_now_cents, tradein_value_at_payoff_cents` (from `tradein_curves`),
 `net_tradein_now_cents = max(0, value_now − balance)`, `best_promo_sku, promo_value_cents, cost_now_cents, cost_wait_cents,

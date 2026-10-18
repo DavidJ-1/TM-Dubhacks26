@@ -1,7 +1,7 @@
 # T-Mobile postpaid plans and price guarantees: real offers mapped to the sandbox
 
-Research for DubHacks '26 (tm-strategy). All facts were accessed on **2026-10-17** unless marked otherwise. The project's customer data is synthetic. Real prices are listed for **fidelity checks only**: customer texts may quote only dollar amounts that exist in the sandbox `plans` or `promotions` tables.
-Sandbox: `/workspace/tmobile/dubhacks/data/sandbox.db`, opened read-only (`mode=ro`). metadata: brand "T-Mobile (stub data, not official)", as_of 2026-10-01, schema_version 9, seed 2026.
+Research for DubHacks '26 (strategy research). All facts were accessed on **2026-10-17** unless marked otherwise. The project's customer data is synthetic. Real prices are listed for **fidelity checks only**: customer texts may quote only dollar amounts that exist in the sandbox `plans` or `promotions` tables.
+Sandbox: `vendor/dubhacks/data/sandbox.db`, opened read-only (`mode=ro`). metadata: brand "T-Mobile (stub data, not official)", as_of 2026-10-01, schema_version 9, seed 2026.
 
 ## Sources (short keys)
 - **[PLANS]** https://www.t-mobile.com/cell-phone-plans: plan cards, footnotes and FAQ.
@@ -104,7 +104,7 @@ Prices are the monthly **total for N lines, before AutoPay**, from the Broadband
 | Retention credits (unofficial) | ~$30 + $10/month for 6 months; $10–20/month for 6–12 months; ~20% for moving to premium | [DOC][TMONEWS-RET] | `PROMO-STUB-LOYALTY-CREDIT` ($5/month, 36+ months tenure, source 'stub'); `PROMO-STUB-CARE-CREDIT` ($25 once, 3+ support contacts in 90 days, 6+ months tenure, source 'stub') | `tenure_months`, `support_interactions`, `account_signals.port_out_inquiry`, `competitor_research_score` | Proactive credit **only** for care or bill-shock problems. Sandbox amounts sit at the low end of the real anecdotes, which is fine |
 | Home Internet bundle | $15/month off with a phone line (bundle page) | bundle page | `PROMO-STUB-BUNDLE-HINT` ($15/month) ✓ | `account_addons` no home internet | Perk or bundle action (outside this doc's scope) |
 
-## 7. Rules for "better-fitting plan" actions (for tm-offers' EV engine)
+## 7. Rules for "better-fitting plan" actions (for the offer engine's EV engine)
 1. **Upgrade a heavy user:** an Essentials line averaging >50GB/month over 3 months (deprioritized above 50GB), or using a lot of hotspot or travel data, moves to More. Hotspot >60GB or a connected device moves to Beyond. Message the benefit ("no slowdowns, price locked 5 years"), not the inference.
 2. **Downgrade an overpayer:** a Beyond line using <15GB and ~0 hotspot, with no connected lines, no satellite or travel signal and no financed early-upgrade need, moves to More, saving $15–50/month on the sandbox prices. A More line using <15GB with a low streaming signal *could* move to Essentials. **Caveat:** that move loses the 5-year guarantee, Netflix and international data. The EV engine should require a strong price-sensitivity signal, and the explanation must state what the customer gives up. Downgrades cost revenue but show "customer value first" (30% of the rubric).
 3. **Eligibility savings:** a `discount_group` of 55_plus, partner or community on a standard-price plan moves to the matching variant, keeping features and the guarantee. This is a clean, no-creep win.
@@ -113,7 +113,7 @@ Prices are the monthly **total for N lines, before AutoPay**, from the Broadband
 6. **Do nothing:** a customer on the right plan with stable bills and no risk signal gets nothing. Moving an Experience customer between Experience plans doesn't reset the guarantee, so there's no "lock in longer" benefit to sell them.
 
 ## 8. Uncertainties and gaps (top first)
-1. **Sandbox `prices_include_autopay=1`, but its prices equal the real *pre*-AutoPay label prices.** So either the sandbox overstates prices by $5/line, or the flag is wrong. tm-offers should decide on one interpretation and label it.
+1. **Sandbox `prices_include_autopay=1`, but its prices equal the real *pre*-AutoPay label prices.** So either the sandbox overstates prices by $5/line, or the flag is wrong. the offer engine should decide on one interpretation and label it.
 2. **The $5.49 vs $4.49 fee:** current labels say $5.49. A cached copy of the main page shows $4.49. The change date of Oct 12, 2026 comes from a third party [M13].
 3. **Experience More upgrade cycle:** 2.0 labels say 3 years; older card copy says 2 years.
 4. **The partner = Military and community = First Responder mapping** is my inference from exact price matches and `priority_network`. The sandbox doesn't say.

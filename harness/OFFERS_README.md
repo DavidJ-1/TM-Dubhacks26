@@ -1,4 +1,4 @@
-# Model B: offer chooser and upgrade moments (tm-offers lane)
+# Model B: offer chooser and upgrade moments (offer engine)
 
 > **Every customer and every number here is synthetic or simulated.** The accounts, usage, bills and promotions
 > come from the judge sandbox (`mageshkumarj/dubhacks`, all rows `data_source = 'stub'`). Save rates, annoyance
@@ -17,8 +17,8 @@ The sandbox is found at `$DUBHACKS_DB` (the project-wide DB variable), then `ven
 ## Inputs
 | File | From | Use |
 |---|---|---|
-| `out/churn_scores.csv` | tm-churn (Model A) | `p_churn_90d`, `risk_rank`. If the file is missing, `out/mock_churn_scores.csv` is generated with the same columns (switch: `CONFIG["CHURN_SOURCE"]`, default `auto`). The `churn_source` column in the output says which was used. |
-| `out/features.csv` | tm-data | Account-level facts for detectors and eligibility (39 mapped columns, `FEATURES_MAP` in `offer_detectors.py`). |
+| `out/churn_scores.csv` | the churn model (Model A) | `p_churn_90d`, `risk_rank`. If the file is missing, `out/mock_churn_scores.csv` is generated with the same columns (switch: `CONFIG["CHURN_SOURCE"]`, default `auto`). The `churn_source` column in the output says which was used. |
+| `out/features.csv` | data prep | Account-level facts for detectors and eligibility (39 mapped columns, `FEATURES_MAP` in `offer_detectors.py`). |
 | `sandbox.db` | judge | `promotions` (amounts and eligibility rules), `plans` (line-price tables, caps, eligibility), plus the per-line facts features.csv lacks: per-line usage peak and hotspot (`usage_monthly`), paid-off or upgrade-ready lines (`lines`), bill-shock month (`billing_history`) and unresolved network contacts (`support_interactions`). |
 
 ## The score
@@ -126,10 +126,10 @@ switching-cost adjustment to p_churn.
 **Guardrails:** no bill credits when p_churn_90d < 5%; upsells blocked within 90 days of bill shock, with an open
 support issue, when a cheaper eligible variant exists, when the top driver is shopping/port-out (port-out inquiry or
 risk >= 5%), or when the increase is > 25% of the current bill (40% if a line is already over its cap). Never income.
-`ENRICHMENT_IN_DECISIONS` is permanently False (tm-strategy A/B): income / job change / kid age band / likely_kid_flag
+`ENRICHMENT_IN_DECISIONS` is permanently False (strategy research A/B): income / job change / kid age band / likely_kid_flag
 appear only in `drivers` as `enrichment(simulated)[not used]`.
 
-**Upgrade gate** (`upgrade_gate.py`): device / family upgrade only for accounts in the top 15% of tm-bench's NO-INCOME
+**Upgrade gate** (`upgrade_gate.py`): device / family upgrade only for accounts in the top 15% of the benchmark's NO-INCOME
 upgrade model (tier "a features.csv + domain", lr_tuned, trained on synthetic 250k; bench top-15% capture 44%).
 `TM_UPGRADE_GATE=0` drops it. `BILL_SHOCK_RELIEF_OVERRIDE` (default True, OPEN DECISION) is the one switch for the
 care-credit 1-contact relief (`TM_BILL_SHOCK_RELIEF_OVERRIDE=0`).
@@ -175,7 +175,7 @@ Persona golden tests: `tests/test_persona_golden.py` (42 personas).
   persona 24's reason; wait personas 29/31/33; open-ticket wording; offer_api toggles for persona 21. Golden tests read
   `demo_data/` when `harness/out/` is missing.
 
-## v2 #3: honest acceptance + upsell guardrails (Sat 10/17 ~10:45 PM PDT; branch tm-offers-v2; all numbers synthetic)
+## v2 #3: honest acceptance + upsell guardrails (Sat 10/17 ~10:45 PM PDT; offers v2; all numbers synthetic)
 - **Honest upsell acceptance.** `P_ACCEPT` step_up / device_upgrade / family_upgrade 0.25 / 0.15 / 0.20 -> **0.04**.
   No carrier publishes offer-acceptance rates; the closest real figures are overall postpaid upgrade rates (AT&T
   3.0-4.7%/quarter, Verizon 2.6% 2Q26), which include organic upgrades, so 4% is a **ceiling**, not a measured
@@ -209,7 +209,7 @@ Persona golden tests: `tests/test_persona_golden.py` (42 personas).
 
 ## v2 merge round (SYNTHETIC)
 - `KEPT_VALUE_MONTHS` 19.338 (default): kept-account value = monthly margin x 19.338 (survival-discounted 24 months,
-  tm-research s13; tm-models' $1,478). Env `TM_KEPT_VALUE_MONTHS=24` restores the old undiscounted value. Upsell and
+  research s13; model experiments' $1,478). Env `TM_KEPT_VALUE_MONTHS=24` restores the old undiscounted value. Upsell and
   lock horizons stay at `VALUE_HORIZON_MONTHS` 24.
 - `PORT_OUT_CONTACT` off | self_initiated_only | all (default all: the signal is the customer's own inquiry). Sandbox signal
   `account_signals.port_out_inquiry` = the customer asked about porting away (self-initiated inquiry), not a carrier
@@ -218,12 +218,12 @@ Persona golden tests: `tests/test_persona_golden.py` (42 personas).
 - `FIX_FIRST_FORCE` ev_positive (default) | all_open: an open ticket (unresolved_90d >= 1) allows only fix-first / care credit + fix-first; ev_positive contacts only when that EV > 0, else silent (`open_ticket_ev_le0`); all_open forces it (`open_ticket`). Env `TM_FIX_FIRST_FORCE`.
 - Receipt: `receipt_limited_time` / `receipt_plan_end_date` (blank: neither plans nor promotions has an end-date
   field); limited-time target plans (plans.status) get a "check it's still offered" line.
-- `harness/one_decision.py`: one `decision` column {text_now, wait_until <date>, receipt_only, silent}, tm-models'
+- `harness/one_decision.py`: one `decision` column {text_now, wait_until <date>, receipt_only, silent}, model experiments'
   bill-change rule on our picks, `retention_net`, `tmm_*` guardrail join columns (`harness/guardrail_join.py`).
 - `harness/moment_replay.py`: the only windowed wait allowed is a care credit gated by min_tenure_months, with the
   90-day support window re-counted from dated contacts.
 
-## decisions.csv + options.csv (v2, tm-design spec; synthetic numbers)
+## decisions.csv + options.csv (v2, design spec; synthetic numbers)
 `harness/decisions_out.py` (run by the engine-rules hook in `offers.py`, or `TM_OUT_DIR=<dir> python harness/decisions_out.py`)
 writes `decisions.csv` (5,042 rows, outreach_card order) and `options.csv` (do nothing first, then every option weighed).
 - Our columns: account_id, decision {message, receipt_only, silent}, channel {text, in_app, email, call, bill, none},
@@ -232,7 +232,7 @@ writes `decisions.csv` (5,042 rows, outreach_card order) and `options.csv` (do n
 - Contact set = the policy guardrail's 184 (`experiments/engine_rules/out/demo/guardrail_detail.csv`, env
   `TM_POLICY_GUARDRAIL`). Open ticket: perk reminder becomes fix-first (25). Message text = the outreach card's wording,
   with any call promise removed unless the channel is call (env `TM_OUTREACH_DIR`).
-- tm-models' ledger (guardrail_result/note, save_rate_*, net_*, why_*, already_leaving(+note), in_holdout, timing,
+- model experiments' ledger (guardrail_result/note, save_rate_*, net_*, why_*, already_leaving(+note), in_holdout, timing,
   wait_until, newest event) is joined from the v2 working tree at build time
-  (`/workspace/tmobile/v2-efficacy/experiments/ledger/ledger.csv`, env `TM_LEDGER_DIR`), never computed here.
+  (`../v2-efficacy/experiments/ledger/ledger.csv`, env `TM_LEDGER_DIR`), never computed here.
 - `fix_first_digital.csv`: fix-first accounts whose channel is not call (for rebooking the callback cost).
