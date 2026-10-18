@@ -27,3 +27,11 @@ build/
 .next/
 out/
 .context/
+
+# Judge sandbox is cloned by `make setup`, not committed
+vendor/
+
+# Generated
+artifacts/
+.pytest_cache/
+.streamlit/cache/
