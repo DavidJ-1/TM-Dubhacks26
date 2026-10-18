@@ -548,7 +548,8 @@ def _facts(r) -> dict[str, list[tuple[str, str]]]:
     def num(c, fmt="{:,.0f}", scale=1.0):
         v = r.get(c)
         return None if v is None or pd.isna(v) else fmt.format(float(v) * scale)
-    plan = " ".join(str(r.get(c, "")).title() for c in ("plan_family", "plan_tier") if pd.notna(r.get(c)))
+    plan = (str(r.get("plan_name")) if pd.notna(r.get("plan_name")) and str(r.get("plan_name", "")).strip() else
+            " ".join(str(r.get(c, "")).title() for c in ("plan_family", "plan_tier") if pd.notna(r.get(c))))
     g = {
         "Commerce": [("Plan", plan or None), ("Plan price / mo", money("plan_price_cents")), ("Last bill", money("last_bill_cents")),
                      ("Bill vs prior 3 mo", num("bill_change_3m_pct", "{:+.0f}%", 100)), ("Promo just ended", yes("promo_expired_recent")),
@@ -588,8 +589,9 @@ INPUT_VALUES: dict[str, Callable] = {  # considerations item -> this customer's 
     "Bring-your-own-phone account": lambda r: None if _v(r, "n_byod_lines") is None else f"{int(r.n_byod_lines)} of {int(_n(r, 'n_lines'))} lines",
     "Phone payoff within 3 months": lambda r: _yn(r, "financing_ends_within_3m"),
     "Home Internet on the account": lambda r: _yn(r, "has_home_internet"),
-    "Plan, family and price": lambda r: None if _v(r, "plan_family") is None else
-        f"{str(r.plan_family).replace('_', ' ').title()} {str(_v(r, 'plan_tier') or '').replace('_', ' ').title()} · ${_n(r, 'plan_price_cents') / 100:,.0f}/mo".replace("  ", " "),
+    "Plan, family and price": lambda r: (f"{_v(r, 'plan_name')} · ${_n(r, 'plan_price_cents') / 100:,.0f}/mo" if _v(r, "plan_name") else None
+        if _v(r, "plan_family") is None else
+        f"{str(r.plan_family).replace('_', ' ').title()} {str(_v(r, 'plan_tier') or '').replace('_', ' ').title()} · ${_n(r, 'plan_price_cents') / 100:,.0f}/mo".replace("  ", " ")),
     "Last bill": lambda r: _fmt(r, "last_bill_cents", lambda v: f"${float(v) / 100:,.0f}"),
     "Bill change reason": lambda r: _fmt(r, "bill_change_reason", lambda v: str(v).replace("_", " ")),
     "Phone financing and trade-in value": lambda r: _fmt(r, "max_financing_months_remaining", lambda v: f"{int(v)} months left" if float(v) > 0 else "nothing financed"),
@@ -634,11 +636,34 @@ def _inputs_html(r, inputs: pd.DataFrame) -> tuple[str, int, int]:
     return cols, shown, total
 
 
-def _message_html(r, d=None) -> str:
+def _nice_date(x) -> str:
+    """'2026-12-03' -> 'Dec 3, 2026'; the input unchanged if it isn't a date."""
+    try:
+        t = pd.Timestamp(x)
+        return f"{t.strftime('%b')} {t.day}, {t.year}"
+    except Exception:  # noqa: BLE001
+        return str(x)
+
+
+def _pref_lang(r) -> str:
+    """'ES' when the customer prefers Spanish (language column), else 'EN'."""
+    return "ES" if str(r.get("language", "") or "").strip().lower() == "es" else "EN"
+
+
+def _msg_es(r, d=None) -> str:
+    return (_sv(d, "message_es") if d is not None else "") or str(r.get("message_es", "") or "").strip()
+
+
+def _message_html(r, d=None, lang: str = "EN") -> str:
     """Step 5: the message as the customer receives it, in its channel's look. Empty string when there is nothing to show.
     d (optional decisions row): receipt_line / customer_saves_usd_mo fill in when df lacks them; receipt_kind 'tradeoff'
-    adds the receipt_tradeoff_line under the bill row as "but you'd lose: ..."."""
+    adds the receipt_tradeoff_line under the bill row as "but you'd lose: ..."; timing 'wait' + wait_until puts the
+    scheduled date in the preview header. lang 'ES' shows message_es (decisions row, else df) when there is one."""
     msg = str(r.get("message_en", "") or "").strip()
+    if lang == "ES" and msg and _msg_es(r, d):
+        msg = _msg_es(r, d)
+    wait = _sv(d, "wait_until") if d is not None and _sv(d, "timing").lower() == "wait" else ""
+    when = f"scheduled {_nice_date(wait)}" if wait else "now"
     ch = r.get("channel")
     bill = str(r.get("receipt_line_en", "") or "").strip() or (_sv(d, "receipt_line") if d is not None else "")
     trade = _sv(d, "receipt_tradeoff_line") if d is not None and _sv(d, "receipt_kind").lower() == "tradeoff" else ""
@@ -663,26 +688,29 @@ def _message_html(r, d=None) -> str:
         return bill_html
     body = esc(msg)
     if ch == "text":
-        m = f"<div class='o-sms'><div class='top'>Text message · now</div><div class='b'>{body}</div></div>"
+        m = f"<div class='o-sms'><div class='top'>Text message · {esc(when)}</div><div class='b'>{body}</div></div>"
     elif ch == "in_app":
         first, _, rest = msg.partition(". ")
         m = (f"<div class='o-app'><span class='bell'>&#x1F514;&#xFE0E;</span><span class='t'>{esc(first)}.</span>"
-             f"<span class='b'>{esc(rest)}</span><span class='m'>app notification · now</span></div>")
+             f"<span class='b'>{esc(rest)}</span><span class='m'>app notification · {esc(when)}</span></div>")
     elif ch == "email":
         subj = "About your open support request"
         m = (f"<div class='o-mail'><div class='h'>From: Customer Care</div><div class='h'>Subject: {subj}</div>"
+             + (f"<div class='h'>Sends: {esc(when)}</div>" if wait else "") +
              f"<div class='body'>{body}</div></div>")
     elif ch == "call":
-        s = re.sub(r"^\[Call script\]\s*", "", msg)
+        s = re.sub(r"^\[(?:Call script|Guion de llamada)\]\s*", "", msg)
         ask = ""
-        if "Ask:" in s:
-            s, _, ask = s.partition("Ask:")
+        for kw in ("Ask:", "Pregunte:"):
+            if kw in s:
+                s, _, ask = s.partition(kw)
+                break
         parts = [p.strip() for p in re.split(r"(?<=[.?!])\s+", s.strip()) if p.strip()]
         items = "".join(f"<li>{'<span class=say>Say:</span> ' if i == 0 else ''}{esc(p)}</li>" for i, p in enumerate(parts))
         if ask:
             q, _, tail = ask.strip().partition("?")
             items += f"<li><span class='say'>Ask:</span> {esc(q)}?</li>" + (f"<li>{esc(tail.strip())}</li>" if tail.strip() else "")
-        m = f"<div class='o-call'><div class='h'><span>&#x260E;&#xFE0E; Agent call script</span><span>read aloud</span></div><ol>{items}</ol></div>"
+        m = f"<div class='o-call'><div class='h'><span>&#x260E;&#xFE0E; Agent call script</span><span>read aloud{(' · ' + esc(when)) if wait else ''}</span></div><ol>{items}</ol></div>"
     else:
         m = f"<div class='o-app'><span class='bell'></span><span class='b'>{body}</span></div>"
     return m + (("<div style='height:12px'></div>" + bill_html) if bill_html else "")
@@ -692,10 +720,30 @@ DN_REASON = {"happy": "nothing is going wrong on this account", "open_ticket": "
              "wait_payoff": "it's better to wait until their phone is paid off"}
 
 
-def outreach_rules(r, channel: str | None = None) -> list[tuple[str, str, str]]:
-    """The outreach rules (from the outreach playbook), in order; the first that applies decides.
-    Returns (rule, status, detail) with status 'stop' (decides: no message), 'pass', 'info' or 'skip' (not reached).
-    Uses optional columns: action_code, do_nothing_reason, policy_selected, block_reason, unresolved_90d, contact_preference."""
+def _bill_rule_pass(r, d=None) -> str:
+    """Rule 4's line when it doesn't stop us, from the same fields step 1 shows (bill_increase_pct, bill_change_reason,
+    unresolved_90d) and the decision's guardrail_note."""
+    inc = _v(r, "bill_increase_pct")
+    rose = (inc is not None and round(float(inc) * 100) > 0) or bool(_sv(r, "bill_change_reason"))
+    if not rose:
+        return "Bill didn't go up."
+    if _n(r, "unresolved_90d") > 0:
+        return "Bill went up, but fixing their open issue is still allowed."
+    if "offset" in (_sv(d, "guardrail_note") if d is not None else "").lower():
+        return "Bill went up, but the message comes with a credit that offsets it."
+    if "new phone" in _sv(r, "bill_change_reason").lower() or _sv(r, "bill_change_reason").lower() == "device_installment":
+        return "Bill went up for a new phone they chose, so a message is still allowed."
+    if not _sv(r, "bill_change_reason"):
+        return "Bill went up, but not from a promo ending or a phone payment, so it doesn't hold a message back."
+    return "Bill went up, but this message is still allowed."
+
+
+def outreach_rules(r, channel: str | None = None, d=None) -> list[tuple[str, str, str]]:
+    """The outreach rules (from the outreach playbook), in order; the first one that stops us decides, and if none
+    does we send. Returns (rule, status, detail) with status 'stop' (decides: no message), 'pass', 'info' (also true:
+    shapes the message), 'na' (doesn't apply), 'note' (noted) or 'skip' (not reached).
+    Uses optional columns: action_code, do_nothing_reason, policy_selected, block_reason, bill_increase_pct,
+    bill_change_reason, unresolved_90d, contact_preference; d (optional decisions row) for guardrail_note."""
     out, stopped = [], False
 
     def sv(c):
@@ -712,7 +760,8 @@ def outreach_rules(r, channel: str | None = None) -> list[tuple[str, str, str]]:
             stopped = True
             out.append((rule, "stop", detail_stop))
         else:
-            out.append((rule, "info" if kind == "info" else "pass", detail_pass if not applies else detail_stop))
+            st_ = {"info": "info" if applies else "na", "note": "note"}.get(kind, "pass")
+            out.append((rule, st_, detail_pass if not applies else detail_stop))
     ac = sv("action_code")
     add("If our engine finds nothing worth doing, we stay silent.", (ac == "do_nothing") if ac else None,
         "Engine says do nothing: " + DN_REASON.get(sv("do_nothing_reason"), "no action applies") + ".", "Engine found something worth weighing.")
@@ -723,15 +772,15 @@ def outreach_rules(r, channel: str | None = None) -> list[tuple[str, str, str]]:
     add("Only offers that still pay off at a realistic 10% save rate get a message.", (not bool(ps)) if ps is not None and not pd.isna(ps) else None,
         "Nothing here pays off at a realistic save rate.", "This action pays off even at a 10% save rate.")
     add("If their bill just went up, we only reach out with a credit that offsets it, or to fix an open issue.",
-        (br == "bill_change_no_fix") if "block_reason" in r else None, "Bill went up and we have no offer that lowers it.", "No blocking bill increase.")
+        (br == "bill_change_no_fix") if "block_reason" in r else None, "Bill went up and we have no offer that lowers it.", _bill_rule_pass(r, d))
     un = _n(r, "unresolved_90d")
     add("With an open support issue, the only message allowed is a fix, never an offer.", un > 0,
         f"{int(un)} unresolved support contact{'s' if un != 1 else ''}: "
         + ("we'll call to help fix their open issue." if (channel or "") == "call" else "we'll help fix their open issue."), "No open support issue.", kind="info")
     pref = sv("contact_preference")
     if pref:
-        add("We reach people the way they asked to be reached.", True, f"Prefers {pref}.", "", kind="info")
-    add("One proactive message per account at most.", True, "At most one message this run.", "", kind="info")
+        add("We reach people the way they asked to be reached.", True, f"Prefers {pref}.", "", kind="note")
+    add("One proactive message per account at most.", True, "At most one message this run.", "", kind="note")
     return out
 
 
@@ -907,7 +956,7 @@ def _why_when(r, nv, e) -> str:
     if nv.get("timing") == "wait" or (e is not None and len(e) and _sv(e.iloc[0], "timing").lower() == "wait"):
         wait = nv.get("wait_until") or (_sv(e.iloc[0], "wait_until") if e is not None and len(e) else "")
         why = _sv(e.iloc[0], "wait_reason") if e is not None and len(e) else ""
-        return f"<b>Why wait:</b> {esc(why or ('the better moment is ' + wait if wait else 'the timing is better later'))}."
+        return f"<b>Why wait:</b> {esc(why or ('the better moment is ' + _nice_date(wait) if wait else 'the timing is better later'))}."
     if nv["kind"] == "bill":
         return "<b>Why now:</b> it goes on their next bill, where they already look; nothing is sent."
     if nv["kind"] == "quiet" or e is None or not len(e):
@@ -1074,12 +1123,22 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
                     st.markdown(f"<div class='o-ph'>Typical {pct(b)} → this customer {pct(pn)}</div>{rows}", unsafe_allow_html=True)
         elif step == 2:
             nv = _next_version(r, decisions)
-            rl = outreach_rules(r, (nv or {}).get("channel") if isinstance(nv, dict) else None)
-            mark = {"stop": f"<span style='color:{MAG};font-weight:700'>STOPS HERE</span>", "pass": "passes", "info": "applies", "skip": "not reached"}
-            rrows = "".join(f"<div class='o-opt {'win' if s_ == 'stop' else ''} {'off' if s_ == 'skip' else ''}' style='grid-template-columns:1.4fr 1.2fr 110px;padding:5px 0'>"
-                            f"<span>{i + 1}. {esc(rule)}</span><span class='why'>{esc(det)}</span><span class='v'>{mark[s_]}</span></div>"
-                            for i, (rule, s_, det) in enumerate(rl))
-            st.markdown(f"<div class='o-ph'>The rules, in order<small>the first one that applies decides</small></div>{rrows}", unsafe_allow_html=True)
+            rl = outreach_rules(r, (nv or {}).get("channel") if isinstance(nv, dict) else None, _drow(decisions, account_id))
+            decide = f"<span style='color:{MAG};font-weight:700'>DECIDES</span>"
+            mark = {"stop": f"<span style='color:{MAG};font-weight:700'>STOPS HERE</span>", "pass": "passes", "info": "also true",
+                    "na": "doesn't apply", "note": "noted", "skip": "not reached"}
+            def _rrow(n, rule, s_, det, win=False):
+                return (f"<div class='o-opt {'win' if win or s_ == 'stop' else ''} {'off' if s_ == 'skip' else ''}' style='grid-template-columns:1.4fr 1.2fr 110px;padding:5px 0'>"
+                        f"<span>{n}{esc(rule)}</span><span class='why'>{esc(det)}</span><span class='v'>{decide if win else mark[s_]}</span></div>")
+            rrows, sent_row = "", not any(s_ == "stop" for _, s_, _ in rl) and nv.get("kind") == "message"
+            for i, (rule, s_, det) in enumerate(rl):
+                if sent_row and s_ in ("info", "na", "note"):   # once, right after the last rule that could stop us
+                    sent_row = False
+                    rrows += _rrow("→ ", "No rule above stopped us, so we send one message.",
+                                   "", nv.get("headline", "").rstrip("."), win=True)
+                rrows += _rrow(f"{i + 1}. ", rule, s_, det)
+            st.markdown(f"<div class='o-ph'>The rules, in order<small>the first one that stops us decides · if none does, we send</small></div>{rrows}",
+                        unsafe_allow_html=True)
             if (candidates is not None and len(candidates)) or _opts_for(options, account_id) is not None:
                 stop = next((d for _, s_, d in rl if s_ == "stop"), "")
                 st.markdown(_options_html(r, candidates, nv, stop, options), unsafe_allow_html=True)
@@ -1104,14 +1163,23 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
             st.markdown(f"<div class='o-dec' style='max-width:780px'><div class='hd'><span class='o-lbl'>What we picked</span></div>{big}{why}{when}{money}</div>",
                         unsafe_allow_html=True)
             if nv["kind"] in ("message", "bill"):
-                m = _message_html(r, _drow(decisions, account_id))
+                m = _message_html(r, _drow(decisions, account_id), st.session_state.get(f"{key}_lang_{account_id}") or _pref_lang(r))
                 if m:
                     lab = "On the bill:" if nv["kind"] == "bill" else f"Sent {CHANNEL_PHRASE.get(nv['channel'], 'as a message')}:"
                     st.markdown(f"<div class='o-lbl' style='margin:12px 0 6px'>{esc(lab)}</div>{m}", unsafe_allow_html=True)
         elif step == 4:
-            m = _message_html(r, _drow(decisions, account_id))
+            drow = _drow(decisions, account_id)
+            lk = f"{key}_lang_{account_id}"
+            lang = _pref_lang(r)
+            if r.messaged and str(r.get("message_en", "") or "").strip() and _msg_es(r, drow):
+                st.session_state.setdefault(lk, lang)
+                lc, _ = st.columns([1, 5])
+                lc.segmented_control("Message language", ["EN", "ES"], key=lk,
+                                     format_func=lambda x: f"{x} · preferred" if x == lang else x)
+            lang = st.session_state.get(lk) or lang
+            m = _message_html(r, drow, lang)
             reason = str(r.get("reason_line", "") or "")
-            head = "Why we're reaching out" if r.messaged else "Why we're not"
+            head = "Why we're reaching out" if r.messaged else "Why we're not reaching out"
             top = f"<div class='o-lbl'>{head}</div><div class='o-ph'>{esc(_cap(reason))}</div>" if reason else ""
             st.markdown(top + m, unsafe_allow_html=True)
         else:

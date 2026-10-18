@@ -92,7 +92,26 @@ def merged() -> pd.DataFrame:
     ps[msg.ne("")] = True
     ps[reason.str.contains("pays off", case=False) & msg.eq("")] = False
     m["policy_selected"] = ps
+    pn = plan_names()
+    if pn is not None:   # the plan catalog's own name for the current plan (the bill note uses the same name)
+        m = m.merge(pn, on="account_id", how="left")
     return m
+
+
+@st.cache_data(show_spinner=False)
+def plan_names() -> pd.DataFrame | None:
+    """account_id, plan_name: the catalog name of each account's current plan, from household_plan.csv (current_plan),
+    the same source the bill notes name it from. None if the file is missing."""
+    if not HOUSEHOLD.exists():
+        return None
+    try:
+        h = pd.read_csv(HOUSEHOLD, usecols=["account_id", "current_plan"])
+    except Exception as e:  # noqa: BLE001
+        print(f"[scroll] plan names unavailable: {type(e).__name__}: {e}")
+        return None
+    h = h.drop_duplicates("account_id").rename(columns={"current_plan": "plan_name"})
+    h["plan_name"] = h.plan_name.map(clean).replace("", pd.NA)
+    return h
 
 
 @st.cache_data(show_spinner=False)
@@ -618,7 +637,7 @@ def offer_decisions(df: pd.DataFrame) -> pd.DataFrame | None:
     d = d.drop_duplicates("account_id").copy()
     d["decision_reason"] = d.decision_reason.fillna("").astype(str).map(_strip_reason).map(lambda t: t[:1].upper() + t[1:])
     for c in ("offer_label", "guardrail_note", "why_low", "why_mid", "why_high", "already_leaving_note", "timing", "wait_until",
-              "receipt_line", "receipt_tradeoff_line", "message_en"):
+              "receipt_line", "receipt_tradeoff_line", "message_en", "message_es"):
         if c in d:
             d[c] = d[c].fillna("").astype(str).map(clean)
     sent = d.account_id.isin(set(df.loc[df.messaged, "account_id"]))
