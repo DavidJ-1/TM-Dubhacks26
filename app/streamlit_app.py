@@ -57,6 +57,8 @@ def apply_css() -> None:
         """
         <style>
           .stApp { background: #F7F1EA; color: #1A1220; }
+          header[data-testid="stHeader"] { background: #F7F1EA; }
+          section.main > div.block-container { padding-top: 2.75rem; }
           .banner {
             background: #1A1220; color: #F7F1EA; padding: 10px 14px; border-radius: 8px;
             font-size: 0.95rem; margin-bottom: 12px;
@@ -90,14 +92,16 @@ def banner() -> None:
     )
 
 
-def chart(fig: go.Figure) -> None:
+def chart(fig: go.Figure, height: int = 400) -> None:
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font_color=COLORS["ink"],
-        margin=dict(l=10, r=10, t=36, b=10),
-        height=360,
+        margin=dict(l=16, r=28, t=56, b=48),
+        height=height,
     )
+    fig.update_xaxes(automargin=True)
+    fig.update_yaxes(automargin=True)
     st.plotly_chart(fig, width="stretch")
 
 
@@ -196,8 +200,8 @@ def overview(console) -> None:
             hovertemplate="%{y}<br>%{x:.1%} expected churn<br>n=%{customdata}<extra></extra>",
         )
     )
-    fig.update_layout(title="Other slices of the same sandbox score", xaxis_tickformat=".0%", height=460)
-    chart(fig)
+    fig.update_layout(title="Other slices of the same sandbox score", xaxis_tickformat=".0%")
+    chart(fig, height=560)
     st.caption(
         "Autopay, Home Internet, and segment barely separate this book. "
         "The gap that matters is friction: support, shopping around, a bill jump, a port-out inquiry."
@@ -273,8 +277,8 @@ def queue(console) -> None:
             marker_color=[COLORS["risk"] if value > 0 else COLORS["good"] for value in contrib["contribution"]],
         )
     )
-    fig.update_layout(title="Model A contribution (coefficient × standardized value)", height=320)
-    chart(fig)
+    fig.update_layout(title="Model A contribution (coefficient × standardized value)")
+    chart(fig, height=480)
 
 
 def action_page(console) -> None:
@@ -402,14 +406,15 @@ def projections(console) -> None:
     upgrade_rate = c.slider("Upgrade acceptance among upgrade-now accounts", 0.0, 1.0, 0.2, 0.05)
     outcome = project(population, acceptance, save_rate, upgrade_rate)
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Baseline expected churn", f"{outcome['baseline_rate']:.1%}")
-    m2.metric("Projected expected churn", f"{outcome['projected_rate']:.1%}")
-    m3.metric("Offers in the fixed list", f"{outcome['targeted_offers']:,}")
+    m1.metric("Baseline expected churn", f"{outcome['baseline_rate']:.2%}")
+    m2.metric("Projected expected churn", f"{outcome['projected_rate']:.2%}")
+    m3.metric("Expected churners averted", f"{outcome['expected_saves']:.0f}")
     m4.metric("Projected upgrades", f"{outcome['projected_upgrades']:.0f}")
     st.caption(
         "The offer list is frozen at the 25% acceptance used to rank actions, "
         "and credits are only considered at or above a 15% model risk. "
         "Moving these sliders does not rebuild who is contacted. "
+        f"Offers in that fixed list: {outcome['targeted_offers']:,}. "
         f"Upgrade-now accounts in the 5,000: {outcome['upgrade_now_accounts']:,}."
     )
     curve = acceptance_curve(population, save_rate)
@@ -423,15 +428,17 @@ def projections(console) -> None:
             line=dict(color=COLORS["magenta"], width=3),
         )
     )
-    fig.add_hline(y=outcome["baseline_rate"], line_dash="dot", line_color="#1A1220", annotation_text="Baseline")
-    fig.add_vline(x=acceptance, line_dash="dot", line_color="#8A7B84")
-    fig.update_layout(
-        title="Projected, illustrative assumptions — churn",
-        xaxis_title="Offer acceptance rate",
-        xaxis_tickformat=".0%",
-        yaxis_tickformat=".1%",
-        yaxis_title="Expected 90-day churn",
+    fig.add_hline(
+        y=outcome["baseline_rate"],
+        line_dash="dot",
+        line_color="#1A1220",
+        annotation_text="Baseline",
+        annotation_position="top left",
     )
+    fig.add_vline(x=acceptance, line_dash="dot", line_color="#8A7B84")
+    fig.update_xaxes(range=[-0.02, 0.84], tickformat=".0%", title="Offer acceptance rate")
+    fig.update_yaxes(tickformat=".1%", title="Expected 90-day churn")
+    fig.update_layout(title="Projected, illustrative assumptions — churn")
     chart(fig)
     lifts = upgrade_curve(population)
     fig = go.Figure(
@@ -443,12 +450,9 @@ def projections(console) -> None:
         )
     )
     fig.add_vline(x=upgrade_rate, line_dash="dot", line_color=COLORS["magenta"])
-    fig.update_layout(
-        title="Projected, illustrative assumptions — upgrade lift",
-        xaxis_title="Upgrade acceptance",
-        xaxis_tickformat=".0%",
-        yaxis_title="Projected upgrades",
-    )
+    fig.update_xaxes(range=[-0.02, 1.02], tickformat=".0%", title="Upgrade acceptance")
+    fig.update_yaxes(title="Projected upgrades")
+    fig.update_layout(title="Projected, illustrative assumptions — upgrade lift")
     chart(fig)
     st.markdown(
         """
