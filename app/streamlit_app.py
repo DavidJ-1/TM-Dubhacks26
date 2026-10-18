@@ -458,10 +458,10 @@ def score_panel(acc: str, p_now: float, kp: str = ""):
 def send_button(body: str, key: str):
     """'Send this text to my phone': only on click, one click = one send. Body is the exact text shown.
     Recipient comes from the sender module's own env config; the app never passes or reads a number."""
-    if str(REPO) not in sys.path:
-        sys.path.insert(0, str(REPO))
+    if str(REPO / "harness") not in sys.path:
+        sys.path.insert(0, str(REPO / "harness"))
     try:
-        from harness.sms_send import is_configured, send_sms
+        from sms_send import is_configured, send_sms
     except ImportError:
         is_configured, send_sms = (lambda: False), None
     try:
@@ -477,7 +477,12 @@ def send_button(body: str, key: str):
         st.session_state[f"sent_{key}"] = res if isinstance(res, dict) else {"ok": False, "detail": str(res)}
     res = st.session_state.get(f"sent_{key}")
     if res is not None:
-        (st.success("Sent") if res.get("ok") else st.error(str(res.get("detail") or "Send failed")))
+        if res.get("ok"):
+            st.success("Sent")
+            if res.get("detail"):
+                st.caption(str(res["detail"]))
+        else:
+            st.error(str(res.get("detail") or "Send failed"))
 
 
 def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = True):
