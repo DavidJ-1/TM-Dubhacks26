@@ -149,7 +149,10 @@ def insights():
     st.caption("Judge-provided sandbox: 5,000 synthetic households, 12 months of usage, billing and support. "
                "Churn figures are **sandbox scoring** (real outcomes are private to the judges).")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Expected to churn in 90 days", "14.6%", help="Sandbox scoring, 5,000 accounts (plan doc)")
+    _cs = data["churn_scores"].df
+    _cs = _cs[~_cs.account_id.astype(str).str.startswith("ACC-PERSONA")]
+    c1.metric("Expected to churn in 90 days (Model A, synthetic)", f"{_cs.p_churn_90d.mean():.1%}",
+              help="Model A, calibrated to ~1%/month (synthetic). The judge sandbox's raw toy score averages 14.6%.")
     gain = held_out_gain()
     if gain is not None:
         c2.metric("Churners caught by calling the riskiest 10%", f"{gain['model_top10']:.0%}",
