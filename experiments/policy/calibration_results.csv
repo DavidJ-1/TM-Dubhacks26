@@ -1,0 +1,13 @@
+setting,churn_probs,mean_p,contacts,net_true,model_believed
+budget 500,oracle (generator p_true),0.0274,500,66904.0,67594.0
+budget 500,baseline LR (calibrated),0.0275,500,66462.0,67664.0
+budget 500,class-weighted LR (miscalibrated),0.2914,500,55798.0,389065.0
+budget 500,class-weighted LR + Platt recal,0.0275,500,65248.0,63675.0
+budget 500,baseline LR x2 (overconfident),0.0542,500,65373.0,136978.0
+budget 500,baseline LR x0.5 (underconfident),0.0138,500,64616.0,32619.0
+unconstrained,oracle (generator p_true),0.0274,876,69087.0,69760.0
+unconstrained,baseline LR (calibrated),0.0275,876,68685.0,69847.0
+unconstrained,class-weighted LR (miscalibrated),0.2914,2288,38097.0,603346.0
+unconstrained,class-weighted LR + Platt recal,0.0275,852,67625.0,65726.0
+unconstrained,baseline LR x2 (overconfident),0.0542,1243,66065.0,148644.0
+unconstrained,baseline LR x0.5 (underconfident),0.0138,592,65496.0,32743.0

@@ -1,0 +1,17 @@
+budget,policy,win_share,beats_engine_share,median_net,p10_net,p90_net
+budget,engine (current offers.csv),0.0,0.0,50110.0,7239.0,152101.0
+budget,teammates' playbook,0.0,0.0,9100.0,-13620.0,54081.0
+budget,risk-only (top p_churn),0.0,0.111,42021.0,8030.0,138306.0
+budget,value-weighted (p_churn x bill),0.0,0.15,43045.0,8315.0,141469.0
+budget,EV-optimal,0.96,1.0,53013.0,14246.0,155744.0
+budget,EV + guardrails (support>=3),0.007,1.0,52912.0,14018.0,155538.0
+budget,EV + guardrails (support>=5),0.033,1.0,53002.0,14185.0,155735.0
+budget,"EV + guardrails, compliant",0.0,0.903,52231.0,13540.0,154408.0
+unconstrained,engine (current offers.csv),0.0,0.0,20704.0,-53867.0,132002.0
+unconstrained,teammates' playbook,0.0,0.246,-2439.0,-40482.0,48762.0
+unconstrained,risk-only (top p_churn),0.0,0.838,42022.0,7971.0,138376.0
+unconstrained,value-weighted (p_churn x bill),0.0,0.856,43070.0,8267.0,141603.0
+unconstrained,EV-optimal,1.0,1.0,54940.0,14246.0,173916.0
+unconstrained,EV + guardrails (support>=3),0.0,1.0,54177.0,14018.0,172747.0
+unconstrained,EV + guardrails (support>=5),0.0,1.0,54710.0,14185.0,173812.0
+unconstrained,"EV + guardrails, compliant",0.0,1.0,53348.0,13540.0,170988.0
