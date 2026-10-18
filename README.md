@@ -10,7 +10,13 @@ DubHacks '26, T-Mobile track. A Python console that ranks who is likely to leave
 make run
 ```
 
-That creates a virtualenv, installs the Python dependencies, clones the judge sandbox if it is not already in `vendor/dubhacks`, and starts Streamlit at <http://localhost:8501>.
+That creates a virtualenv, installs the Python dependencies, clones the judge sandbox if it is not already in `vendor/dubhacks`, and starts the Retention Console (`app/console_app.py`) at <http://localhost:8501>.
+
+The teammate demo UI is a second Streamlit app, `app/streamlit_app.py`. It reads `harness/out/*.csv` when those files exist and otherwise the synthetic mocks in `app/mock/`. See `app/README.md`.
+
+```bash
+make run-ui
+```
 
 ```bash
 make test
@@ -63,9 +69,10 @@ The sandbox has no observed churn outcomes. Judges score a private model that is
 ## Layout
 
 ```
-app/streamlit_app.py     Streamlit screens
-harness/                 load, Model A, offers, upgrade moments, projections
-tests/test_engine.py     checks against sandbox.db
+app/console_app.py       Retention Console (make run): sandbox.db, Model A, offers, projections
+app/streamlit_app.py     Teammate demo UI (make run-ui): insights, at-risk list, customer card
+harness/                 Both lanes: console engine plus tm-data, tm-churn, tm-offers, tm-harness
+tests/                   console checks against sandbox.db, plus the harness tests
 vendor/dubhacks/         cloned judge sandbox (not committed)
 ```
 

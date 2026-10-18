@@ -6,7 +6,8 @@ import math
 
 import pandas as pd
 
-from harness import data, messages, moments, offers, stats
+from harness import data, messages, moments, stats
+from harness import console_offers as offers
 from harness.config import AS_OF, RETENTION_SKUS, db_path
 from harness.model_a import ChurnModel, explain
 

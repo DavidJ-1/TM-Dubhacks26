@@ -17,7 +17,7 @@ from harness.config import (
     UPGRADE_MIN_AGE_MONTHS,
 )
 from harness.data import tradein_value_cents
-from harness.offers import best_device_promo
+from harness.console_offers import best_device_promo
 
 
 def estimated_battery_pct(age_months: int) -> int:

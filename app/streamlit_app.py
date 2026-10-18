@@ -1,494 +1,331 @@
-"""Retention Console. Streamlit UI over the Python scoring engine. No JavaScript frontend."""
+"""T-Mobile churn + upsell harness: demo UI (tm-ui lane).
 
+Run:  streamlit run app/streamlit_app.py
+Reads harness/out/*.csv when present (LANES.md contracts), else app/mock/*.csv.
+ALL CUSTOMERS ARE SYNTHETIC (judge sandbox + mock scoring).
+"""
 from __future__ import annotations
 
+import html
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
+import altair as alt
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 
-from harness.engine import build_console
-from harness.projections import acceptance_curve, project, upgrade_curve
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from data import load_all, merged, persona_titles, truthy, upgrade_flag_cols  # noqa: E402
+from messages import action_label, normalize_action, render_message  # noqa: E402
 
-st.set_page_config(page_title="Retention Console", layout="wide")
+MAGENTA = "#E20074"
+st.set_page_config(page_title="Churn + Upsell Harness (synthetic)", page_icon="📱", layout="wide")
 
-PINNED = [
-    "ACC-PERSONA-04",
-    "ACC-PERSONA-24",
-    "ACC-PERSONA-23",
-    "ACC-PERSONA-10",
-    "ACC-PERSONA-21",
-    "ACC-PERSONA-22",
-    "ACC-PERSONA-25",
-    "ACC-PERSONA-27",
-    "ACC-PERSONA-28",
-    "ACC-PERSONA-30",
-]
+st.markdown(f"""
+<style>
+.synth-banner {{position: sticky; top: 2.8rem; z-index: 999; background: {MAGENTA}; color: white;
+  padding: .45rem 1rem; border-radius: 8px; font-weight: 700; text-align: center; margin-bottom: .8rem;}}
+.src {{display:inline-block; font-size:.7rem; font-weight:700; padding:1px 7px; border-radius:10px;
+  margin-right:6px; color:white; text-transform:uppercase; letter-spacing:.04em}}
+.src-commerce {{background:#1f77b4}} .src-customer {{background:#2ca02c}} .src-live {{background:#ff7f0e}}
+.sig-row {{padding:4px 0; border-bottom:1px solid #eee; font-size:.92rem}}
+.offer-box {{border:2px solid {MAGENTA}; border-radius:12px; padding:14px 16px; background:#fff0f7}}
+.wait-box {{border:2px solid #555; border-radius:12px; padding:14px 16px; background:#f4f4f4}}
+.phone {{width:290px; margin:auto; border:12px solid #111; border-radius:38px; background:#f2f2f7;
+  min-height:470px; padding:30px 12px 18px; box-shadow:0 8px 24px rgba(0,0,0,.25); position:relative}}
+.notch {{position:absolute; top:6px; left:50%; transform:translateX(-50%); width:90px; height:18px;
+  background:#111; border-radius:10px}}
+.sender {{text-align:center; font-size:.75rem; color:#666; margin-bottom:10px}}
+.bubble {{background:#e5e5ea; color:#000; border-radius:18px; padding:10px 13px; font-size:.86rem;
+  line-height:1.3; max-width:88%;}}
+.nomsg {{text-align:center; color:#777; margin-top:150px; font-size:.9rem}}
+.tag {{display:inline-block; background:#eee; border-radius:10px; padding:1px 8px; margin:2px; font-size:.78rem}}
+</style>
+<div class="synth-banner">⚠️ All customers are synthetic: T-Mobile judge sandbox data with simulated scores. Not real customers.</div>
+""", unsafe_allow_html=True)
 
-COLORS = {
-    "ink": "#1A1220",
-    "magenta": "#E20074",
-    "paper": "#F7F1EA",
-    "line": "#E4D9CF",
-    "good": "#1F7A4D",
-    "risk": "#E20074",
+data = load_all()
+PERSONAS = persona_titles()
+df = merged(data)
+flag_cols = upgrade_flag_cols(data["offers"].df)
+if "action_code" in df:  # tm-offers machine code; falls back to the human-readable action
+    df["action_key"] = df["action_code"].fillna(df.get("action")).map(normalize_action)
+elif "action" in df:
+    df["action_key"] = df["action"].map(normalize_action)
+
+# Column names = tm-data's harness/out/features.csv. Source grouping is a UI choice:
+# commerce = plan/bill/device/financing, customer = profile + support history, live = latest signals snapshot.
+SIGNALS = {  # column -> (source, label, kind)
+    "plan_sku": ("commerce", "Plan", "plan"), "n_lines": ("commerce", "Lines", "int"),
+    "last_bill_cents": ("commerce", "Latest monthly bill", "cents"),
+    "bill_change_3m_pct": ("commerce", "Bill change vs prior 3 mo", "pct"),
+    "promo_expired_recent": ("commerce", "Promo credit expired recently", "yesno"),
+    "installment_ended_recent": ("commerce", "Phone just paid off", "yesno"),
+    "min_financing_months_left_financed": ("commerce", "Financing months left", "int"),
+    "max_device_age_months": ("commerce", "Oldest phone (months)", "int"),
+    "n_lines_over_cap_3m": ("commerce", "Lines over plan data cap", "int"),
+    "segment": ("customer", "Segment", "str"), "tenure_months": ("customer", "Tenure (months)", "int"),
+    "language": ("customer", "Language", "str"), "contact_preference": ("customer", "Contact preference", "str"),
+    "autopay": ("customer", "AutoPay", "yesno"),
+    "support_90d": ("customer", "Support contacts (90d)", "int"), "unresolved_90d": ("customer", "Unresolved (90d)", "int"),
+    "avg_sentiment_90d": ("customer", "Avg support sentiment (90d, -1..1)", "float"),
+    "network_contacts_90d": ("customer", "Network complaints (90d)", "int"),
+    "cancel_inquiries_270d": ("customer", "Cancellation inquiries (270d)", "int"),
+    "competitor_research_score": ("live", "Competitor research score (0..1)", "float"),
+    "port_out_inquiry": ("live", "Port-out inquiry", "yesno"),
+    "app_sessions_30d": ("live", "T-Life app sessions (30d)", "int"),
+    "data_growth_pct": ("live", "Data use growth", "pct"),
 }
 
-
-def dollars(cents: int | None) -> str:
-    if cents is None:
-        return "n/a"
-    return f"${cents / 100:,.2f}"
-
-
-@st.cache_resource(show_spinner="Scoring the sandbox…")
-def get_console():
-    return build_console()
-
-
-def apply_css() -> None:
-    st.markdown(
-        """
-        <style>
-          .stApp { background: #F7F1EA; color: #1A1220; }
-          header[data-testid="stHeader"] { background: #F7F1EA; }
-          section.main > div.block-container { padding-top: 2.75rem; }
-          .banner {
-            background: #1A1220; color: #F7F1EA; padding: 10px 14px; border-radius: 8px;
-            font-size: 0.95rem; margin-bottom: 12px;
-          }
-          .banner strong { color: #FF8FBF; }
-          .phone {
-            width: 320px; max-width: 100%; background: #1A1220; border-radius: 28px;
-            padding: 18px 14px 22px; margin-top: 8px;
-          }
-          .phone-bar { height: 8px; width: 96px; border-radius: 8px; background: #3A2C3E; margin: 0 auto 14px; }
-          .bubble {
-            background: #F7F1EA; color: #1A1220; border-radius: 16px 16px 16px 4px;
-            padding: 12px 14px; white-space: pre-wrap; font-size: 0.92rem; line-height: 1.4;
-          }
-          .quiet { color: #C8B8C2; font-size: 0.9rem; padding: 8px 4px 4px; }
-          div[data-testid="stMetric"] {
-            background: white; border: 1px solid #E4D9CF; border-radius: 10px; padding: 8px 12px;
-          }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+# ---------------- sidebar ----------------
+with st.sidebar:
+    st.markdown("### 📱 Churn + Upsell Harness")
+    page = st.radio("Screen", ["Insights", "Who's at risk this week", "Customer card"], key="page")
+    st.divider()
+    st.caption("Data sources (auto-switch to real outputs when they land)")
+    for n, l in data.items():
+        icon = {"real": "🟢 real", "mock": "🟡 mock", "missing": "🔴 missing"}[l.source]
+        st.caption(f"**{n}.csv**: {icon}")
+        if l.note:
+            st.caption(f"↳ {l.note}")
+    if st.button("Reload data"):
+        st.rerun()
+    st.caption("<span class='src src-commerce'>commerce</span><span class='src src-customer'>customer</span>"
+               "<span class='src src-live'>live</span>", unsafe_allow_html=True)
+any_mock = any(l.source != "real" for k, l in data.items() if k in ("churn_scores", "offers"))
 
 
-def banner() -> None:
-    st.markdown(
-        "<div class='banner'><strong>Synthetic data.</strong> "
-        "Customers, prices, and promotions are the T-Mobile hackathon sandbox "
-        "(stub data as of 2026-10-01). This is not a real customer file and not an official offer.</div>",
-        unsafe_allow_html=True,
-    )
+def mock_note():
+    parts = []
+    if data["churn_scores"].source != "real":
+        parts.append("churn scores and reasons are **mock** until Model A (tm-churn) lands")
+    if data["offers"].source != "real":
+        parts.append("offers are **mock** until Model B (tm-offers) lands")
+    if parts:
+        st.info("Heads-up: " + "; ".join(parts) + ".", icon="🧪")
 
 
-def chart(fig: go.Figure, height: int = 400) -> None:
-    fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font_color=COLORS["ink"],
-        margin=dict(l=16, r=28, t=56, b=48),
-        height=height,
-    )
-    fig.update_xaxes(automargin=True)
-    fig.update_yaxes(automargin=True)
-    st.plotly_chart(fig, width="stretch")
+def flag_label(c: str) -> str:
+    return c.removeprefix("um_").removeprefix("upgrade_").replace("_", " ")
 
 
-def selected_rows(event) -> list[int]:
-    selection = getattr(event, "selection", None)
-    if selection is None and isinstance(event, dict):
-        selection = event.get("selection")
-    rows = getattr(selection, "rows", None) if selection is not None else None
-    if rows is None and isinstance(selection, dict):
-        rows = selection.get("rows")
-    return list(rows or [])
+def open_card(acc: str):
+    st.session_state["account"] = acc
+    st.session_state["page"] = "Customer card"
 
 
-def ensure_selection(console) -> str:
-    if "account_id" not in st.session_state or st.session_state.account_id not in console.details:
-        st.session_state.account_id = "ACC-PERSONA-04"
-    return st.session_state.account_id
-
-
-def overview(console) -> None:
-    stats = console.stats
-    rate = stats["expected_churn_rate"]
-    top20 = stats["concentration"]["top_20"]
-    support = {row["bin"]: row for row in stats["support_bins"]}
+# ---------------- Insights ----------------
+def insights():
+    st.title("Insights from T-Mobile's own sandbox data")
+    st.caption("Judge-provided sandbox: 5,000 synthetic households, 12 months of usage, billing and support. "
+               "Churn figures are **sandbox scoring** (real outcomes are private to the judges).")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Expected 90-day churn", f"{rate:.1%}", help=stats["population_note"])
-    c2.metric("Top 20% share of expected churners", f"{top20['share_of_expected_churners']:.0%}")
-    c3.metric("5+ support contacts", f"{support['5+']['expected_churn']:.0%}", help=f"n={support['5+']['n']}")
-    c4.metric("0 support contacts", f"{support['0']['expected_churn']:.0%}", help=f"n={support['0']['n']}")
-    st.caption(
-        f"Sandbox scoring on {stats['accounts']:,} non-persona accounts. "
-        "These are mean probabilities from the public reference model, not observed churn. "
-        f"Holdout AUC of our logistic model against a seeded draw from that score: "
-        f"{console.metrics['holdout_auc']:.2f}. {console.metrics['label_note']}"
-    )
+    c1.metric("Expected to churn in 90 days", "14.6%", help="Sandbox scoring, 5,000 accounts (plan doc)")
+    c2.metric("Churners in riskiest 20% of accounts", "61%", help="Targeting beats blanket discounts")
+    c3.metric("Asked about cancelling", "346 accounts")
+    c4.metric("Promo expired recently", "553 accounts")
 
-    left, right = st.columns(2)
-    with left:
-        support_frame = pd.DataFrame(stats["support_bins"])
-        fig = go.Figure(
-            go.Bar(
-                x=support_frame["bin"],
-                y=support_frame["expected_churn"],
-                marker_color=COLORS["magenta"],
-                customdata=support_frame["n"],
-                hovertemplate="Support contacts %{x}<br>Expected churn %{y:.1%}<br>n=%{customdata}<extra></extra>",
-            )
-        )
-        fig.update_layout(title="Expected churn by support contacts (90 days)", yaxis_tickformat=".0%", yaxis_title=None)
-        fig.update_xaxes(title="Contacts in the last 90 days")
-        chart(fig)
-        st.caption("Support counts are rows in support_interactions. They are not a model score we invented.")
-    with right:
-        deciles = pd.DataFrame(stats["deciles"])
-        fig = go.Figure(
-            go.Bar(
-                x=deciles["decile"].astype(str),
-                y=deciles["share_of_expected_churners"],
-                marker_color="#1A1220",
-                hovertemplate="Risk decile %{x}<br>Share of expected churners %{y:.1%}<extra></extra>",
-            )
-        )
-        fig.update_layout(
-            title="Where expected churners sit (1 = lowest risk)",
-            yaxis_tickformat=".0%",
-        )
-        chart(fig)
-        st.caption(
-            f"The riskiest 10% average {stats['concentration']['top_10']['mean_risk']:.0%} "
-            f"and hold {stats['concentration']['top_10']['share_of_expected_churners']:.0%} of expected churners."
-        )
+    st.subheader("What drives churn (sandbox scoring)")
+    drivers = pd.DataFrame([
+        ("Support contacts (90d)", "0", 4), ("Support contacts (90d)", "3", 18), ("Support contacts (90d)", "5+", 54),
+        ("Competitor research", "score 0", 5), ("Competitor research", "score 0.75+", 50),
+        ("Bill change", "flat / down", 10), ("Bill change", "up >5%", 23),
+        ("Port-out inquiry", "no", 14), ("Port-out inquiry", "yes", 41),
+        ("Tenure", "<1 year", 16.7), ("Tenure", "3+ years", 12.8),
+    ], columns=["driver", "group", "churn_pct"])
+    chart = alt.Chart(drivers).mark_bar(color=MAGENTA).encode(
+        x=alt.X("churn_pct:Q", title="90-day churn % (sandbox scoring, synthetic)"),
+        y=alt.Y("group:N", title=None, sort=None),
+        row=alt.Row("driver:N", title=None, sort=None, header=alt.Header(labelAngle=0, labelAlign="left")),
+        tooltip=["driver", "group", "churn_pct"]).properties(height=alt.Step(18), width=520).resolve_scale(y="independent")
+    st.altair_chart(chart)
+    st.caption("Source: plan doc 'Useful data' headline stats, computed with the sandbox's own scoring pipeline on 5,000 accounts.")
 
-    drivers = pd.DataFrame(
-        [
-            {"driver": "Competitor research 0.75+", **stats["competitor_high"]},
-            {"driver": "Competitor research 0", **stats["competitor_zero"]},
-            {"driver": "Bill up more than 5%", **stats["bill_up"]},
-            {"driver": "Bill within 5%", **stats["bill_flat"]},
-            {"driver": "Port-out inquiry", **stats["port_yes"]},
-            {"driver": "No port-out inquiry", **stats["port_no"]},
-            {"driver": "Tenure under 12 months", **stats["tenure_short"]},
-            {"driver": "Tenure 36+ months", **stats["tenure_long"]},
-            {"driver": "Autopay off", **stats["autopay_off"]},
-            {"driver": "Autopay on", **stats["autopay_on"]},
-            {"driver": "Home Internet", **stats["home_internet"]},
-            {"driver": "No Home Internet", **stats["no_home_internet"]},
-        ]
-    )
-    fig = go.Figure(
-        go.Bar(
-            y=drivers["driver"],
-            x=drivers["expected_churn"],
-            orientation="h",
-            marker_color=["#E20074" if i % 2 == 0 else "#8A7B84" for i in range(len(drivers))],
-            customdata=drivers["n"],
-            hovertemplate="%{y}<br>%{x:.1%} expected churn<br>n=%{customdata}<extra></extra>",
-        )
-    )
-    fig.update_layout(title="Other slices of the same sandbox score", xaxis_tickformat=".0%")
-    chart(fig, height=560)
-    st.caption(
-        "Autopay, Home Internet, and segment barely separate this book. "
-        "The gap that matters is friction: support, shopping around, a bill jump, a port-out inquiry."
-    )
-    segment_frame = pd.DataFrame(stats["segments"])
-    segment_frame["expected_churn"] = segment_frame["expected_churn"].map(lambda value: f"{value:.1%}")
-    st.dataframe(segment_frame, hide_index=True, width="stretch")
-    k1, k2, k3 = st.columns(3)
-    k1.metric("Cancellation inquiry, ever", f"{stats['cancellation_accounts']:,} accounts")
-    k2.metric("Promo expired, last 3 billing months", f"{stats['promo_expired_recent']:,}")
-    k3.metric("Installment ended, last 3 billing months", f"{stats['installment_ended_recent']:,}")
-    st.caption(
-        f"Catalog has {len(console.promos)} promotions. "
-        f"{len(console.retention_promos)} are retention offers (source = stub): "
-        + ", ".join(promo["name"] for promo in console.retention_promos)
-        + ". Money in the database is cents. Financing is 24 months. Data as of "
-        + f"{console.as_of}."
-    )
+    f, lab = data["features"], data["labels"]
+    if f.source == "real" and lab.source == "real" and "churn_90d" in lab.df and "support_90d" in f.df:
+        with st.expander("Live check: computed from tm-data's harness/out files (synthetic labels)"):
+            j = f.df.merge(lab.df[["account_id", "churn_90d"]], on="account_id")
+            j = j[~j.account_id.str.startswith("ACC-PERSONA")]
+            j["support bucket"] = pd.cut(j.support_90d, [-1, 0, 2, 4, 999], labels=["0", "1-2", "3-4", "5+"])
+            t = j.groupby("support bucket", observed=True).churn_90d.agg(["mean", "size"]).reset_index()
+            t["churn_pct"] = t["mean"] * 100
+            st.metric("Synthetic 90-day churn rate (labels.csv)", f"{j.churn_90d.mean():.1%}", help=f"{len(j):,} non-persona accounts")
+            st.altair_chart(alt.Chart(t).mark_bar(color=MAGENTA).encode(
+                x=alt.X("support bucket:N", sort=None, title="Support contacts in 90 days"),
+                y=alt.Y("churn_pct:Q", title="90-day churn % (synthetic labels)"), tooltip=["support bucket", "churn_pct", "size"]
+            ).properties(height=220), width="stretch")
+            st.caption("labels.csv churn_90d is tm-data's synthetic label (calibrated per LANES.md). Not real outcomes.")
+
+    a, b = st.columns(2)
+    with a:
+        st.subheader("Myth-buster")
+        st.markdown("AutoPay, the Home Internet bundle and segment **barely change churn**. "
+                    "People stay because nothing is going wrong: no unresolved support, a steady bill, not shopping around.")
+        st.subheader("Upgrade moments in the data")
+        um = pd.DataFrame([("Phone just paid off", 240), ("Usage up 30%+ (lines)", 188),
+                           ("Over plan cap (lines)", 234), ("Phone 3+ years old (lines)", 800)], columns=["moment", "count"])
+        st.altair_chart(alt.Chart(um).mark_bar(color="#555").encode(
+            x=alt.X("count:Q", title="count (synthetic sandbox)"), y=alt.Y("moment:N", sort="-x", title=None)).properties(height=160),
+            width="stretch")
+    with b:
+        st.subheader("This week's decisions")
+        mock_note()
+        if len(df) and "action_key" in df:
+            mix = df.groupby("action_key").size().reset_index(name="accounts")
+            mix["action"] = mix.action_key.map(action_label)
+            st.altair_chart(alt.Chart(mix).mark_bar().encode(
+                x=alt.X("accounts:Q"), y=alt.Y("action:N", sort="-x", title=None),
+                color=alt.condition(alt.datum.action_key == "do_nothing", alt.value("#555"), alt.value(MAGENTA))
+            ).properties(height=200), width="stretch")
+            dn = int((df.action_key == "do_nothing").sum())
+            st.markdown(f"**{dn} of {len(df)}** scored accounts get **no offer**: the engine says *wait* when an offer's "
+                        "expected value is below zero.")
+    st.caption("Everyone will build the chatbot. This is the one that says wait.")
 
 
-def queue(console) -> None:
-    account_id = ensure_selection(console)
-    c1, c2 = st.columns([2, 1])
-    with c1:
-        query = st.text_input("Filter by account id or persona title", "")
-    with c2:
-        personas_only = st.checkbox("Persona accounts only", value=False)
-    frame = console.queue(personas_only=personas_only)
-    if query.strip():
-        needle = query.strip().lower()
-        title = frame["title"].fillna("").str.lower()
-        frame = frame.loc[frame["account_id"].str.lower().str.contains(needle) | title.str.contains(needle)]
-    show = frame[
-        ["rank", "account_id", "segment", "model_p", "sandbox_p", "support_90d", "action_name", "upgrade_when", "top_leave"]
-    ].copy()
-    show["model_p"] = show["model_p"].map(lambda value: f"{value:.1%}")
-    show["sandbox_p"] = show["sandbox_p"].map(lambda value: f"{value:.1%}")
-    event = st.dataframe(
-        show,
-        hide_index=True,
-        width="stretch",
-        on_select="rerun",
-        selection_mode="single-row",
-        height=420,
-    )
-    rows = selected_rows(event)
+# ---------------- At-risk list ----------------
+def at_risk():
+    st.title("Who's at risk this week")
+    mock_note()
+    if not len(df):
+        st.warning("No churn scores loaded.")
+        return
+    c1, c2, c3 = st.columns([1, 1, 2])
+    top_n = c1.slider("Show top", 5, max(5, len(df)), min(25, len(df)))
+    min_p = c2.slider("Min 90-day churn risk", 0.0, 1.0, 0.0, 0.05)
+    acts = sorted(df["action_key"].dropna().unique()) if "action_key" in df else []
+    pick = c3.multiselect("Action", acts, default=acts, format_func=action_label)
+    v = df[(df.p_churn_90d >= min_p)]
+    if acts:
+        v = v[v.action_key.isin(pick)]
+    v = v.head(top_n)
+    show = pd.DataFrame({
+        "Rank": v.risk_rank, "Account": v.account_id,
+        "Segment": v.get("segment", ""), "Risk (90d)": v.p_churn_90d * 100,
+        "Top reason": v.risk_reason_1, "Action": v.get("action_key", pd.Series(dtype=str)).map(action_label),
+        "Expected value ($)": v.get("expected_value"),
+    })
+    if flag_cols:
+        show["Upgrade moment"] = v[flag_cols].apply(
+            lambda r: ", ".join(flag_label(c) for c in flag_cols if truthy(r.get(c))), axis=1)
+    ev = st.dataframe(show, hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
+                      column_config={"Risk (90d)": st.column_config.ProgressColumn("Risk (90d)", format="%.0f%%", min_value=0, max_value=100),
+                                     "Expected value ($)": st.column_config.NumberColumn(format="$%.0f")}, key="risk_table")
+    st.caption("Risk = simulated 90-day churn probability. Expected value = p_churn × save rate × customer value − offer cost − annoyance (synthetic).")
+    rows = ev.selection.rows if ev and hasattr(ev, "selection") else []
     if rows:
-        st.session_state.account_id = frame.iloc[rows[0]]["account_id"]
-        account_id = st.session_state.account_id
-    detail = console.account(account_id)
-    st.subheader(account_id)
-    if detail.get("title"):
-        st.caption(detail["title"])
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Model A risk", f"{detail['model_p']:.1%}")
-    m2.metric("Sandbox score", f"{detail['sandbox_p']:.1%}")
-    m3.metric("Support contacts, 90 days", int(detail["support_90d"]))
-    left, right = st.columns(2)
-    with left:
-        st.markdown("**Reasons to leave**")
-        for reason in detail["leave"]:
-            st.write("· " + reason)
-    with right:
-        st.markdown("**Reasons to stay**")
-        for reason in detail["stay"]:
-            st.write("· " + reason)
-    contrib = pd.DataFrame(detail["contributions"])
-    fig = go.Figure(
-        go.Bar(
-            y=contrib["label"],
-            x=contrib["contribution"],
-            orientation="h",
-            marker_color=[COLORS["risk"] if value > 0 else COLORS["good"] for value in contrib["contribution"]],
-        )
-    )
-    fig.update_layout(title="Model A contribution (coefficient × standardized value)")
-    chart(fig, height=480)
-
-
-def action_page(console) -> None:
-    options = PINNED + sorted(set(console.details) - set(PINNED))
-    current = ensure_selection(console)
-    choice = st.selectbox(
-        "Customer",
-        options,
-        index=options.index(current) if current in options else 0,
-        format_func=lambda account_id: _label(console, account_id),
-    )
-    st.session_state.account_id = choice
-    detail = console.account(choice)
-    action = detail["action"]
-    moment = detail["moment"]
-    message = detail["message"]
-
-    left, right = st.columns([1.15, 0.85])
-    with left:
-        st.subheader(action["name"])
-        st.write(action["why"])
-        st.caption(action["formula"])
-        considered = pd.DataFrame(action["considered"])
-        if not considered.empty:
-            view = considered.copy()
-            view["cost"] = view["cost_cents"].map(dollars)
-            view["score"] = view["net_cents"].map(dollars)
-            st.markdown("**Offers considered**")
-            st.dataframe(
-                view[["name", "eligible", "cost", "score", "fit_reason", "reasons"]],
-                hide_index=True,
-                width="stretch",
-            )
-        st.markdown("**Upgrade moment**")
-        if moment is None:
-            st.write("No paid-off phone, no usage over the plan cap, and no phone 36 months or older.")
-        else:
-            st.write(moment["headline"])
-            st.caption(moment.get("assumption", ""))
-            st.write(moment.get("battery_note", ""))
-            st.caption(moment.get("condition_note", ""))
-            triggers = ", ".join(moment["triggers"])
-            st.write(f"Triggers: {triggers}.")
-            if moment.get("usage_3m_gb") is not None and moment.get("data_cap_gb"):
-                st.write(
-                    f"Recent usage {float(moment['usage_3m_gb']):.1f} GB versus a {int(moment['data_cap_gb'])} GB cap."
-                )
-            promo = moment.get("promo")
-            if promo:
-                st.write(
-                    f"One device promo: {promo['name']} ({dollars(promo['savings_cents'])}) "
-                    f"on {promo['device_name']}. A second device promo is not applied."
-                )
-                st.write(
-                    f"Good-condition trade-in {dollars(moment.get('tradein_value_cents'))}. "
-                    f"Balance charged today {dollars(moment.get('balance_cents'))}. "
-                    f"Net after we subtract the promo {dollars(moment.get('net_cents'))}. "
-                    "The sandbox cart total does not subtract promo savings."
-                )
-            elif moment.get("when") == "now":
-                st.write("No device promotion is eligible on a single trade-in plus one new phone.")
-    with right:
-        customer_card(detail, message)
-
-
-def _label(console, account_id: str) -> str:
-    detail = console.account(account_id)
-    title = detail.get("title") or detail["segment"]
-    return f"{account_id} · {title} · {detail['model_p']:.0%}"
-
-
-def customer_card(detail: dict, message: dict) -> None:
-    st.markdown("**Customer card**")
-    st.write(
-        f"{detail['segment']} · {detail['tenure_months']} months · {detail['credit_tier']} · "
-        f"prefers {detail['contact_preference']} · language {detail['language']}"
-    )
-    st.write(
-        f"Latest bill {dollars(detail['last_bill_cents'])}. "
-        f"Bill vs prior average {detail['bill_increase_pct'] * 100:.0f}%. "
-        f"Autopay {'on' if detail['autopay'] else 'off'}."
-    )
-    if detail.get("top_topic"):
-        st.write(
-            f"Most common support topic in 90 days: {detail['top_topic']} ({detail['top_topic_n']}). "
-            f"Average sentiment {detail['avg_sentiment']:.2f}."
-        )
-    if detail.get("scenario"):
-        st.caption(detail["scenario"])
-    lines = pd.DataFrame(detail["lines"])
-    if not lines.empty:
-        show = lines[["member_label", "device_name", "age_months", "financing_balance_cents", "plan_name", "usage_3m_gb"]].copy()
-        show["balance"] = show["financing_balance_cents"].map(dollars)
-        st.dataframe(
-            show[["member_label", "device_name", "age_months", "balance", "plan_name", "usage_3m_gb"]],
-            hide_index=True,
-            width="stretch",
-        )
-    st.markdown(f"Draft for {message['channel']} · {message['language']} · not sent")
-    if message["text"]:
-        st.markdown(
-            "<div class='phone'><div class='phone-bar'></div><div class='bubble'>"
-            + message["html"]
-            + "</div></div>",
-            unsafe_allow_html=True,
-        )
+        acc = show.iloc[rows[0]]["Account"]
+        st.button(f"Open customer card for {acc} →", on_click=open_card, args=(acc,), type="primary")
     else:
-        st.markdown(
-            "<div class='phone'><div class='phone-bar'></div>"
-            "<div class='quiet'>No outbound message. Doing nothing means we do not text this account.</div></div>",
-            unsafe_allow_html=True,
-        )
+        st.caption("Select a row to open its customer card.")
 
 
-def projections(console) -> None:
-    st.subheader("Projected, illustrative assumptions")
-    st.write(
-        "Projected, illustrative assumptions. The curves below are arithmetic on today's scores. "
-        "They are not measured offer responses, not a before/after test, and not a retrained model."
-    )
-    population = console.frame.loc[console.frame["is_persona"] == 0]
-    a, b, c = st.columns(3)
-    acceptance = a.slider("Offer acceptance rate", 0.0, 0.8, 0.25, 0.05)
-    save_rate = b.slider("Share of accepted offers assumed to avert churn", 0.0, 1.0, 1.0, 0.05)
-    upgrade_rate = c.slider("Upgrade acceptance among upgrade-now accounts", 0.0, 1.0, 0.2, 0.05)
-    outcome = project(population, acceptance, save_rate, upgrade_rate)
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Baseline expected churn", f"{outcome['baseline_rate']:.2%}")
-    m2.metric("Projected expected churn", f"{outcome['projected_rate']:.2%}")
-    m3.metric("Expected churners averted", f"{outcome['expected_saves']:.0f}")
-    m4.metric("Projected upgrades", f"{outcome['projected_upgrades']:.0f}")
-    st.caption(
-        "The offer list is frozen at the 25% acceptance used to rank actions, "
-        "and credits are only considered at or above a 15% model risk. "
-        "Moving these sliders does not rebuild who is contacted. "
-        f"Offers in that fixed list: {outcome['targeted_offers']:,}. "
-        f"Upgrade-now accounts in the 5,000: {outcome['upgrade_now_accounts']:,}."
-    )
-    curve = acceptance_curve(population, save_rate)
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=curve["acceptance"],
-            y=curve["projected_churn_rate"],
-            mode="lines",
-            name="Projected churn",
-            line=dict(color=COLORS["magenta"], width=3),
-        )
-    )
-    fig.add_hline(
-        y=outcome["baseline_rate"],
-        line_dash="dot",
-        line_color="#1A1220",
-        annotation_text="Baseline",
-        annotation_position="top left",
-    )
-    fig.add_vline(x=acceptance, line_dash="dot", line_color="#8A7B84")
-    fig.update_xaxes(range=[-0.02, 0.84], tickformat=".0%", title="Offer acceptance rate")
-    fig.update_yaxes(tickformat=".1%", title="Expected 90-day churn")
-    fig.update_layout(title="Projected, illustrative assumptions — churn")
-    chart(fig)
-    lifts = upgrade_curve(population)
-    fig = go.Figure(
-        go.Scatter(
-            x=lifts["upgrade_acceptance"],
-            y=lifts["projected_upgrades"],
-            mode="lines",
-            line=dict(color="#1A1220", width=3),
-        )
-    )
-    fig.add_vline(x=upgrade_rate, line_dash="dot", line_color=COLORS["magenta"])
-    fig.update_xaxes(range=[-0.02, 1.02], tickformat=".0%", title="Upgrade acceptance")
-    fig.update_yaxes(title="Projected upgrades")
-    fig.update_layout(title="Projected, illustrative assumptions — upgrade lift")
-    chart(fig)
-    st.markdown(
-        """
-        **Assumptions on this screen**
-        - Acceptance is the share of sent retention offers that are taken. Default 25%, and that same 25% is what Model B uses to rank a credit against doing nothing.
-        - "Share assumed to avert churn" turns an acceptance into a cancelled churn probability. At 100%, an accepted offer removes that account's sandbox probability from the expected-churn total. That is not something the data measured.
-        - Upgrade acceptance applies only to accounts whose detector says upgrade now (paid off, over the cap, or phone age, and the timing rule says now).
-        - Value horizon inside Model B is 24 months of the latest bill, matching the financing term. Open-ended credits are costed at 12 months, which is how the sandbox estimates savings.
-        - Battery health and any wait that is not the 12-month upgrade rule or a remaining installment are labeled on the customer card as modeled assumptions. This chart does not use them.
-        """
-    )
-
-
-def main() -> None:
-    apply_css()
-    banner()
+# ---------------- Customer card ----------------
+def fmt(col, val):
+    if val is None or (not isinstance(val, str) and pd.isna(val)):
+        return "n/a"
+    kind = SIGNALS.get(col, (None, None, "auto"))[2]
     try:
-        console = get_console()
-    except FileNotFoundError as exc:
-        st.error(str(exc))
-        st.stop()
-    st.title("Retention Console")
-    st.caption("DubHacks '26 · T-Mobile track")
-    page = st.sidebar.radio(
-        "Screen",
-        ["Overview", "At-risk queue", "Next best action", "Projections"],
-    )
-    st.sidebar.caption("Synthetic sandbox data. Money is cents until it is shown as dollars.")
-    if page == "Overview":
-        overview(console)
-    elif page == "At-risk queue":
-        queue(console)
-    elif page == "Next best action":
-        action_page(console)
+        if kind == "yesno":
+            return "yes" if int(val) else "no"
+        if kind == "cents":
+            return f"${float(val) / 100:,.2f}"
+        if kind == "pct":
+            pv = round(float(val) * 100)
+            return f"{pv:+d}%" if pv else "0%"
+        if kind == "int":
+            return f"{int(round(float(val)))}"
+        if kind == "plan":
+            return html.escape(str(val).replace("TMO-STUB-PLAN-", "").replace("-", " ").title())
+    except (TypeError, ValueError):
+        pass
+    if isinstance(val, float):
+        return f"{val:,.2f}".rstrip("0").rstrip(".")
+    return html.escape(str(val))
+
+
+def phone(msg: str | None, lang: str) -> str:
+    sender = "T-Mobile · Text Message"
+    if msg is None:
+        inner = ("<div class='nomsg'>🤫<br><b>No message sent</b><br>" +
+                 ("El motor decidió esperar." if lang == "es" else "The engine decided to wait.") + "</div>")
     else:
-        projections(console)
+        inner = f"<div class='bubble'>{html.escape(msg)}</div>"
+    return f"<div class='phone'><div class='notch'></div><div class='sender'>{sender}</div>{inner}</div>"
 
 
-main()
+def customer_card():
+    st.title("Customer card")
+    mock_note()
+    if not len(df):
+        st.warning("No accounts loaded.")
+        return
+    ids = df.account_id.tolist()
+    cur = st.session_state.get("account", ids[0])
+    acc = st.selectbox("Account", ids, index=ids.index(cur) if cur in ids else 0,
+                       format_func=lambda a: f"#{int(df.loc[df.account_id == a, 'risk_rank'].iloc[0])} · {a}")
+    st.session_state["account"] = acc
+    r = df[df.account_id == acc].iloc[0]
+    note = PERSONAS.get(acc)
+    hdr = f"**{acc}** · {r.get('segment', '')} · {fmt('tenure_months', r.get('tenure_months'))} months · synthetic customer"
+    st.markdown(hdr + (f"  \n_{html.escape(str(note))}_" if isinstance(note, str) and note else ""))
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("90-day churn risk (simulated)", f"{r.p_churn_90d:.0%}")
+    m2.metric("Risk rank", f"#{int(r.risk_rank)} of {len(df)}")
+    m3.metric("Expected value of action (synthetic)", f"${float(r.get('expected_value', 0) or 0):,.0f}")
+
+    left, mid, right = st.columns([1.15, 1.1, 1])
+    with left:
+        st.subheader("Signals")
+        for src in ("commerce", "customer", "live"):
+            rows = [(c, lab) for c, (s, lab, _k) in SIGNALS.items() if s == src and c in r.index]
+            if not rows:
+                continue
+            st.markdown(f"<span class='src src-{src}'>{src}</span>", unsafe_allow_html=True)
+            st.markdown("".join(f"<div class='sig-row'><span class='src src-{src}' style='opacity:.35'>{src[0]}</span>"
+                                f"{lab}: <b>{fmt(c, r[c])}</b></div>" for c, lab in rows), unsafe_allow_html=True)
+        if not any(c in r.index for c in SIGNALS):
+            st.caption("No feature columns loaded (features.csv).")
+    with mid:
+        st.subheader("Why at risk")
+        for i in (1, 2, 3):
+            t = r.get(f"risk_reason_{i}")
+            if isinstance(t, str) and t:
+                st.markdown(f"🔺 {html.escape(t)}")
+        st.subheader("Why they'd stay")
+        for i in (1, 2, 3):
+            t = r.get(f"stay_reason_{i}")
+            if isinstance(t, str) and t:
+                st.markdown(f"🟢 {html.escape(t)}")
+        st.subheader("Decision")
+        k = r.get("action_key", "do_nothing")
+        reason = html.escape(str(r.get("reason", "")))
+        if k == "do_nothing":
+            st.markdown(f"<div class='wait-box'><b>✋ Do nothing: the one that says wait</b><br>{reason}</div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<div class='offer-box'><b>🎯 {action_label(k)}</b><br>{reason}<br>"
+                        f"<small>Expected value ${float(r.get('expected_value', 0) or 0):,.0f} (synthetic)</small></div>",
+                        unsafe_allow_html=True)
+        if truthy(r.get("also_fix_first")) and k != "fix_first_callback":
+            st.markdown("➕ Also: fix-first callback for the open issue")
+        ru = r.get("runner_up_action")
+        if isinstance(ru, str) and ru:
+            ru_txt = f"Runner-up: {action_label(ru)} (EV ${float(r.get('runner_up_ev', 0) or 0):,.0f}, synthetic)"
+            st.caption(ru_txt.replace("$", "\\$"))
+        flags = [flag_label(c) for c in flag_cols if truthy(r.get(c))]
+        if flags:
+            st.markdown("**Upgrade moments:** " + "".join(f"<span class='tag'>{html.escape(f)}</span>" for f in flags),
+                        unsafe_allow_html=True)
+    with right:
+        st.subheader("Outgoing text")
+        default = "es" if str(r.get("language", "en")) == "es" else "en"
+        lang = st.radio("Language", ["en", "es"], index=["en", "es"].index(default), horizontal=True,
+                        format_func=lambda x: {"en": "English", "es": "Español"}[x], key=f"lang_{acc}")
+        msg = render_message(k, lang, r.get("tenure_months"))
+        st.markdown(phone(msg, lang), unsafe_allow_html=True)
+        st.caption(f"Channel preference: {fmt('contact_preference', r.get('contact_preference'))}. "
+                   "Mockup only, nothing is sent. Deterministic template; an LLM may only reword it.")
+
+
+{"Insights": insights, "Who's at risk this week": at_risk, "Customer card": customer_card}[page]()
