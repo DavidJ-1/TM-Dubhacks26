@@ -1,0 +1,366 @@
+{
+  "_note": "Fixed message templates for synthetic accounts. No LLM: the script only fills {slots} with values read from the sandbox tables or the engine output. Every $ amount comes from a slot. Spanish is written for Spanish readers (usted), not translated word for word.",
+  "openers": {
+    "OPEN_STD": {
+      "en": "Hi there.",
+      "es": "Hola."
+    },
+    "OPEN_FAMILY": {
+      "en": "Hi, a note about your {n_lines}-line account.",
+      "es": "Hola, sobre su cuenta de {n_lines} líneas."
+    },
+    "OPEN_LONG": {
+      "en": "Hi, and thanks for {tenure_years} years with us.",
+      "es": "Hola, y gracias por estar con nosotros {tenure_years} años."
+    },
+    "OPEN_SORRY": {
+      "en": "Hi. We're sorry about the trouble with {topic_en}.",
+      "es": "Hola. Lamentamos los problemas con {topic_es}."
+    }
+  },
+  "bodies": {
+    "FIX_CALLBACK": {
+      "offer_type": "fix_first",
+      "channel_rule": "direct",
+      "en": "You have {open_en} we haven't resolved. A specialist can call you to fix it at a time that works for you.",
+      "es": "Tiene {open_es} sin resolver. Un especialista puede llamarle para solucionarlo cuando le convenga.",
+      "cta": "call"
+    },
+    "FIX_CALLBACK_CREDIT": {
+      "offer_type": "care_credit_fix_first",
+      "channel_rule": "direct",
+      "en": "You have {open_en} we haven't resolved. A specialist can call you to fix it, and we'll add a one-time ${care_credit_usd} credit to your next bill.",
+      "es": "Tiene {open_es} sin resolver. Un especialista puede llamarle para solucionarlo y le daremos un crédito único de ${care_credit_usd} en su próxima factura.",
+      "cta": "call"
+    },
+    "CARE_CREDIT": {
+      "offer_type": "care_credit",
+      "channel_rule": "direct",
+      "en": "Thanks for your patience with your recent support contacts. We're adding a one-time ${care_credit_usd} credit to your next bill.",
+      "es": "Gracias por su paciencia con sus contactos recientes con soporte. Vamos a aplicar un crédito único de ${care_credit_usd} en su próxima factura.",
+      "cta": "none"
+    },
+    "BILL_SHOCK_RELIEF": {
+      "offer_type": "bill_shock_price_lock",
+      "channel_rule": "direct",
+      "en": "Your {promo_month_en} bill went up ${promo_change_usd} because a promo credit ended, not because your plan price changed. {plan_name} keeps its {pg_years}-year price guarantee. We'll add a one-time ${care_credit_usd} credit.",
+      "es": "Su factura de {promo_month_es} subió ${promo_change_usd} porque terminó un crédito de promoción; el precio de su plan no cambió. {plan_name} mantiene su garantía de precio de {pg_years} años. Le daremos un crédito único de ${care_credit_usd}.",
+      "cta": "accept"
+    },
+    "CHECK_IN": {
+      "offer_type": "check_in",
+      "channel_rule": "direct",
+      "en": "Want a quick plan review? We'll check that {plan_name} still fits your lines and your bill. No offer attached, no pressure.",
+      "es": "¿Le gustaría revisar su plan? Confirmamos que {plan_name} sigue siendo el adecuado para sus líneas y su factura. Sin ofertas ni presión.",
+      "cta": "review"
+    },
+    "CHECK_IN_PROMO": {
+      "offer_type": "check_in",
+      "channel_rule": "direct",
+      "en": "Your {promo_month_en} bill went up ${promo_change_usd} because a promo credit ended, not because your plan price changed. Want a quick, no-pressure review of {plan_name}?",
+      "es": "Su factura de {promo_month_es} subió ${promo_change_usd} porque terminó un crédito de promoción, no porque cambiara el precio de su plan. ¿Quiere una revisión rápida de {plan_name}, sin presión?",
+      "cta": "review"
+    },
+    "PERK_INCLUDED": {
+      "offer_type": "perk_reminder",
+      "channel_rule": "in_app",
+      "en": "Your {plan_name} plan already includes an ad-supported streaming service at no extra cost.",
+      "es": "Su plan {plan_name} ya incluye un servicio de streaming con anuncios sin costo adicional.",
+      "cta": "turn_on"
+    },
+    "FIX_CALLBACK_RECENT": {
+      "offer_type": "fix_first",
+      "channel_rule": "direct",
+      "en": "You've contacted support {recent_en} in the last 3 months. A specialist can call to make sure everything is sorted, at a time that works for you.",
+      "es": "Se ha comunicado con soporte {recent_es} en los últimos 3 meses. Un especialista puede llamarle para confirmar que todo quedó resuelto, cuando le convenga.",
+      "cta": "call"
+    },
+    "FIX_CALLBACK_CREDIT_RECENT": {
+      "offer_type": "care_credit_fix_first",
+      "channel_rule": "direct",
+      "en": "You've contacted support {recent_en} in the last 3 months. A specialist can call to make sure it's sorted, and we'll add a one-time ${care_credit_usd} credit to your next bill.",
+      "es": "Se ha comunicado con soporte {recent_es} en los últimos 3 meses. Un especialista puede llamarle para confirmarlo y le daremos un crédito único de ${care_credit_usd} en su próxima factura.",
+      "cta": "call"
+    }
+  },
+  "closers": {
+    "text": {
+      "en": "Reply STOP to opt out.",
+      "es": "Responda STOP para no recibir más mensajes."
+    },
+    "in_app": {
+      "en": "Turn off these notes anytime in Settings.",
+      "es": "Puede desactivar estos avisos en Configuración cuando quiera."
+    },
+    "email": {
+      "en": "Unsubscribe from these emails anytime.",
+      "es": "Puede darse de baja de estos correos cuando quiera."
+    },
+    "phone_call": {
+      "en": "If they'd rather not get calls like this, offer to stop them.",
+      "es": "Si prefiere no recibir este tipo de llamadas, ofrezca dejar de llamarle."
+    }
+  },
+  "receipt": {
+    "RCPT_PLAN_SAME": {
+      "en": "Same features, lower price: {best_plan} would cost ${save_usd}/mo less than {current_plan} for your lines. Tap to switch. Nothing else changes.",
+      "es": "Mismas funciones, menor precio: {best_plan} le costaría ${save_usd} menos al mes que {current_plan} para sus líneas. Toque para cambiar. Todo lo demás sigue igual."
+    },
+    "RCPT_PLAN_SAME_ELIG": {
+      "en": "Same features, lower price: {best_plan} would cost ${save_usd}/mo less than {current_plan} for your lines, after a quick eligibility check. Tap to start.",
+      "es": "Mismas funciones, menor precio: {best_plan} le costaría ${save_usd} menos al mes que {current_plan} para sus líneas, tras una verificación rápida. Toque para empezar."
+    },
+    "RCPT_PLAN_LOSE": {
+      "en": "{best_plan} would cost ${save_usd}/mo less than {current_plan}, but you'd lose: {loss_en}. Only switch if that's fine with you. Tap to review.",
+      "es": "{best_plan} le costaría ${save_usd} menos al mes que {current_plan}, pero perdería: {loss_es}. Cambie solo si eso no le afecta. Toque para revisar."
+    },
+    "RCPT_WATCH": {
+      "en": "Your watch line is billed at ${watch_now_usd}/mo. On {plan_name} it can be ${watch_new_usd}/mo, saving ${watch_save_usd}/mo. Tap to switch.",
+      "es": "Su línea de reloj cuesta ${watch_now_usd} al mes. Con {plan_name} puede costar ${watch_new_usd} al mes, un ahorro de ${watch_save_usd}. Toque para cambiar."
+    },
+    "RCPT_WATCH_LOSE": {
+      "en": "Your watch line is billed at ${watch_now_usd}/mo. On {plan_name} it can be ${watch_new_usd}/mo, saving ${watch_save_usd}/mo, but you'd lose watch data abroad. Tap to review.",
+      "es": "Su línea de reloj cuesta ${watch_now_usd} al mes. Con {plan_name} puede costar ${watch_new_usd} al mes, un ahorro de ${watch_save_usd}, pero perdería los datos del reloj en el extranjero. Toque para revisar."
+    },
+    "RCPT_PRICE_GUARANTEE": {
+      "en": "Reminder: {plan_name} comes with a {pg_years}-year price guarantee on talk, text and data.",
+      "es": "Recordatorio: {plan_name} incluye una garantía de precio de {pg_years} años en llamadas, mensajes y datos."
+    },
+    "RCPT_STREAMING": {
+      "en": "Included with {plan_name}: an ad-supported streaming service at no extra cost. Turn it on under plan benefits.",
+      "es": "Incluido con {plan_name}: un servicio de streaming con anuncios sin costo adicional. Actívelo en los beneficios del plan."
+    },
+    "RCPT_TRADEIN": {
+      "en": "Your paid-off {device_name} has a trade-in value of about ${tradein_usd} today. No pressure, just so you know.",
+      "es": "Su {device_name}, ya pagado, tiene hoy un valor de intercambio de unos ${tradein_usd}. Sin compromiso, solo para que lo sepa."
+    }
+  },
+  "phrases": {
+    "topic": {
+      "network": {
+        "en": "your coverage",
+        "es": "su cobertura"
+      },
+      "billing": {
+        "en": "your bill",
+        "es": "su factura"
+      },
+      "device": {
+        "en": "your phone",
+        "es": "su teléfono"
+      },
+      "plan_change": {
+        "en": "your plan change",
+        "es": "su cambio de plan"
+      },
+      "cancellation_inquiry": {
+        "en": "your service",
+        "es": "su servicio"
+      }
+    },
+    "open_one": {
+      "en": "1 support request",
+      "es": "1 solicitud de soporte"
+    },
+    "open_many": {
+      "en": "{n} support requests",
+      "es": "{n} solicitudes de soporte"
+    },
+    "loss": {
+      "price guarantee": {
+        "en": "the price guarantee",
+        "es": "la garantía de precio"
+      },
+      "high-speed hotspot": {
+        "en": "high-speed hotspot",
+        "es": "el hotspot de alta velocidad"
+      },
+      "plan perks": {
+        "en": "plan perks",
+        "es": "los beneficios del plan"
+      },
+      "unlimited premium data (Essentials has a 50 GB cap)": {
+        "en": "unlimited premium data (Essentials has a 50 GB cap)",
+        "es": "los datos premium ilimitados (Essentials tiene un límite de 50 GB)"
+      }
+    },
+    "month": {
+      "01": [
+        "January",
+        "enero"
+      ],
+      "02": [
+        "February",
+        "febrero"
+      ],
+      "03": [
+        "March",
+        "marzo"
+      ],
+      "04": [
+        "April",
+        "abril"
+      ],
+      "05": [
+        "May",
+        "mayo"
+      ],
+      "06": [
+        "June",
+        "junio"
+      ],
+      "07": [
+        "July",
+        "julio"
+      ],
+      "08": [
+        "August",
+        "agosto"
+      ],
+      "09": [
+        "September",
+        "septiembre"
+      ],
+      "10": [
+        "October",
+        "octubre"
+      ],
+      "11": [
+        "November",
+        "noviembre"
+      ],
+      "12": [
+        "December",
+        "diciembre"
+      ]
+    },
+    "recent_one": {
+      "en": "once",
+      "es": "una vez"
+    },
+    "recent_many": {
+      "en": "{n} times",
+      "es": "{n} veces"
+    }
+  },
+  "_channel_note": "Channel framing: text = 'T-Mobile: ' + opener + body + 'Reply YES ...' + 'Reply STOP to opt out.'; in_app = tap CTA + Settings opt-out; email = link/reply CTA + unsubscribe; phone_call = short agent script with an offer to stop calls. The channel is the customer's own accounts.contact_preference, never a ranking.",
+  "frames": {
+    "text": {
+      "prefix": {
+        "en": "T-Mobile: ",
+        "es": "T-Mobile: "
+      }
+    },
+    "in_app": {
+      "prefix": {
+        "en": "",
+        "es": ""
+      }
+    },
+    "email": {
+      "prefix": {
+        "en": "",
+        "es": ""
+      }
+    },
+    "phone_call": {
+      "prefix": {
+        "en": "[Call script] Hi, this is T-Mobile calling about your account.",
+        "es": "[Guion de llamada] Hola, le llamamos de T-Mobile por su cuenta."
+      },
+      "strip_greeting": true
+    }
+  },
+  "cta": {
+    "call": {
+      "text": {
+        "en": "Reply YES to set up the call.",
+        "es": "Responda SÍ para agendar la llamada."
+      },
+      "in_app": {
+        "en": "Tap to set up the call.",
+        "es": "Toque para agendar la llamada."
+      },
+      "email": {
+        "en": "Use the link below to pick a time, or reply to this email.",
+        "es": "Use el enlace de abajo para elegir un horario o responda a este correo."
+      },
+      "phone_call": {
+        "en": "Ask: Can I set up that fix with you now, or is there a better time?",
+        "es": "Pregunte: ¿Le parece si dejamos agendada la solución ahora, o prefiere otro momento?"
+      }
+    },
+    "accept": {
+      "text": {
+        "en": "Reply YES to accept.",
+        "es": "Responda SÍ para aceptarlo."
+      },
+      "in_app": {
+        "en": "Tap to accept.",
+        "es": "Toque para aceptarlo."
+      },
+      "email": {
+        "en": "Use the link below to accept, or reply to this email.",
+        "es": "Use el enlace de abajo para aceptarlo o responda a este correo."
+      },
+      "phone_call": {
+        "en": "Ask: Would you like me to add that credit now?",
+        "es": "Pregunte: ¿Quiere que le aplique ese crédito ahora?"
+      }
+    },
+    "review": {
+      "text": {
+        "en": "Reply YES and we'll call when it suits you.",
+        "es": "Responda SÍ y le llamamos cuando le convenga."
+      },
+      "in_app": {
+        "en": "Tap to set up a call.",
+        "es": "Toque para agendar una llamada."
+      },
+      "email": {
+        "en": "Use the link below to pick a time, or reply to this email.",
+        "es": "Use el enlace de abajo para elegir un horario o responda a este correo."
+      },
+      "phone_call": {
+        "en": "Ask: Do you have five minutes now, or should we call back later?",
+        "es": "Pregunte: ¿Tiene cinco minutos ahora o prefiere que le llamemos más tarde?"
+      }
+    },
+    "none": {
+      "text": {
+        "en": "Nothing to do on your end.",
+        "es": "No tiene que hacer nada."
+      },
+      "in_app": {
+        "en": "Nothing to do on your end.",
+        "es": "No tiene que hacer nada."
+      },
+      "email": {
+        "en": "Nothing to do on your end. Questions? Reply to this email.",
+        "es": "No tiene que hacer nada. ¿Preguntas? Responda a este correo."
+      },
+      "phone_call": {
+        "en": "Confirm the credit and ask if anything else needs fixing.",
+        "es": "Confirme el crédito y pregunte si hay algo más que resolver."
+      }
+    },
+    "turn_on": {
+      "in_app": {
+        "en": "Tap to turn it on.",
+        "es": "Toque para activarlo."
+      },
+      "text": {
+        "en": "Reply YES for the setup link.",
+        "es": "Responda SÍ para recibir el enlace."
+      },
+      "email": {
+        "en": "Use the link below to turn it on.",
+        "es": "Use el enlace de abajo para activarlo."
+      },
+      "phone_call": {
+        "en": "Offer to turn it on during the call.",
+        "es": "Ofrezca activarlo durante la llamada."
+      }
+    }
+  }
+}
