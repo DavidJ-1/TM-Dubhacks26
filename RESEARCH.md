@@ -185,3 +185,84 @@ Not used as headline facts: "5-25x cheaper to retain" (unsourced, not telecom-sp
 - Verizon 3-year price lock ending: confirmed only by Verizon's AI support assistant (Droid Life). T-Mobile "price-hike churn was temporary" is from search summaries.
 - Recon Analytics LTV ($1,900 financed vs $1,516 BYOD) and "half wait until device fails" (paywalled report abstract); churncost.com SAC/retention costs (unknown site, **do not use**); BTIG Comcast $1,260 per gross add (2018).
 - Becker 2020 arm-level churn numbers and Prince & Greenstein details (abstract/summary only); immigration share of growth (TBR, search summary).
+
+## 8. Further reading & datasets (ranked; free; full notes in research-notes/notes_whitepapers.md)
+Strength: A = peer-reviewed, regulator, or primary dataset; B = industry paper or survey; C = consulting or thesis. Our demo data is synthetic, so external numbers are "industry evidence", not our results.
+1. [Criteo Uplift dataset](https://ailab.criteo.com/criteo-uplift-prediction-dataset/) + [benchmark paper](https://arxiv.org/abs/2111.10106): ~25M randomized rows. Validate uplift-vs-risk ranking and Qini on real data (A).
+2. [Hillstrom MineThatData email test](https://blog.minethatdata.com/2008/03/minethatdata-e-mail-analytics-and-data.html): 64k customers in 3 arms, including no email. A small real "best offer or nothing" check (A).
+3. [MegaFon uplift dataset](https://www.uplift-modeling.com/en/latest/api/datasets/fetch_megafon.html): operator-published synthetic telecom uplift data. Precedent for our synthetic approach (B).
+4. [Ascarza et al. 2018, retention review](https://evaascarza.com/papers/ascarza_et_al_cns_18_author_copy.pdf): 12-author consensus that at-risk ≠ should-target. Core-thesis citation (A).
+5. [LinkedIn email volume, KDD'16](https://www.kdd.org/kdd2016/papers/files/adf0710-guptaA.pdf): send-all drew 45% more unsubscribes and spam reports. Backs our contact cap and annoyance cost (B+).
+6. [EMP metric (R pkg)](https://cran.r-project.org/package=EMP) / [TKDE 2013](https://doi.org/10.1109/tkde.2012.50): a profit metric plus the profit-optimal contact share. Report it next to AUC (A).
+7. [Profit-driven churn trees](https://arxiv.org/abs/1712.08101): profit-trained models pick different customers than accuracy-trained ones (A).
+8. [Booking.com knapsack + uplift](https://arxiv.org/abs/2108.13298): one offer per customer under a budget. Our answer to "what if the budget is capped?" (A-).
+9. [E3IR, RecSys'24](https://arxiv.org/abs/2408.11623): state of the art for budget-constrained incentives. Future-work bullet (A-).
+10. [Multi-treatment revenue uplift](https://arxiv.org/abs/2101.03336): academic precedent for multi-offer EV choice with explanations (A-).
+11. [InterpretML EBM](https://interpret.ml/docs/ebm.html): glass-box model with exact per-feature contributions. Faithfulness check on our reason codes (A-/B).
+12. [EconML customer-segmentation case](https://github.com/py-why/EconML): policy tree that explains who gets the offer, built on synthetic data (B).
+13. [Ofcom 2021, better deals](https://www.ofcom.org.uk/siteassets/resources/documents/consultations/category-2-6-weeks/130197-helping-consumers-get-better-deals-on-their-broadband/associated-documents/helping-customers-get-better-deals-2021.pdf?v=327229): loyal out-of-contract customers pay £9–10/mo more. "Fair retention" slide (A; open in a browser before quoting).
+14. [Ofcom 2019, fair deals](https://www.ofcom.org.uk/siteassets/resources/documents/phones-telecoms-and-internet/information-for-industry/fairness-for-customers/fairness-for-customers-progress-update-june-2019.pdf?v=324004): overpaying after handset term ends. Supports pro-customer payoff timing (A).
+15. [CMA loyalty-penalty super-complaint](https://www.gov.uk/cma-cases/loyalty-penalty-super-complaint): mobile is a named loyalty-penalty market (A).
+16. [Ericsson ConsumerLab 2023](https://www.ericsson.com/en/reports-and-papers/consumerlab/5g/reports/5g-value-turning-performance-into-loyalty): ~half of 5G switchers left over network, not price (B, stated intent).
+17. [McKinsey 2017, telecom churn](https://www.mckinsey.com/industries/technology-media-and-telecommunications/our-insights/reducing-churn-in-telecom-through-advanced-analytics): offer library plus microsegments, 10–15% churn cut (C, self-reported).
+18. [BCRLSP offline RL promotions](https://arxiv.org/abs/2207.07790): sequential retention offers under a per-period budget. Post-hackathon step (B+).
+19. [RecSim (Google)](https://arxiv.org/abs/1909.04847): precedent for comparing strategies in a simulator (A-).
+20. [Guelman et al., uplift RF for insurance retention](http://ub.edu/rfa/research/WP/UBriskcenterWP201406.pdf): real non-telecom retention uplift (A-, working-paper version).
+21. [Telco bandit retention gym (thesis)](http://hdl.handle.net/10400.14/45824): closest analogue to our simulator. **Unverified** (C).
+
+## 9. Live signals: cited base rates (full table in research-notes/notes_live_signals.md)
+Public sources give **direction**, rarely size, and nearly all sizes are survey intent or correlation. **Every effect size in our engine is our assumption**, shown in a sensitivity range. "Real field" = exists in the judge sandbox; everything else is a simulated event.
+
+| Event | Direction | Best public number | Source (strength) | Data |
+|---|---|---|---|---|
+| Bill shock | ↑ | 17% of US mobile users hit; 84% got no warning. Overage raises switching about as much as equal savings | [FCC white paper, Oct 2010](https://transition.fcc.gov/stage/Bill-Shock-White-Paper.pdf) (A); [Genakos et al. 2023](https://researchonline.lse.ac.uk/id/eprint/121294/1/dp1939.pdf) (A-) | real field: `billing_history` |
+| Network problem / dropped calls | ↑ | Dropped calls raise churn (Ahn 2006). T-Mobile leavers had 3x more no-signal time. 24% with >12 problems/100 "definitely will" switch | [Ahn et al. 2006](https://doi.org/10.1016/j.telpol.2006.09.006) (A); [Opensignal, Oct 2022](https://insights.opensignal.com/2022/10/20/how-mobile-network-experience-affects-churn-in-us-wireless-carriers) (B); [J.D. Power 2016](https://www.jdpower.com/business/press-releases/2016-us-wireless-network-quality-performance-study-volume-2/) (B, intent) | simulated |
+| Price-change notice | ↑ (size disputed) | Verizon: "only 2 basis points of churn" from a large Q1'24 hike. Its 2026 CEO blames "blunt price increases". T-Mobile guided elevated Q3'26 churn | [VZ, May 2024](https://www.verizon.com/about/sites/default/files/2024-05/MN_Conference_Transcript_051424.pdf) (A-, exec); [VZ 1Q26, Apr 2026](https://www.verizon.com/about/sites/default/files/2026-06/vz_1q26_transcript_042726rm.pdf) (A-) | simulated |
+| Device payoff month | ↑ after payoff | AT&T: churn +14 bps YoY, partly from customers "reaching the end of device financing periods" | [AT&T CFO via PhoneArena, Oct 2025](https://www.phonearena.com/news/hidden-in-its-q3-report-is-news-that-could-lead-to-big-problems-at-at-t_id175350) (A-, exec) | real field: `lines.financing_months_remaining` |
+| Promo/credit ending | ↑ | Promo expiry is a top FCC bill-shock cause. Ofcom: out-of-contract customers pay £9–10/mo more | FCC 2010 (A); Ofcom 2021, §8 #13 (A) | simulated (no promo end dates in sandbox) |
+| Data cap ≥90% / throttled | weak | Throttling: "no evidence" US subscribers change behavior | [Bauner & Espín 2023](https://doi.org/10.1016/j.telpol.2023.102665) (A) | simulated; treat as an upsell moment, not churn |
+| Unresolved / high-effort support | ↑ (largest gap) | 41% of high-effort resolvers "definitely will" switch vs 5% when easy | [J.D. Power 2017](https://www.jdpower.com/business/press-releases/us-wireless-customer-care-full-service-performance-study/) (B, intent) | real field: `support_interactions` (re-score; don't double-count) |
+| Move / address change | ↑ | Canada: 11% switched cellphone provider in a year; 14% of them cited a move or life change | [Competition Bureau Canada, 2020](https://competition-bureau.canada.ca/en/how-we-foster-competition/promotion-and-advocacy/advocacy-promoting-benefits-competition/consumer-switching-behaviour) (A-) | simulated |
+| Competitor promo in market | ↑ | 21% of Canadian cellphone switchers cited a promo and 44% price. Verizon blamed Q4'25 churn partly on competition | Competition Bureau Canada (A-); [VZ 4Q25](https://www.verizon.com/about/sites/default/files/2026-02/vz_4q25_transcript_013026.pdf) (A-) | simulated; regional multiplier |
+
+Accessed 2026-10-17. Caution: answering bill shock with a cheaper-plan nudge can backfire (Ascarza et al. JMR 2016: churn rose from 6% to 10%; §4a).
+
+## 10. Customer-advocate evidence (Fair Bill Receipt)
+Thesis: the carrier tells customers when they're overpaying, says "don't upgrade yet," and shows a receipt of money saved. Below is what public evidence supports. Full notes: `research-notes/notes_trust.md`. Strength: A = peer-reviewed or regulator evaluation; B = official statement without an outcome. Accessed 2026-10-17.
+
+| Claim | Number | Source (date) | Strength |
+|---|---|---|---|
+| Telling customers their best deal mostly made them **re-sign, not leave** (UK broadband) | Out-of-contract share fell from 40% (8.7M) to 35% (7.4M), Sep 2019 → Sep 2020, "largely driven by... re-contracting with their existing provider, rather than switching" | [Ofcom review, Nov 2021](https://www.ofcom.org.uk/siteassets/resources/documents/consultations/category-2-6-weeks/130197-helping-consumers-get-better-deals-on-their-broadband/associated-documents/helping-customers-get-better-deals-2021.pdf) | A |
+| End-of-contract alerts raised re-signing (broadband) | +8–13 pp by provider (Plusnet +13, BT/EE/Virgin ~+10); some customers saved >£110/yr | [Ofcom, 2022](https://www.ofcom.org.uk/phones-and-broadband/saving-money/end-of-contract-notifications-driving-better-deals-for-customers) | A |
+| **Mobile is weaker**: annual best-tariff notices lifted re-signing and switching; end-of-contract notices were "small and generally mixed" for re-signing and "slightly negative for switching" (varies by provider, about −8.6 to +11.9 pp) | see table 3B | [Ofcom mobile ex-post evaluation, 2024](https://www.ofcom.org.uk/siteassets/resources/documents/consultations/category-2-6-weeks/130197-helping-consumers-get-better-deals-on-their-broadband/ex-post-evaluation/ex-post-evaulation-ecn-2024.pdf) | A |
+| What the rule requires (Ofcom GC C1, from 15 Feb 2020) | Alert 10–40 days before contract end showing the post-contract price **and the provider's best tariffs, including new-customer prices**, plus a yearly reminder while out of contract | [Ofcom statement, 2019](https://www.ofcom.org.uk/siteassets/resources/documents/consultations/category-2-6-weeks/130197-helping-consumers-get-better-deals-on-their-broadband/ecn-consultation-and-statement/statement-helping-consumers-get-better-deals.pdf) | A |
+| **Backfire risk**: a cheaper-plan recommendation raised churn (randomized, ~65k wireless customers) | 3-month churn 10% treated vs 6% control. Mechanism: it **lowered inertia** and **made past usage and overpaying salient**. Hardest hit: customers with **high usage variability and steeply falling usage** | [Ascarza, Iyengar & Schleicher, JMR 2016](https://journals.sagepub.com/doi/10.1509/jmr.13.0483) ([PDF](https://evaascarza.com/papers/ascarza_iyengar_schleicher_16.pdf)) | A |
+| Target by response to the offer, not by risk | Highest-risk customers are not the best targets; uplift targeting beat risk targeting in two field experiments | [Ascarza, JMR 2018](https://doi.org/10.1509/jmr.16.0163) | A |
+| Counterpoint on real telecom data (Orange Belgium, randomized, 11,896 customers, 2020): a plain churn model scored ≥ uplift models | AUUC 0.26% (outcome RF) vs 0.25% (T-learner) vs 0.19% (uplift RF), but SDs are ±0.4–0.5, so **not separable**. Treated churn 3.4% vs control 3.6% | [Verhelst, Mercier, Shrestha & Bontempi, arXiv Dec 2023](https://arxiv.org/abs/2312.07206) | A- (preprint; Orange Belgium co-author) |
+| Uplift beat churn prediction on profit (**financial-industry** case, not telecom) | MPU measure | [Devriendt, Berrevoets & Verbeke, Inf. Sci. 2021](https://doi.org/10.1016/j.ins.2019.12.075) | A |
+| "Warn before the fee" alerts cut customer charges (UK banks, >1M customers) | Auto-enrolled unarranged-overdraft alerts cut charges by **25%** and unpaid-item alerts by 21–24% (OP36). Just-in-time alerts −13–18% and low-balance warnings weak (OP40). **No "alert fatigue"** | [FCA OP36](https://www.fca.org.uk/publications/occasional-papers/occasional-paper-no-36-sending-out-sms-impact-automatically-enrolling-consumers-overdraft-alerts); [FCA OP40, Jul 2018](https://www.fca.org.uk/publications/occasional-papers/occasional-paper-no-40-time-act-field-experiment-overdraft-alerts) | A (measures money saved, not loyalty) |
+| Netflix cancelled inactive paid accounts | <0.5% of members ("a few hundred thousand"). **No retention or trust outcome published** | [Netflix, 21 May 2020](https://about.netflix.com/en/news/helping-members-who-havent-been-watching-cancel) | B |
+
+**How we use it:** pitch the receipt as the UK-style "here's your best deal" notice, which in broadband mostly produced re-signing. Avoid the Ascarza backfire by suppressing cheaper-plan nudges for customers whose usage is volatile or falling, and by choosing who to contact by modeled response rather than risk alone.
+
+**Do not claim:**
+- That any company measured a **trust or retention lift** from telling customers to spend less (none found; Netflix published no outcome; FCA measured fees, not loyalty).
+- That best-tariff notices reduce **mobile** churn (Ofcom 2024: small and mixed).
+- That uplift models are proven better than churn models in telecom (Orange Belgium: tie or worse, within noise).
+- That a US carrier today proactively flags overpaying (not verified; Ascarza 2016 only mentions Verizon, AT&T and Vodafone plan recommendations at the time).
+- Any trust → churn number from J.D. Power or ACSI (not verified).
+
+## 11. Plan-switch acceptance (replaces unsourced 45%)
+`harness/offers.py` currently sets `CONFIG["P_ACCEPT"]["right_size"] = 0.45`, with no source. Randomized public evidence puts acceptance far lower. Full table: `research-notes/notes_trust.md` §7. Accessed 2026-10-17.
+
+| Setting | Treated vs control | Source (date) | Strength |
+|---|---|---|---|
+| Wireless operator, phone call recommending a money-saving plan + $15/mo credit for 3 months (54,089 treated) | **1.5% accepted** (828). Any plan change in 3 mo: 9.59% vs 6.54% | [Ascarza, Iyengar & Schleicher, JMR Feb 2016](https://evaascarza.com/papers/ascarza_iyengar_schleicher_16.pdf) | A |
+| UK energy, Cheaper Market Offers Letter (RCT, 137,876) | 2.4–3.4% vs 1.0% switched (30 days) | [Ofgem, Nov 2017](https://www.ofgem.gov.uk/sites/default/files/docs/2017/11/cmol_report_0.pdf) | A |
+| UK energy, cheaper-offer letter + reminder | 6.8–7.5% vs 2.9% | [Ofgem, Sep 2019](https://www.ofgem.gov.uk/sites/default/files/docs/2019/09/cmoc_report_final_updated_template_0.pdf) | A |
+| UK energy, on default tariff 3+ yrs | 12.1–13.4% vs 6.8% (14 weeks) | [Ofgem, Nov 2017](https://www.ofgem.gov.uk/sites/default/files/docs/2017/11/small_scale_database_trial_paper_pdf.pdf) | A |
+| UK broadband, end-of-contract notices | 62% vs 47% re-signed or switched **at contract end**: any action at a natural decision point, *not* acceptance of a single offer | [Ofcom, Nov 2021](https://www.ofcom.org.uk/siteassets/resources/documents/consultations/category-2-6-weeks/130197-helping-consumers-get-better-deals-on-their-broadband/associated-documents/helping-customers-get-better-deals-2021.pdf) | A (before/after) |
+
+**Recommendation:** set `right_size` acceptance to a **3% base (range 2–5%)** with a **sensitivity of up to 13%**. Apply a timing bump only at contract end or device payoff (Ofcom: +8–15 pp at contract end). No public source supports 45%. Caveat: Ascarza's plans saved money by cutting overage, and Ofgem's are energy, not telecom.
+
+**Synthetic implication (our 5,042 synthetic accounts; all figures synthetic):** 682 accounts are right-size-eligible, worth about **$450/mo at 3%** and about **$1,900/mo at 13%**, against a **$14,830/mo ceiling** if everyone accepted.
