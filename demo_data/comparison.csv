@@ -3,4 +3,4 @@ strategy,description,save_scale,contacted,contacts_to_low_risk,contacts_to_low_r
 2. Discount everyone,"$25 care credit to all 5,042 accounts",1.0,5042,4523,0.9,126050.0,138,1.0,35.03,126050.0,3597.92,15126.0,65340.7,-75835.3,34.8,3621.84,-75556.67,0.0,False,SYNTHETIC/SIMULATED
 3. 3+ support calls rule,$25 care credit if 3+ support contacts in 90 days,1.0,1466,978,0.67,36650.0,105,0.76,28.29,36650.0,1295.33,4398.0,53320.62,12272.62,27.84,1316.26,11954.31,0.0,False,SYNTHETIC/SIMULATED
 4. Top 10% risk score only,$25 care credit to the top 504 by churn-model risk,1.0,504,0,0.0,12600.0,88,0.64,23.69,12600.0,531.96,1512.0,44357.34,30245.34,22.95,549.11,29349.67,0.0,False,SYNTHETIC/SIMULATED
-5. Ours,churn model + per-customer offer chooser; do nothing allowed to win,1.0,1123,639,0.57,6725.0,92,0.67,41.77,39991.6,957.47,4323.0,82842.2,38527.6,40.75,981.37,37479.5,66929.32,False,SYNTHETIC/SIMULATED
+5. Ours,churn model + per-customer offer chooser; do nothing allowed to win,1.0,1314,827,0.63,6700.0,96,0.7,42.63,51654.1,1211.56,4610.0,83922.07,27657.97,41.71,1238.38,26729.02,59336.19,False,SYNTHETIC/SIMULATED
