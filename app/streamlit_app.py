@@ -25,46 +25,165 @@ from data import clean_stays, is_mock, load_all, merged, persona_titles  # noqa:
 from messages import action_label, normalize_action  # noqa: E402
 
 MAGENTA = "#E20074"
+import plotly.graph_objects as _go  # noqa: E402
+import plotly.io as _pio  # noqa: E402
+_t = _go.layout.Template(_pio.templates["plotly_white"])
+_t.layout.update(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                 font=dict(family="Inter, sans-serif", color="#15111A", size=12),
+                 colorway=["#15111A", "#A39DA6", "#D6CEC4"],
+                 xaxis=dict(showgrid=False, zeroline=False), yaxis=dict(showgrid=False, zeroline=False))
+_pio.templates["tm_light"] = _t
 # How-it-decides tab: show app/charts/06_upgrade_or_wait.png only once tm-strategy signs off on its post-8:50 figures.
 SHOW_UPGRADE_WAIT = False
+import itertools as _it  # noqa: E402
+_orig_container, _cc = st.container, _it.count()
+
+
+def _card_container(*a, **k):  # tag bordered containers so the dark card CSS can target them (visual only)
+    if k.get("border") and "key" not in k:
+        k["key"] = f"tmcard_{next(_cc)}"
+    return _orig_container(*a, **k)
+
+
+st.container = _card_container
 st.set_page_config(page_title="T-Mobile Next Best Moment (synthetic)", page_icon="📱", layout="wide")
 st.markdown(f"""
 <style>
-.block-container {{padding-top: 2rem; max-width: 1450px}}
-.why {{font-size:1.45rem; line-height:1.35; font-weight:600; color:#1F2328; border-left:5px solid {MAGENTA};
-  padding:.2rem 0 .2rem .8rem; margin:.3rem 0 .8rem}}
-.kicker {{color:{MAGENTA}; font-weight:700; letter-spacing:.05em; text-transform:uppercase; font-size:.78rem}}
-.chip {{display:inline-block; border-radius:12px; padding:2px 10px; margin:2px 4px 2px 0; font-size:.82rem}}
-.risk {{background:#FDECF4; color:#9B0050}} .stay {{background:#EAF6EE; color:#1B5E20}}
-.phone {{width:280px; margin:auto; border:1px solid #D0D7DE; border-radius:28px; background:#FFFFFF;
-  min-height:400px; padding:22px 14px 16px; box-shadow:0 4px 16px rgba(31,35,40,.10)}}
-.sender {{text-align:center; font-size:.74rem; color:#57606A; margin-bottom:12px; border-bottom:1px solid #EEF0F2; padding-bottom:8px}}
-.bubble {{background:#F1F3F5; color:#1F2328; border-radius:16px; padding:10px 13px; font-size:.88rem; line-height:1.35}}
-.nomsg {{text-align:center; color:#6E7781; margin-top:120px; font-size:.95rem}}
-.whatif {{border:1px solid #F3B6D2; border-radius:10px; padding:8px 12px; background:#FFF5FA; font-size:.92rem}}
-.how {{background:#F6F7F9; border-radius:10px; padding:.6rem 1rem; font-size:.95rem; color:#1F2328}}
-.how b {{color:{MAGENTA}}}
-.step {{color:{MAGENTA}; font-weight:700; font-size:.85rem; margin-bottom:2px}}
-.big {{font-size:1.7rem; font-weight:700; color:#1F2328; line-height:1.1}}
-.sub {{font-size:.78rem; color:#57606A; margin-bottom:4px}}
-.arrow {{font-size:1.6rem; color:{MAGENTA}; text-align:center; margin-top:4.5rem}}
-.pill {{display:inline-block; font-size:.66rem; font-weight:700; padding:0 6px; border-radius:8px; margin-right:5px;
-  color:white; vertical-align:1px}}
-.p-com {{background:#0969DA}} .p-cus {{background:#1A7F37}} .p-rt {{background:#BC4C00}}
-.legend {{font-size:.74rem; color:#57606A; margin:4px 0 2px}} .legend .pill {{margin-left:8px}}
-.badge {{display:inline-block; background:#FDECF4; color:{MAGENTA}; border:1px solid #F3B6D2; border-radius:12px;
-  padding:1px 10px; font-size:.74rem; font-weight:600; margin-left:10px; text-transform:none; letter-spacing:0}}
-.cid {{font-size:.8rem; color:#57606A}}
-table.opts {{width:100%; border-collapse:collapse; font-size:.86rem; margin-bottom:.6rem}}
-table.opts th {{text-align:left; color:#57606A; font-weight:600; background:#F6F7F9; padding:6px 8px;
-  border-bottom:1px solid #D0D7DE}}
-table.opts td {{padding:6px 8px; border-bottom:1px solid #EEF0F2; vertical-align:top; white-space:normal}}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Inter+Tight:wght@500;600&display=swap');
+:root {{--paper:#F6F3EE; --card:#FFFFFF; --line:#E6E0D8; --ink:#15111A; --muted:#6E6873; --faint:#A39DA6; --mag:{MAGENTA}}}
+html, body, [data-testid="stAppViewContainer"], .stApp {{background:var(--paper) !important; color:var(--ink)}}
+.stApp, .stApp p, .stApp li, .stApp label, .stApp span, .stApp div, .stApp td, .stApp th, .stApp input {{font-family:'Inter',system-ui,sans-serif}}
+.stApp h1, .stApp h2, .stApp h3, .stApp h4 {{font-family:'Inter Tight','Inter',sans-serif !important; font-weight:600 !important;
+  letter-spacing:-0.025em; color:var(--ink)}}
+.stApp h3 {{font-size:28px !important; margin:48px 0 8px !important}}
+.stApp h4 {{font-size:20px !important; margin:40px 0 16px !important}}
+#MainMenu, footer, [data-testid="stDecoration"], [data-testid="stStatusWidget"], [data-testid="stToolbar"] {{display:none !important}}
+header[data-testid="stHeader"] {{display:none !important}}
+.block-container {{padding:0 40px 64px !important; max-width:1360px}}
+[data-testid="stCaptionContainer"], .stCaption, [data-testid="stCaptionContainer"] p {{color:var(--muted) !important; font-size:13px}}
+/* app shell */
+.tm-head {{position:sticky; top:0; z-index:50; display:flex; justify-content:space-between; align-items:center; height:64px;
+  margin:0 -40px 0; padding:0 40px; background:rgba(246,243,238,.92); backdrop-filter:blur(8px); border-bottom:1px solid var(--line)}}
+.tm-brand {{display:flex; align-items:center; gap:12px; font-weight:600; font-size:15px; letter-spacing:-0.01em; color:var(--ink)}}
+.tm-logo {{width:24px; height:24px; border-radius:6px; background:var(--mag); display:inline-flex; align-items:center;
+  justify-content:center; font-weight:600; color:white; font-size:12px}}
+.tm-sub {{color:var(--faint); font-size:13px; font-weight:400; padding-left:12px; border-left:1px solid var(--line)}}
+.tm-syn {{display:inline-flex; gap:8px; align-items:center; color:var(--ink); background:var(--card); border:1px solid var(--line);
+  border-radius:999px; padding:6px 14px; font-size:12px; font-weight:500}}
+.tm-syn small {{color:var(--muted); font-weight:400; font-size:12px}}
+/* tabs as segmented nav */
+[data-testid="stTabs"] [role="tablist"] {{gap:24px; border-bottom:1px solid var(--line) !important; margin:16px 0 0}}
+[data-testid="stTabs"] button[role="tab"] {{background:transparent !important; padding:12px 0 !important; margin:0 !important; border:none !important; box-shadow:none !important}}
+[data-testid="stTabs"] button[role="tab"] p {{font-size:14px !important; font-weight:500; color:var(--muted)}}
+[data-testid="stTabs"] button[role="tab"][aria-selected="true"] p {{color:var(--ink) !important}}
+[data-testid="stTabs"] [data-baseweb="tab-highlight"] {{background:var(--mag) !important; height:2px !important; display:block !important}}
+[data-testid="stTabs"] [data-baseweb="tab-border"] {{display:none !important}}
+div[class*="st-key-tmcard_"] h4 {{margin:4px 0 0 !important; padding:0 !important; font-size:22px !important}}
+div[class*="st-key-tmcard_"] [data-testid="stMetric"], div[class*="st-key-tmcard_"] .risk-card {{margin-top:0}}
+div[class*="st-key-tmcard_"] .pill {{margin-bottom:2px}}
+/* bento */
+.bento {{display:grid; grid-template-columns:repeat(12,1fr); grid-auto-rows:minmax(150px,auto); gap:16px; margin:8px 0 8px}}
+.tile {{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:24px; min-width:0}}
+.bento .t1 {{grid-column:span 4; grid-row:span 2; display:flex; flex-direction:column}}
+.bento .t1 .rows {{margin-top:auto}}
+.bento .t2 {{grid-column:span 4}} .bento .t3 {{grid-column:span 4}}
+.bento .t4 {{grid-column:span 5}} .bento .t5 {{grid-column:span 3}}
+.tile.dark {{background:var(--ink); border-color:var(--ink)}}
+.tile.dark .big {{color:#F6F3EE}} .tile.dark .step, .tile.dark .sub, .tile.dark .note {{color:#A39DA6}}
+.trow {{display:grid; grid-template-columns:96px 1fr; gap:8px; align-items:baseline; padding:8px 0; border-top:1px solid var(--line); font-size:14px}}
+.note {{font-size:13px; color:var(--muted); margin-top:16px}}
+.brow {{display:flex; justify-content:space-between; gap:8px; font-size:13px; color:var(--ink); margin-top:12px}}
+.brow span {{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}} .brow b {{font-weight:600}}
+.bbar {{height:4px; background:#ECE7E0; border-radius:2px; margin-top:6px}} .bbar i {{display:block; height:4px; border-radius:2px}}
+.follow {{display:grid; grid-template-columns:1.4fr .9fr 1.3fr 1fr 1.4fr; gap:16px; margin:8px 0 24px}}
+.follow .tile {{padding:20px}}
+.ft {{padding:6px 0; font-size:13px; line-height:1.45; color:var(--ink)}} .ft .pill {{margin-bottom:4px}}
+.fw {{font-size:18px; font-weight:600; letter-spacing:-0.01em; color:var(--ink); margin-bottom:4px}}
+.fq {{font-size:14px; line-height:1.4; color:var(--ink); margin-bottom:12px}}
+.bubble.sm {{font-size:12px; padding:10px 12px; background:var(--ink); color:#F6F3EE}}
+[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * {{white-space:normal !important; overflow:visible !important; text-overflow:clip !important}}
+[data-testid="stMetricLabel"] p {{letter-spacing:.02em !important}}
+/* hero */
+.hero {{padding:48px 0 32px}}
+.hero-eyebrow {{font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:500; margin-bottom:16px}}
+.hero h1 {{font-size:56px !important; line-height:1.04 !important; max-width:980px; margin:0 0 40px !important; padding:0 !important}}
+.hero h1 em {{font-style:normal; color:var(--mag)}}
+.hero-stats {{display:grid; grid-template-columns:repeat(4,1fr); border-top:1px solid var(--line)}}
+.hero-stat {{padding:24px 24px 0 0}}
+.hero-stat + .hero-stat {{padding-left:24px; border-left:1px solid var(--line)}}
+.hero-num {{font-family:'Inter Tight',sans-serif; font-size:64px; font-weight:600; letter-spacing:-0.04em; line-height:1; color:var(--ink)}}
+.hero-lbl {{font-size:13px; color:var(--muted); margin-top:8px}}
+/* cards */
+div[class*="st-key-tmcard_"] {{background:var(--card) !important; border:1px solid var(--line) !important; border-radius:16px !important;
+  box-shadow:none !important; padding:24px !important; transition:border-color .15s ease}}
+div[class*="st-key-tmcard_"]:hover {{border-color:#D6CEC4 !important}}
+.kicker {{color:var(--muted); font-weight:500; letter-spacing:.08em; text-transform:uppercase; font-size:11px}}
+.badge {{display:inline-block; color:var(--muted); border:1px solid var(--line); border-radius:999px; padding:2px 10px; font-size:11px;
+  font-weight:500; margin-left:8px; text-transform:none; letter-spacing:0; background:var(--paper)}}
+.cid {{font-size:13px; color:var(--faint)}}
+.why {{font-family:'Inter Tight','Inter',sans-serif; font-size:30px; line-height:1.15; font-weight:600; color:var(--ink);
+  letter-spacing:-0.025em; margin:8px 0 16px; max-width:820px}}
+.decision {{display:inline-block; background:var(--mag); color:white; font-weight:500; border-radius:8px; padding:6px 12px; font-size:13px}}
+.decision i {{font-weight:400; opacity:.85}}
+.chip {{display:grid; grid-template-columns:96px 16px 1fr; align-items:baseline; padding:12px 0; border-bottom:1px solid var(--line);
+  font-size:15px; color:var(--ink)}}
+.chip .mk {{color:var(--faint); font-size:10px}}
+.chip.risk .mk {{color:var(--mag)}}
+.pill {{display:inline-block; font-size:11px; font-weight:500; padding:1px 8px; border:1px solid var(--line); border-radius:999px;
+  color:var(--muted) !important; background:var(--paper) !important; margin-right:6px; width:fit-content; letter-spacing:.01em}}
+.legend {{font-size:12px; color:var(--faint); margin:16px 0 4px}} .legend .pill {{margin-left:8px}}
+/* phone */
+.phone {{width:280px; margin:8px auto 0; border-radius:44px; background:#15111A; min-height:480px; padding:44px 16px 24px; position:relative;
+  box-shadow:0 0 0 1px #2A2430, 0 24px 48px -24px rgba(21,17,26,.35)}}
+.phone::before {{content:""; position:absolute; top:14px; left:50%; transform:translateX(-50%); width:88px; height:24px;
+  background:#000; border-radius:14px}}
+.sender {{text-align:center; font-size:11px; color:#A39DA6; margin:0 0 16px; padding-bottom:12px; border-bottom:1px solid #2A2430}}
+.bubble {{background:#2A2430; color:#F6F3EE; border-radius:18px 18px 18px 4px; padding:12px 14px; font-size:14px; line-height:1.4}}
+.nomsg {{text-align:center; color:#A39DA6; margin-top:136px; font-size:14px}}
+.whatif {{border:1px solid var(--line); border-radius:10px; padding:12px 16px; background:var(--paper); font-size:14px; color:var(--ink)}}
+.how {{background:var(--card); border-radius:12px; padding:8px 16px; font-size:15px; color:var(--ink)}}
+.how b {{color:var(--ink)}}
+/* bento pipeline */
+.step {{color:var(--muted); font-weight:500; font-size:11px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:16px}}
+.big {{font-family:'Inter Tight',sans-serif; font-size:44px; font-weight:600; letter-spacing:-0.035em; line-height:1; color:var(--ink); margin:0 0 8px}}
+.sub {{font-size:13px; color:var(--muted); margin-bottom:4px; line-height:1.45}}
+.arrow {{color:var(--faint); text-align:center; margin-top:88px; font-size:14px}}
+/* risk */
+.risk-lbl {{color:var(--muted); font-size:11px; letter-spacing:.08em; text-transform:uppercase; font-weight:500}}
+.risk-num {{font-family:'Inter Tight',sans-serif; font-size:48px; font-weight:600; letter-spacing:-0.04em; color:var(--mag); line-height:1; margin:8px 0 16px}}
+.risk-bar {{height:4px; background:#ECE7E0; border-radius:2px; position:relative}}
+.risk-bar span {{position:absolute; left:0; top:0; bottom:0; background:var(--mag); border-radius:2px}}
+.risk-scale {{display:flex; justify-content:space-between; color:var(--faint); font-size:11px; margin-top:8px}}
+.risk-was {{color:var(--muted); font-size:13px; margin-top:8px}}
+/* metrics */
+[data-testid="stMetric"] {{background:var(--card) !important; border:1px solid var(--line) !important; border-radius:16px !important; padding:24px !important;
+  box-shadow:none !important; border-left:1px solid var(--line) !important}}
+[data-testid="stMetricLabel"] p {{color:var(--muted) !important; font-size:11px !important; letter-spacing:.04em; text-transform:uppercase; font-weight:500}}
+[data-testid="stMetricValue"] {{font-family:'Inter Tight',sans-serif; font-size:40px !important; font-weight:600; letter-spacing:-0.035em; color:var(--ink)}}
+/* options table */
+table.opts {{width:100%; border-collapse:collapse; font-size:14px; margin:8px 0 16px; color:var(--ink); border:none}}
+table.opts th, table.opts td {{border:none !important; border-bottom:1px solid var(--line) !important}}
+table.opts th {{text-align:left; color:var(--faint); font-weight:500; font-size:11px; letter-spacing:.06em; text-transform:uppercase; padding:8px 12px 8px 0}}
+table.opts td {{padding:12px 12px 12px 0; vertical-align:top; white-space:normal}}
+table.opts tr.won td {{font-weight:600}}
+table.opts tr.won td:first-child {{box-shadow:inset 3px 0 0 var(--mag); padding-left:12px}}
+table.opts tr.blocked td {{color:var(--faint)}}
 table.opts td:nth-child(1) {{width:19%}} table.opts td:nth-child(2) {{width:8%; white-space:nowrap}}
 table.opts td:nth-child(3) {{width:15%}} table.opts td:nth-child(4) {{width:11%; white-space:nowrap}}
 table.opts td:nth-child(5) {{width:7%; white-space:nowrap}}
+/* widgets */
+.stButton button {{border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); font-weight:500; font-size:13px}}
+.stButton button:hover {{border-color:var(--ink); color:var(--ink)}}
+[data-baseweb="select"] > div {{background:var(--card) !important; border:1px solid var(--line) !important; border-radius:10px !important}}
+[data-testid="stExpander"] details {{background:var(--card); border:1px solid var(--line) !important; border-radius:12px}}
+[data-testid="stAlert"] {{background:var(--paper) !important; border:1px solid var(--line) !important; border-radius:10px; color:var(--ink)}}
+[data-testid="stWidgetLabel"] p {{font-size:13px; color:var(--muted)}}
 </style>
 """, unsafe_allow_html=True)
-st.info("**All customers are synthetic:** T-Mobile judge sandbox data with simulated scores. Not real customers.", icon="⚠️")
+st.markdown("<div class='tm-head'><div class='tm-brand'><span class='tm-logo'>T</span>Next Best Moment"
+            "<span class='tm-sub'>churn risk model + offer engine</span></div>"
+            "<div class='tm-syn'>⚠️ All customers are synthetic <small>· T-Mobile judge sandbox data with simulated "
+            "scores. Not real customers.</small></div></div>", unsafe_allow_html=True)
 
 data = load_all()
 MOCK = is_mock(data)
@@ -187,8 +306,8 @@ PILL = {"Commerce": "p-com", "Customer": "p-cus", "Real-time": "p-rt"}
 
 def chip(text: str, kind: str) -> str:
     stype = signal_type(text)
-    return (f"<span class='chip {kind}'><span class='pill {PILL[stype]}'>{stype}</span>"
-            f"{'▲' if kind == 'risk' else '●'} {html.escape(clean_text(text))}</span>")
+    return (f"<div class='chip {kind}'><span class='pill {PILL[stype]}'>{stype}</span>"
+            f"<span class='mk'>{'▲' if kind == 'risk' else '●'}</span> {html.escape(clean_text(text))}</div>")
 
 
 LEGEND = ("<div class='legend'><span class='pill p-com'>Commerce</span>plan, price, bill, device, financing "
@@ -455,7 +574,7 @@ FEATURE_LABELS = {  # churn model column -> (plain label, signal type)
     "competitor_research_score": ("Comparing carriers", "Real-time"),
     "negative_contacts_90d": ("Unhappy support contacts, 90 days", "Customer"),
 }
-TYPE_COLOR = {"Commerce": "#0969DA", "Customer": "#1A7F37", "Real-time": "#BC4C00"}
+TYPE_COLOR = {"Commerce": "#6E6873", "Customer": "#6E6873", "Real-time": "#6E6873"}
 
 
 @st.cache_resource(show_spinner=False)
@@ -514,15 +633,15 @@ def score_panel(acc: str, p_now: float, kp: str = ""):
     d["type"] = [FEATURE_LABELS.get(f, ("", "Commerce"))[1] for f in d.feat]
     d = d.iloc[::-1]
     fig = go.Figure(go.Bar(x=d.pts, y=d.label, orientation="h",
-                           marker_color=[("#CF222E" if v > 0 else "#1A7F37") for v in d.pts],
+                           marker_color=[(MAGENTA if v > 0 else "#A39DA6") for v in d.pts],
                            text=[f"{v:+.2f} pts" for v in d.pts], textposition="outside", cliponaxis=False))
-    fig.add_vline(x=0, line_color="#57606A", line_width=1)
-    fig.update_layout(template="plotly_white", height=60 + 34 * max(1, len(d)), margin=dict(l=8, r=60, t=4, b=4),
+    fig.add_vline(x=0, line_color="#D6CEC4", line_width=1)
+    fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', template="tm_light", height=60 + 34 * max(1, len(d)), margin=dict(l=8, r=60, t=4, b=4),
                       xaxis_title="change in 90-day churn risk, percentage points (synthetic)", yaxis_title=None,
                       font=dict(size=12))
-    st.plotly_chart(fig, use_container_width=True, key=f"{kp}why_{acc}")
+    st.plotly_chart(fig, use_container_width=True, theme=None, key=f"{kp}why_{acc}")
     st.caption(f"Typical customer: {fmt_prob(sig(b0))} · this customer: {fmt_prob(p_now)}. "
-               "Red raises risk, green lowers it. Tags: Commerce / Customer / Real-time. Synthetic.")
+               "Magenta raises risk, grey lowers it. Tags: Commerce / Customer / Real-time. Synthetic.")
 
 
 def send_button(body: str, key: str):
@@ -554,6 +673,18 @@ def send_button(body: str, key: str):
             st.error(str(res.get("detail") or "Send failed"))
 
 
+def ring(p, caption: str = "") -> str:
+    """Churn risk as a plain number + thin bar on a 0-20% scale (so low risks stay visible)."""
+    try:
+        w = max(1.5, min(100.0, float(p) / 0.20 * 100))
+    except (TypeError, ValueError):
+        w = 0.0
+    return (f"<div class='risk-card'><div class='risk-lbl'>Churn risk, 90 days</div><div class='risk-num'>{fmt_prob(p)}</div>"
+            f"<div class='risk-bar'><span style='width:{w:.1f}%'></span></div>"
+            f"<div class='risk-scale'><span>0%</span><span>10%</span><span>20%+</span></div>"
+            + (f"<div class='risk-was'>{html.escape(caption)}</div>" if caption else "") + "</div>")
+
+
 def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = True):
     if acc not in set(df.account_id):
         st.warning(f"{acc} is not in the loaded data.")
@@ -570,8 +701,8 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
                 f"{r.get('segment', '')} · "
                 f"{int(r.get('tenure_months', 0) or 0) // 12} yrs with us</span>", unsafe_allow_html=True)
     risk_ph = h2.empty()
-    risk_ph.metric("Churn risk, 90 days", fmt_prob(r.p_churn_90d),
-              help="Churn risk model: the single churn number used on every screen (synthetic).")
+    risk_ph.markdown(ring(r.p_churn_90d), unsafe_allow_html=True,
+                     help="Churn risk model: the single churn number used on every screen (synthetic).")
     why_ph = st.empty()
     warn_ph = st.empty()
     left, right = st.columns([2.4, 1])
@@ -595,10 +726,8 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
             if w["p"] is None:
                 st.markdown(f"<div class='whatif'>{html.escape(w['error'])}</div>", unsafe_allow_html=True)
             else:
-                with risk_ph.container():
-                    st.metric("Churn risk, 90 days", fmt_prob(w["p"]),
-                              help="What-if: re-scored live by the churn risk model with the switched-off facts removed (synthetic).")
-                    st.caption(f"(what-if, was {fmt_prob(r.p_churn_90d)})")
+                risk_ph.markdown(ring(w["p"], f"(what-if, was {fmt_prob(r.p_churn_90d)})"), unsafe_allow_html=True,
+                                 help="What-if: re-scored live by the churn risk model with the switched-off facts removed (synthetic).")
                 line = f"Risk {fmt_prob(r.p_churn_90d)} → <b>{fmt_prob(w['p'])}</b>"
                 if w["action"]:
                     na = normalize_action(w["action"])
@@ -637,7 +766,8 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
     why_ph.markdown(f"<div class='why'>{html.escape(clean_text(why))}</div>", unsafe_allow_html=True)
     if fits and not edits and normalize_action(k) not in {normalize_action(x) for x in fits}:
         warn_ph.error(f"Engine picked **{action_label(k)}**, which doesn't match this card's story ({story}).")
-    dec_ph.markdown(f"**Decision: {action_label(k_now)}**" + ("  _(what-if)_" if edits and w and w.get("action") else ""))
+    dec_ph.markdown(f"<span class='decision'>Decision: {html.escape(action_label(k_now))}"
+                    + (" <i>(what-if)</i>" if edits and w and w.get("action") else "") + "</span>", unsafe_allow_html=True)
     if res is not None:
         cand = res["candidates"].copy()
         cand["account_id"] = acc
@@ -650,7 +780,11 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
     if len(tbl):
         # HTML table so long "Why not" text wraps instead of being cut off
         _t = tbl.rename(columns={"Cost to T-Mobile": "Cost to us", "Customer": "Customer saves / pays"})
-        tbl_ph.markdown(_t.to_html(index=False, escape=True, classes="opts", border=0), unsafe_allow_html=True)
+        _h = _t.to_html(index=False, escape=True, classes="opts", border=0)
+        _rows = _h.split("<tr>")
+        _h = _rows[0] + "".join(("<tr class='won'>" if "✅ Won" in x else "<tr class='blocked'>" if "<td>Blocked</td>" in x else "<tr>") + x
+                                for x in _rows[1:])
+        tbl_ph.markdown(_h, unsafe_allow_html=True)
     else:
         tbl_ph.caption("Option list not available.")
     with right:
@@ -753,8 +887,17 @@ with top_c:
         except Exception:  # noqa: BLE001
             auc = None
     # ================= End-to-end process band (one screen explains the pipeline) =================
-    st.markdown("#### How it works, end to end")
     n_contact = int(D.contact.sum())
+    st.markdown(
+        "<div class='hero'><div class='hero-eyebrow'>Next Best Moment · churn risk model + offer engine · synthetic</div>"
+        "<h1>One engine decides who gets a text, what it says, and <em>when to stay silent</em>.</h1>"
+        "<div class='hero-stats'>"
+        f"<div class='hero-stat'><div class='hero-num'>{n_acc:,}</div><div class='hero-lbl'>synthetic accounts scored</div></div>"
+        f"<div class='hero-stat'><div class='hero-num'>{n_flag:,}</div><div class='hero-lbl'>flagged at risk (top 10%)</div></div>"
+        f"<div class='hero-stat'><div class='hero-num'>{n_msg:,}</div><div class='hero-lbl'>texts ready, English/Spanish</div></div>"
+        f"<div class='hero-stat'><div class='hero-num'>{n_dn:,}</div><div class='hero-lbl'>left alone on purpose</div></div>"
+        "</div></div>", unsafe_allow_html=True)
+    st.markdown("#### How it works, end to end")
     _rr = NONP[NONP.p_churn_90d >= cut].risk_reason_1.fillna("").map(reason_category)
     top_drv = _rr[_rr != ""].value_counts().head(3)
     mix_top = D[D.contact].action_key.map(action_label).value_counts().head(4) if "action_key" in D else pd.Series(dtype=int)
@@ -768,37 +911,34 @@ with top_c:
             f"<div style='background:{color}; height:7px; border-radius:4px; width:{max(4, 100 * v / mx):.0f}%'></div>"
             for lbl, v in series.items()), unsafe_allow_html=True)
 
-    widths = [1, .08, 1, .08, 1, .08, 1, .08, 1]
-    band = st.columns(widths)
-    steps = [band[i] for i in (0, 2, 4, 6, 8)]
-    for i in (1, 3, 5, 7):
-        band[i].markdown("<div class='arrow'>➜</div>", unsafe_allow_html=True)
-    with steps[0], st.container(border=True):
-        st.markdown("<div class='step'>1 · Customer data</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='big'>{n_acc:,}</div><div class='sub'>synthetic accounts</div>", unsafe_allow_html=True)
-        st.markdown("<span class='pill p-com'>Commerce</span> plan, bill, device<br>"
-                    "<span class='pill p-cus'>Customer</span> support, sentiment, tenure<br>"
-                    "<span class='pill p-rt'>Real-time</span> transfer questions, comparing carriers, app use",
-                    unsafe_allow_html=True)
-    with steps[1], st.container(border=True):
-        st.markdown("<div class='step'>2 · Churn risk score</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='big'>{n_flag:,}</div><div class='sub'>flagged: top 10% most likely to leave in 90 days</div>",
-                    unsafe_allow_html=True)
-        if catch is not None:
-            st.caption(f"Tested on held-out customers, the top 10% catches {catch:.0%} of churners (synthetic).")
-    with steps[2], st.container(border=True):
-        st.markdown("<div class='step'>3 · Why this score</div>", unsafe_allow_html=True)
-        st.markdown("<div class='sub'>Top drivers among flagged customers</div>", unsafe_allow_html=True)
-        _mini_bar(top_drv, MAGENTA, "band_drv")
-    with steps[3], st.container(border=True):
-        st.markdown("<div class='step'>4 · Offer engine</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='big'>{n_contact:,}</div><div class='sub'>get a text · {n_dn:,} left alone "
-                    "(every eligible action is weighed, including doing nothing)</div>", unsafe_allow_html=True)
-        _mini_bar(mix_top, "#8C959F", "band_mix")
-    with steps[4], st.container(border=True):
-        st.markdown("<div class='step'>5 · Why this offer → message</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='big'>0</div><div class='sub'>actually sent: this is a demo. {n_msg:,} English/Spanish "
-                    "texts are ready, each with a plain-language reason.</div>", unsafe_allow_html=True)
+    def _bars(series, color):
+        if not len(series):
+            return ""
+        mx = float(series.max()) or 1.0
+        return "".join(f"<div class='brow'><span>{html.escape(str(lbl))}</span><b>{int(v):,}</b></div>"
+                       f"<div class='bbar'><i style='width:{max(3, 100 * v / mx):.0f}%; background:{color}'></i></div>"
+                       for lbl, v in series.items())
+    catch_txt = (f"Tested on held-out customers, the top 10% catches {catch:.0%} of churners (synthetic)." if catch is not None else "")
+    st.markdown(
+        "<div class='bento'>"
+        "<div class='tile t1'><div class='step'>01 · Customer data</div>"
+        f"<div class='big'>{n_acc:,}</div><div class='sub'>synthetic accounts</div>"
+        "<div class='rows'><div class='trow'><span class='pill p-com'>Commerce</span><span>plan, bill, device</span></div>"
+        "<div class='trow'><span class='pill p-cus'>Customer</span><span>support, sentiment, tenure</span></div>"
+        "<div class='trow'><span class='pill p-rt'>Real-time</span><span>transfer questions, comparing carriers, app use</span></div></div></div>"
+        "<div class='tile t2'><div class='step'>02 · Churn risk score</div>"
+        f"<div class='big'>{n_flag:,}</div><div class='sub'>flagged: top 10% most likely to leave in 90 days</div>"
+        f"<div class='note'>{html.escape(catch_txt)}</div></div>"
+        "<div class='tile t3'><div class='step'>03 · Why this score</div><div class='sub'>Top drivers among flagged customers</div>"
+        f"{_bars(top_drv, '#15111A')}</div>"
+        "<div class='tile t4'><div class='step'>04 · Offer engine</div>"
+        f"<div class='big'>{n_contact:,}</div><div class='sub'>get a text · {n_dn:,} left alone</div>{_bars(mix_top.head(3), '#A39DA6')}</div>"
+        "<div class='tile t5 dark'><div class='step'>05 · Why this offer → message</div>"
+        f"<div class='big'>0</div><div class='sub'>actually sent: this is a demo</div>"
+        f"<div class='note'>{n_msg:,} English/Spanish texts ready</div></div>"
+        "</div>", unsafe_allow_html=True)
+    st.caption("Every eligible action is weighed, including doing nothing. Each ready text carries a plain-language reason. "
+               "All numbers synthetic.")
 
     # ---- follow one customer through it ----
     FOLLOW = ["ACC-PERSONA-38", "ACC-PERSONA-04", "ACC-PERSONA-21", "ACC-PERSONA-24", "ACC-PERSONA-05"]
@@ -807,10 +947,6 @@ with top_c:
         fa = st.selectbox("Follow one customer through it", FOLLOW, index=0, key="follow",
                           format_func=lambda a: f"Customer #{a.rsplit('-', 1)[-1]} · {PERSONAS.get(a, '')} (synthetic)")
         fr = df[df.account_id == fa].iloc[0]
-        row2 = st.columns(widths)
-        fs = [row2[i] for i in (0, 2, 4, 6, 8)]
-        for i in (1, 3, 5, 7):
-            row2[i].markdown("<div class='arrow'>➜</div>", unsafe_allow_html=True)
 
         def _v(c, kind="int"):
             v = fr.get(c)
@@ -822,53 +958,47 @@ with top_c:
                 return "n/a"
             return {"int": f"{int(round(v))}", "pct": f"{v:+.0%}", "f2": f"{v:.2f}", "usd": f"${v / 100:,.0f}",
                     "yn": "yes" if v > 0 else "no"}[kind]
-        with fs[0], st.container(border=True):
-            plan = str(fr.get("plan_sku", "")).replace("TMO-STUB-PLAN-", "").replace("-", " ").title()
-            st.markdown(f"<span class='pill p-com'>Commerce</span> {html.escape(plan)} · {_v('n_lines')} lines · bill "
-                        f"{_v('last_bill_cents', 'usd')} ({_v('bill_change_3m_pct', 'pct')}) · phone {_v('max_device_age_months')} mo<br>"
-                        f"<span class='pill p-cus'>Customer</span> {_v('support_270d')} support contacts (270d), "
-                        f"{_v('unresolved_270d')} unresolved · sentiment {_v('avg_sentiment', 'f2')} · {_v('tenure_months')} mo tenure<br>"
-                        f"<span class='pill p-rt'>Real-time</span> asked about transferring number: {_v('port_out_inquiry', 'yn')} · comparing carriers "
-                        f"{_v('competitor_research_score', 'f2')} · {_v('app_sessions_30d')} app sessions/30d",
-                        unsafe_allow_html=True)
-        with fs[1], st.container(border=True):
-            flagged = float(fr.p_churn_90d) >= cut
-            st.markdown(f"<div class='big'>{fmt_prob(fr.p_churn_90d)}</div><div class='sub'>90-day churn risk · rank "
-                        f"#{int(fr.risk_rank):,} of {n_acc:,} · {'flagged' if flagged else 'not flagged'}</div>",
-                        unsafe_allow_html=True)
-        with fs[2], st.container(border=True):
-            cr, _src = contributions_for(fa)
-            if cr is not None:
-                import numpy as np
-                b0 = float(cr.pop("intercept_logit")); lg = b0 + float(cr.sum()); sg = lambda z: 1 / (1 + np.exp(-z))  # noqa: E731,E702
-                pts = pd.Series({f: (sg(lg) - sg(lg - c)) * 100 for f, c in cr.items()})
-                top = pts.reindex(pts.abs().sort_values(ascending=False).index).head(3)
-                st.markdown("<br>".join(
-                    f"<span class='pill {PILL[FEATURE_LABELS.get(f, ('', 'Commerce'))[1]]}'>{FEATURE_LABELS.get(f, ('', 'Commerce'))[1]}</span>"
-                    f"{html.escape(FEATURE_LABELS.get(f, (f, ''))[0])} <b style='color:{'#CF222E' if v > 0 else '#1A7F37'}'>{v:+.2f} pts</b>"
-                    for f, v in top.items()) + f"<div class='sub'>vs typical customer {fmt_prob(sg(b0))}</div>",
-                    unsafe_allow_html=True)
-            else:
-                st.markdown("<br>".join(chip(x, "risk") for x in [fr.get(f"risk_reason_{i}") for i in (1, 2, 3)]
-                                        if isinstance(x, str) and x), unsafe_allow_html=True)
-        with fs[3], st.container(border=True):
-            tbl_f, _tip = options_table(fa)
-            if len(tbl_f):
-                won = tbl_f[tbl_f.Result.str.contains("Won")]
-                n_el = int((tbl_f.Result != "Blocked").sum())
-                lost = tbl_f[tbl_f.Result == "Lost"].head(1)
-                st.markdown(f"<b>{html.escape(won.Option.iloc[0] if len(won) else action_label(fr.get('action_key')))}</b> wins"
-                            + (f" · net value to us {won['Net value to us (simulated)'].iloc[0]} (simulated)" if len(won) else "")
-                            + f"<div class='sub'>{n_el} eligible options weighed"
-                            + (f"; runner-up {html.escape(lost.Option.iloc[0])}" if len(lost) else "") + "</div>",
-                            unsafe_allow_html=True)
-        with fs[4], st.container(border=True):
-            st.markdown(f"<i>{html.escape(clean_text(fr.get('why_this_offer', '')))}</i>", unsafe_allow_html=True)
-            m_ = fr.get("message_es" if str(fr.get("language")) == "es" else "message_en")
-            if fr.get("action_key") != "do_nothing" and isinstance(m_, str) and m_.strip():
-                st.markdown(f"<div class='bubble' style='font-size:.78rem'>{html.escape(m_.strip())}</div>", unsafe_allow_html=True)
-            else:
-                st.markdown("<div class='sub'>🤫 No message sent: we decided to wait.</div>", unsafe_allow_html=True)
+        plan = str(fr.get("plan_sku", "")).replace("TMO-STUB-PLAN-", "").replace("-", " ").title()
+        f1 = ("<div class='ft'><span class='pill p-com'>Commerce</span>"
+              f"<div>{html.escape(plan)} · {_v('n_lines')} lines · bill {_v('last_bill_cents', 'usd')} ({_v('bill_change_3m_pct', 'pct')}) · phone {_v('max_device_age_months')} mo</div></div>"
+              "<div class='ft'><span class='pill p-cus'>Customer</span>"
+              f"<div>{_v('support_270d')} support contacts (270d), {_v('unresolved_270d')} unresolved · sentiment {_v('avg_sentiment', 'f2')} · {_v('tenure_months')} mo tenure</div></div>"
+              "<div class='ft'><span class='pill p-rt'>Real-time</span>"
+              f"<div>asked about transferring number: {_v('port_out_inquiry', 'yn')} · comparing carriers {_v('competitor_research_score', 'f2')} · {_v('app_sessions_30d')} app sessions/30d</div></div>")
+        flagged = float(fr.p_churn_90d) >= cut
+        f2 = (f"<div class='big' style='color:{MAGENTA}'>{fmt_prob(fr.p_churn_90d)}</div><div class='sub'>90-day churn risk · rank "
+              f"#{int(fr.risk_rank):,} of {n_acc:,} · {'flagged' if flagged else 'not flagged'}</div>")
+        cr, _src = contributions_for(fa)
+        if cr is not None:
+            import numpy as np
+            b0 = float(cr.pop("intercept_logit")); lg = b0 + float(cr.sum()); sg = lambda z: 1 / (1 + np.exp(-z))  # noqa: E731,E702
+            pts = pd.Series({f: (sg(lg) - sg(lg - c)) * 100 for f, c in cr.items()})
+            top = pts.reindex(pts.abs().sort_values(ascending=False).index).head(3)
+            f3 = "".join(
+                f"<div class='ft'><span class='pill {PILL[FEATURE_LABELS.get(f, ('', 'Commerce'))[1]]}'>{FEATURE_LABELS.get(f, ('', 'Commerce'))[1]}</span>"
+                f"<div>{html.escape(FEATURE_LABELS.get(f, (f, ''))[0])} <b style='color:{MAGENTA if v > 0 else '#6E6873'}'>{v:+.2f} pts</b></div></div>"
+                for f, v in top.items()) + f"<div class='sub'>vs typical customer {fmt_prob(sg(b0))}</div>"
+        else:
+            f3 = "".join(chip(x, "risk") for x in [fr.get(f"risk_reason_{i}") for i in (1, 2, 3)] if isinstance(x, str) and x)
+        f4 = ""
+        tbl_f, _tip = options_table(fa)
+        if len(tbl_f):
+            won = tbl_f[tbl_f.Result.str.contains("Won")]
+            n_el = int((tbl_f.Result != "Blocked").sum())
+            lost = tbl_f[tbl_f.Result == "Lost"].head(1)
+            f4 = (f"<div class='fw'>{html.escape(won.Option.iloc[0] if len(won) else action_label(fr.get('action_key')))}</div><div class='sub'>wins"
+                  + (f" · net value to us {won['Net value to us (simulated)'].iloc[0]} (simulated)" if len(won) else "") + "</div>"
+                  + f"<div class='sub'>{n_el} eligible options weighed"
+                  + (f"; runner-up {html.escape(lost.Option.iloc[0])}" if len(lost) else "") + "</div>")
+        m_ = fr.get("message_es" if str(fr.get("language")) == "es" else "message_en")
+        f5 = f"<div class='fq'>{html.escape(clean_text(fr.get('why_this_offer', '')))}</div>"
+        if fr.get("action_key") != "do_nothing" and isinstance(m_, str) and m_.strip():
+            f5 += f"<div class='bubble sm'>{html.escape(m_.strip())}</div>"
+        else:
+            f5 += "<div class='sub'>🤫 No message sent: we decided to wait.</div>"
+        st.markdown("<div class='follow'>" + "".join(
+            f"<div class='tile'><div class='step'>{lab}</div>{body}</div>" for lab, body in
+            (("Data", f1), ("Score", f2), ("Why", f3), ("Decision", f4), ("Message", f5))) + "</div>", unsafe_allow_html=True)
     st.markdown("<div style='text-align:center;font-size:1.05rem;margin:.4rem 0 1rem'>⬇ <b>Step 5 in full:</b> "
                 "Customer #38's card is right below, then three more customers (synthetic).</div>", unsafe_allow_html=True)
 with bottom_c:
@@ -886,7 +1016,7 @@ with bottom_c:
                 help="Customers below the risk flag who still get a text: money-saving, fix-first, or a plan upgrade (synthetic).")
     try:
         from streamlit_extras.metric_cards import style_metric_cards
-        style_metric_cards(border_left_color=MAGENTA, background_color="#FFFFFF", border_color="#E5E7EB", box_shadow=False)
+        style_metric_cards(border_left_color="#E6E0D8", background_color="#FFFFFF", border_color="#E6E0D8", border_radius_px=16, box_shadow=False)
     except Exception:  # noqa: BLE001
         pass
 
@@ -909,14 +1039,12 @@ with bottom_c:
                    f"Text ready {mo:,}"]
         fig = go.Figure(go.Sankey(
             node=dict(label=labels_, pad=18, thickness=16,
-                      color=["#6E7781", MAGENTA, "#AFB8C1", MAGENTA, "#8250DF", "#AFB8C1", MAGENTA]),
+                      color=["#A39DA6", "#D6CEC4", "#A39DA6", "#A39DA6", "#D6CEC4", "#D6CEC4", MAGENTA]),
             link=dict(source=[0, 0, 1, 1, 2, 2, 2, 3, 4], target=[1, 2, 3, 5, 3, 4, 5, 6, 6],
                       value=[n_flag, n_acc - n_flag, fo, fd, no, su, nd, m3, m4],
-                      color=["rgba(226,0,116,.25)", "rgba(175,184,193,.35)", "rgba(226,0,116,.25)",
-                             "rgba(175,184,193,.35)", "rgba(226,0,116,.18)", "rgba(130,80,223,.25)",
-                             "rgba(175,184,193,.35)", "rgba(226,0,116,.25)", "rgba(130,80,223,.25)"])))
-        fig.update_layout(template="plotly_white", height=380, margin=dict(l=8, r=8, t=8, b=8), font=dict(size=13, color="#1F2328"))
-        st.plotly_chart(fig, use_container_width=True)
+                      color=["rgba(21,17,26,.08)"] * 9)))
+        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', template="tm_light", height=380, margin=dict(l=8, r=8, t=8, b=8), font=dict(size=13, color="#15111A"))
+        st.plotly_chart(fig, use_container_width=True, theme=None)
         st.caption(f"Why more texts ({mo:,}) than flags ({n_flag:,}): customers who aren't at risk still get a text when "
                    f"it helps them: {no:,} money-saving or fix-first contacts, plus {su:,} {UPS.lower()}"
                    + (" (near their data cap or using hotspot)" if "usage" in UPS else "")
@@ -930,13 +1058,13 @@ with bottom_c:
             mix["kind"] = mix.action.map(lambda a: "Do nothing" if a == action_label("do_nothing")
                                          else ("Upsell" if a.startswith("Plan upgrades") else "Contact"))
             fig = px.bar(mix.sort_values("accounts"), x="accounts", y="action", orientation="h", color="kind",
-                         color_discrete_map={"Do nothing": "#8C959F", "Contact": MAGENTA, "Upsell": "#8250DF"}, template="plotly_white",
+                         color_discrete_map={"Do nothing": "#D6CEC4", "Contact": "#15111A", "Upsell": "#6E6873"}, template="tm_light",
                          text="accounts")
-            fig.update_layout(height=380, margin=dict(l=8, r=40, t=8, b=8), showlegend=False,
+            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=380, margin=dict(l=8, r=40, t=8, b=8), showlegend=False,
                               xaxis_title="accounts (synthetic)", yaxis_title=None,
                               xaxis=dict(range=[0, float(mix.accounts.max()) * 1.15]))
             fig.update_traces(textposition="outside", cliponaxis=False)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, theme=None)
     with st.container(border=True):
         st.markdown("**Same assumptions, different strategies (simulated)**")
         src_dir = Path(data["offers"].path).parent if data["offers"].path else REPO / "demo_data"
@@ -962,15 +1090,15 @@ with bottom_c:
                 cmp_["ours"] = cmp_.Strategy.str.startswith("Ours")
                 ca, cb = st.columns([1.1, 1])
                 with ca:
-                    fig = px.bar(cmp_, x="net_value_usd", y="Strategy", orientation="h", template="plotly_white",
-                                 color="ours", color_discrete_map={True: MAGENTA, False: "#AFB8C1"},
+                    fig = px.bar(cmp_, x="net_value_usd", y="Strategy", orientation="h", template="tm_light",
+                                 color="ours", color_discrete_map={True: MAGENTA, False: "#D6CEC4"},
                                  text=cmp_.net_value_usd.map(lambda v: f"${v:,.0f}"))
-                    fig.add_vline(x=0, line_color="#57606A", line_width=1)
-                    fig.update_layout(height=300, margin=dict(l=8, r=8, t=8, b=8), showlegend=False,
+                    fig.add_vline(x=0, line_color="#D6CEC4", line_width=1)
+                    fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(l=8, r=8, t=8, b=8), showlegend=False,
                                       xaxis_title="simulated net value, $ (synthetic)", yaxis_title=None,
                                       yaxis=dict(autorange="reversed"))
                     fig.update_traces(textposition="inside", insidetextanchor="middle", textfont_color="white")
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True, theme=None)
                 with cb:
                     st.dataframe(pd.DataFrame({
                         "Contacts to low-risk customers": cmp_[next(c for c in ("contacts_to_low_risk", "unneeded_contacts") if c in cmp_)].astype(int),
@@ -988,12 +1116,12 @@ with bottom_c:
     with g3, st.container(border=True):
         st.markdown("**Churn risk across accounts**")
         h = NONP.assign(pct=NONP.p_churn_90d * 100)
-        fig = px.histogram(h, x="pct", nbins=60, template="plotly_white", color_discrete_sequence=["#AFB8C1"])
-        fig.add_vline(x=cut * 100, line_color=MAGENTA, line_width=2, annotation_text=f"flag: top 10% (≥ {fmt_prob(cut)})",
-                      annotation_position="top right", annotation_font_color=MAGENTA)
-        fig.update_layout(height=330, margin=dict(l=8, r=8, t=8, b=8), xaxis_title="90-day churn risk, % (synthetic)",
+        fig = px.histogram(h, x="pct", nbins=60, template="tm_light", color_discrete_sequence=["#A39DA6"])
+        fig.add_vline(x=cut * 100, line_color="#15111A", line_width=2, annotation_text=f"flag: top 10% (≥ {fmt_prob(cut)})",
+                      annotation_position="top right", annotation_font_color="#15111A")
+        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=330, margin=dict(l=8, r=8, t=8, b=8), xaxis_title="90-day churn risk, % (synthetic)",
                           yaxis_title="accounts", bargap=0.05)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, theme=None)
         st.caption(f"Most customers are low risk; the average is {fmt_prob(nonp_p.mean())}. Synthetic.")
     with g4, st.container(border=True):
         uw = APP / "charts" / "06_upgrade_or_wait.png"
@@ -1007,11 +1135,11 @@ with bottom_c:
             rr = fl.risk_reason_1.fillna("").map(reason_category)
             t = rr[rr != ""].value_counts().head(8).reset_index()
             t.columns = ["reason", "accounts"]
-            fig = px.bar(t.sort_values("accounts"), x="accounts", y="reason", orientation="h", template="plotly_white",
-                         color_discrete_sequence=[MAGENTA], text="accounts")
-            fig.update_layout(height=330, margin=dict(l=8, r=8, t=8, b=8), xaxis_title="flagged accounts (synthetic)", yaxis_title=None)
+            fig = px.bar(t.sort_values("accounts"), x="accounts", y="reason", orientation="h", template="tm_light",
+                         color_discrete_sequence=["#15111A"], text="accounts")
+            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=330, margin=dict(l=8, r=8, t=8, b=8), xaxis_title="flagged accounts (synthetic)", yaxis_title=None)
             fig.update_traces(textposition="outside", cliponaxis=False)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, theme=None)
             st.caption("Top risk reason for the flagged top 10%. Synthetic.")
 
     with st.expander("Explore: drivers of churn and the at-risk list (synthetic)"):
@@ -1056,7 +1184,7 @@ with bottom_c:
             if parts:
                 st.markdown("**What drives churn: synthetic 90-day churn rate by bucket**")
                 t = pd.concat(parts)
-                st.altair_chart(alt.Chart(t).mark_bar(color=MAGENTA).encode(
+                st.altair_chart(alt.Chart(t).mark_bar(color="#15111A").encode(
                     x=alt.X("churn_pct:Q", title="90-day churn % (synthetic labels)"),
                     y=alt.Y("group:N", title=None, sort=None),
                     row=alt.Row("driver:N", title=None, sort=None, header=alt.Header(labelAngle=0, labelAlign="left")),
