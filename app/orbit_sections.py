@@ -481,7 +481,8 @@ def breakdown(b0: float, C: pd.Series, p: float, Z: pd.Series | None = None, k: 
 def _tower(base, top, rest, overlap, p_now, key, hl: str | None = None, hl_old: float | None = None,
            hl_delta: float | None = None) -> go.Figure:
     """hl (optional): feature whose block moved (the 'Other' block when it isn't in the top): drawn solid magenta at its
-    new height, a dashed grey outline at its old height (hl_old pts), and a 'moved · +x pts' callout (hl_delta)."""
+    new height, a dashed grey outline at its old height (hl_old pts), and a callout with the change this event
+    (hl_delta = new minus old points; the list beside the tower shows the signal's total points now)."""
     cols = [("Typical customer", "base", base, 0.0)]
     cum = base
     hl_i = None
@@ -524,7 +525,7 @@ def _tower(base, top, rest, overlap, p_now, key, hl: str | None = None, hl_old: 
                 OZ = [olo] * 4 + [max(ohi, olo + 0.012)] * 4
                 hx += [OX[a], OX[b], None]; hy += [OY[a], OY[b], None]; hz += [OZ[a], OZ[b], None]
         if i == hl_i and hl_delta is not None:
-            ann.append(dict(x=x, y=y, z=hi, text=f"<b>moved</b> · {hl_delta:+.2f} pts", showarrow=True, arrowhead=0, arrowwidth=1,
+            ann.append(dict(x=x, y=y, z=hi, text=f"<b>moved {hl_delta:+.2f} pts this event</b> · now {(hl_old or 0) + hl_delta:+.2f}", showarrow=True, arrowhead=0, arrowwidth=1,
                             arrowcolor=MAG, ax=40, ay=-30, font=dict(family="SM", size=10, color=MAG), bgcolor="#fff",
                             bordercolor=MAG, borderwidth=1, borderpad=3))
         if lane in ("base", "total"):
@@ -1186,9 +1187,8 @@ def render_customer(df: pd.DataFrame, account_id: str, *, contributions_fn: Call
                 a, z = st.columns([1.5, 1], gap="large")
                 with a:
                     tk = tick or {}
-                    with st.container(key=f"orbit_tower_{'flash_' + str(tk.get('step')) if an and tk.get('hl') else 'still'}"):
-                        st.plotly_chart(_tower(b, top, rest, overlap, pn, key, tk.get("hl"), tk.get("hl_old_pts"), tk.get("hl_delta")),
-                                        width="stretch", theme=None, config=CFG3D, key=f"{key}_tower")
+                    st.plotly_chart(_tower(b, top, rest, overlap, pn, key, tk.get("hl"), tk.get("hl_old_pts"), tk.get("hl_delta")),
+                                    width="stretch", theme=None, config=CFG3D, key=f"{key}_tower")
                     st.markdown("<div class='o-hint'>drag to rotate · hover a block</div>", unsafe_allow_html=True)
                 with z:
                     hlf = (tick or {}).get("hl")

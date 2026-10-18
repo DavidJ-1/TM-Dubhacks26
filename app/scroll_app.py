@@ -114,7 +114,6 @@ TICK_CSS = (f"<style>.st-key-orbit_tick{{position:sticky;top:0;z-index:20;backgr
             f"@keyframes tkRing{{from{{box-shadow:0 0 0 0 {O.MAG}}}to{{box-shadow:0 0 0 9px rgba(226,0,116,0)}}}}"
             "@keyframes tkLine{from{transform:scaleX(0)}to{transform:scaleX(1)}}"
             f"@keyframes tkFade{{from{{opacity:1;color:{O.INK}}}to{{opacity:.75;color:{O.MUTED}}}}}"
-            f"@keyframes tkFlash{{0%{{box-shadow:0 0 0 2px {O.MAG}}}100%{{box-shadow:0 0 0 2px rgba(226,0,116,0)}}}}"
             "@keyframes tkFlip{from{transform:perspective(900px) rotateX(-90deg);opacity:.2}to{transform:perspective(900px) rotateX(0);opacity:1}}"
             ".tka .o-tk-risk{animation:tkUp .45s ease-out both}"
             ".tka .o-tk-chip{animation:tkIn .45s ease-out .1s both}"
@@ -122,7 +121,6 @@ TICK_CSS = (f"<style>.st-key-orbit_tick{{position:sticky;top:0;z-index:20;backgr
             f".tka .o-chg{{position:relative}}.tka .o-chg::after{{content:'';position:absolute;left:0;right:0;bottom:-1px;height:1px;"
             f"background:{O.MAG};transform-origin:left;animation:tkLine .5s ease-out both}}"
             ".tka .o-chg .wv{animation:tkFade .55s ease-out both}"
-            "[class*='st-key-orbit_tower_flash']{animation:tkFlash .55s ease-out 1}"
             ".o-tk-flip{animation:tkFlip .5s ease-out both;transform-origin:top center}"
             ".o-tk-slide{animation:tkUp .45s ease-out .15s both}</style>")
 
