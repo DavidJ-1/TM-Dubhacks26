@@ -481,19 +481,23 @@ def prewarm() -> bool:
         return False
 
 
-def sms_state() -> str:
-    """'dry' | 'real' | 'off' for the caption under the phone. Reads only TM_SMS_DRY_RUN."""
-    import os
-    if str(REPO / "harness") not in sys.path:
-        sys.path.insert(0, str(REPO / "harness"))
+def _demo_phone():
+    """harness.phone_push (ntfy via notify.py; dry run unless TM_SEND_LIVE=1 + NTFY_TOPIC), or None."""
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
     try:
-        from sms_send import is_configured
-        cfg = bool(is_configured())
+        from harness import phone_push
+        return phone_push
     except Exception:  # noqa: BLE001
-        cfg = False
-    if not cfg:
+        return None
+
+
+def sms_state() -> str:
+    """'dry' | 'real' | 'off' for the caption under the phone (harness.phone_push.mode())."""
+    dp = _demo_phone()
+    if dp is None:
         return "off"
-    return "dry" if os.environ.get("TM_SMS_DRY_RUN") else "real"
+    return "real" if dp.mode()[0] == "live" else "dry"
 
 
 def what_if(acc: str, edits: dict) -> dict:
@@ -647,32 +651,35 @@ def score_panel(acc: str, p_now: float, kp: str = ""):
 
 
 def send_button(body: str, key: str):
-    """'Send this text to my phone': only on click, one click = one send. Body is the exact text shown.
-    Recipient comes from the sender module's own env config; the app never passes or reads a number."""
-    if str(REPO / "harness") not in sys.path:
-        sys.path.insert(0, str(REPO / "harness"))
-    try:
-        from sms_send import is_configured, send_sms
-    except ImportError:
-        is_configured, send_sms = (lambda: False), None
-    try:
-        ok_cfg = bool(is_configured()) and send_sms is not None
-    except Exception:  # noqa: BLE001
-        ok_cfg = False
-    clicked = st.button("📲 Send this text to my phone", key=f"send_{key}", disabled=not ok_cfg)
-    if not ok_cfg:
+    """'Send to my phone': one click = one call. Body is the exact engine text shown on the phone mockup.
+    harness.phone_push dry-runs unless TM_SEND_LIVE=1 and NTFY_TOPIC are set; topic is masked on screen.
+    The app never passes a customer number, address or topic."""
+    dp = _demo_phone()
+    if dp is None:
+        st.button("📲 Send to my phone", key=f"send_{key}", disabled=True)
         return
+    live = dp.mode()[0] == "live"
+    clicked = st.button("📲 Send to my phone" + ("" if live else " (dry run)"), key=f"send_{key}")
     if clicked:  # st.button is True only on the rerun triggered by this click
-        res = send_sms(body)
-        st.session_state[f"sent_{key}"] = res if isinstance(res, dict) else {"ok": False, "detail": str(res)}
+        acc, _, lang = key.rpartition("_")
+        res = dp.send_to_my_phone(body, account_id=acc.split("_", 1)[-1], lang=lang)
+        st.session_state[f"sent_{key}"] = res
     res = st.session_state.get(f"sent_{key}")
-    if res is not None:
-        if res.get("ok"):
-            st.success("Sent")
-            if res.get("detail"):
-                st.caption(str(res["detail"]))
-        else:
-            st.error(str(res.get("detail") or "Send failed"))
+    if res is None:
+        return
+    if res.get("sent"):
+        st.success("Sent to the demo phone")
+    elif res.get("ok"):
+        st.info("Dry run: nothing was sent. This is exactly what would go out.")
+    else:
+        st.error(str(res.get("detail") or "Send failed"))
+    pv = res.get("preview")
+    if pv:
+        with st.expander("What goes to the phone", expanded=not res.get("sent")):
+            st.markdown(f"**To:** ntfy push, topic {pv['topic_masked']} (demo phone only)  \n"
+                        f"**Length:** {pv['chars']} chars, plain text")
+            st.code(pv["text"], language=None, wrap_lines=True)
+            st.caption(str(res.get("detail", "")))
 
 
 def ring(p, caption: str = "") -> str:
@@ -803,8 +810,8 @@ def card(acc: str, story, fits: set, idx: int, kp: str = "", allow_send: bool = 
             st.info("No text is sent to this customer: the offer engine chose to wait." if k_now == "do_nothing"
                     else "No text is sent to this customer.", icon="🤫")
         st.caption(("What-if text from the offer engine." if res is not None else "The exact text the offer engine wrote.")
-                   + " " + {"dry": "Rehearsal mode: the text is checked but not sent.",
-                            "real": "Sends this exact text to the demo phone.",
+                   + " " + {"dry": "Rehearsal mode: the button shows what would be sent, nothing is sent.",
+                            "real": "Live: sends this exact text to the demo phone.",
                             "off": "Phone sending not set up."}[sms_state()])
     sp, _gap = st.columns([2.4, 1])
     with sp:
