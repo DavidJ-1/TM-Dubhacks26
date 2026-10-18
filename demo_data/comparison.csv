@@ -1,0 +1,6 @@
+strategy,description,contacted,unneeded_contacts,unneeded_share,credit_spend_usd,churners_reached,churners_reached_share,expected_saves,offer_cost_usd,cost_per_save_usd,contact_cost_usd,saved_margin_usd,net_value_usd,expected_saves_true_p,cost_per_save_true_p_usd,net_value_true_p_usd,other_ev_usd,data_note
+1. Do nothing,"no contact, no cost",0,0,,0.0,0,0.0,0.0,0.0,,0.0,0.0,0.0,0.0,,0.0,0.0,SYNTHETIC/SIMULATED
+2. Discount everyone,"$25 care credit to all 5,042 accounts",5042,4523,0.9,126050.0,138,1.0,35.03,126050.0,3597.92,15126.0,65340.7,-75835.3,34.8,3621.84,-75556.67,0.0,SYNTHETIC/SIMULATED
+3. 3+ support calls rule,$25 care credit if 3+ support contacts in 90 days,1466,978,0.67,36650.0,105,0.76,28.29,36650.0,1295.33,4398.0,53320.62,12272.62,27.84,1316.26,11954.31,0.0,SYNTHETIC/SIMULATED
+4. Top 10% risk score only,$25 care credit to the top 504 by Model A risk,504,0,0.0,12600.0,88,0.64,23.69,12600.0,531.96,1512.0,44357.34,30245.34,22.95,549.11,29349.67,0.0,SYNTHETIC/SIMULATED
+5. Ours (Model A + EV engine),per-customer pick from offers.csv; do nothing allowed to win,1123,639,0.57,6725.0,92,0.67,41.77,39991.6,957.47,4323.0,82842.2,38527.6,40.75,981.37,37479.5,66929.32,SYNTHETIC/SIMULATED
