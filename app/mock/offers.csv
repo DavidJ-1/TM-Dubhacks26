@@ -1,0 +1,49 @@
+account_id,action,expected_value,reason,upgrade_moment,um_device_paid_off,um_usage_growth,um_student_graduating,um_old_device
+ACC-00021,fix_first_callback,39.37,"Coverage complaints: fix the network issue first, no discount",0,0,0,0,0
+ACC-00095,device_upgrade,35.17,Phone is 3+ years old (upgrade moment),1,1,0,0,1
+ACC-00626,fix_first_callback,158.01,"Coverage complaints: fix the network issue first, no discount",0,0,0,0,0
+ACC-00662,do_nothing,0.0,"Expected value of any offer is below zero, so we wait",0,0,0,0,0
+ACC-00735,fix_first_callback,12.89,"Coverage complaints: fix the network issue first, no discount",0,0,0,0,0
+ACC-00804,step_up_plan,30.5,Usage is outgrowing the plan (upgrade moment),1,0,1,0,0
+ACC-00841,step_up_plan,18.03,Usage is outgrowing the plan (upgrade moment),1,0,1,0,0
+ACC-00908,do_nothing,0.0,"Expected value of any offer is below zero, so we wait",0,0,0,0,0
+ACC-00976,step_up_plan,28.83,Usage is outgrowing the plan (upgrade moment),1,0,0,1,0
+ACC-01723,fix_first_callback,24.28,"Coverage complaints: fix the network issue first, no discount",1,1,0,0,1
+ACC-01830,step_up_plan,18.92,Usage is outgrowing the plan (upgrade moment),1,0,1,0,0
+ACC-01966,step_up_plan,14.27,Usage is outgrowing the plan (upgrade moment),1,1,1,0,0
+ACC-02061,step_up_plan,16.63,Usage is outgrowing the plan (upgrade moment),1,0,0,1,0
+ACC-02354,step_up_plan,12.38,Usage is outgrowing the plan (upgrade moment),1,0,0,1,0
+ACC-02357,fix_first_callback,661.74,"Coverage complaints: fix the network issue first, no discount",0,0,0,0,0
+ACC-02394,do_nothing,0.0,"Expected value of any offer is below zero, so we wait",0,0,0,0,0
+ACC-02575,do_nothing,0.0,"Expected value of any offer is below zero, so we wait",0,0,0,0,0
+ACC-02618,fix_first_callback,56.47,"Coverage complaints: fix the network issue first, no discount",1,1,0,1,0
+ACC-02789,step_up_plan,32.42,Usage is outgrowing the plan (upgrade moment),1,0,0,1,0
+ACC-02849,do_nothing,0.0,"Expected value of any offer is below zero, so we wait",0,0,0,0,0
+ACC-02922,step_up_plan,13.14,Usage is outgrowing the plan (upgrade moment),1,1,0,1,0
+ACC-03084,do_nothing,0.0,"Expected value of any offer is below zero, so we wait",0,0,0,0,0
+ACC-03255,step_up_plan,14.46,Usage is outgrowing the plan (upgrade moment),1,0,1,0,0
+ACC-03446,step_up_plan,32.6,Usage is outgrowing the plan (upgrade moment),1,1,0,1,0
+ACC-03614,do_nothing,0.0,"Expected value of any offer is below zero, so we wait",0,0,0,0,0
+ACC-03684,fix_first_callback,343.03,"Coverage complaints: fix the network issue first, no discount",1,0,1,0,0
+ACC-03748,step_up_plan,44.82,Usage is outgrowing the plan (upgrade moment),1,0,1,0,0
+ACC-04017,loyalty_credit,4.57,Long tenure; small loyalty credit recognizes it,1,1,0,0,0
+ACC-04022,do_nothing,0.0,"Expected value of any offer is below zero, so we wait",0,0,0,0,0
+ACC-04117,care_credit_25,95.68,Bill jumped after a promo ended; $25/mo care credit softens it,0,0,0,0,0
+ACC-04193,step_up_plan,53.34,Usage is outgrowing the plan (upgrade moment),1,0,1,0,0
+ACC-04208,device_upgrade,38.1,Phone is 3+ years old (upgrade moment),1,1,0,0,1
+ACC-04408,step_up_plan,25.99,Usage is outgrowing the plan (upgrade moment),1,0,0,1,0
+ACC-04488,do_nothing,0.0,"Expected value of any offer is below zero, so we wait",0,0,0,0,0
+ACC-04560,do_nothing,0.0,"Expected value of any offer is below zero, so we wait",0,0,0,0,0
+ACC-04567,fix_first_callback,9.9,"Coverage complaints: fix the network issue first, no discount",0,0,0,0,0
+ACC-04691,step_up_plan,26.71,Usage is outgrowing the plan (upgrade moment),1,0,1,0,0
+ACC-04805,do_nothing,0.0,"Expected value of any offer is below zero, so we wait",0,0,0,0,0
+ACC-04924,do_nothing,0.0,"Expected value of any offer is below zero, so we wait",0,0,0,0,0
+ACC-PERSONA-04,fix_first_callback,358.67,"Coverage complaints: fix the network issue first, no discount",0,0,0,0,0
+ACC-PERSONA-10,do_nothing,0.0,"Expected value of any offer is below zero, so we wait",0,0,0,0,0
+ACC-PERSONA-21,do_nothing,0.0,"Expected value of any offer is below zero, so we wait",1,1,0,0,0
+ACC-PERSONA-22,care_credit_25,283.41,Bill jumped after a promo ended; $25/mo care credit softens it,0,0,0,0,0
+ACC-PERSONA-23,fix_first_callback,506.86,"Coverage complaints: fix the network issue first, no discount",1,1,0,0,0
+ACC-PERSONA-24,do_nothing,0.0,"Expected value of any offer is below zero, so we wait",0,0,0,0,0
+ACC-PERSONA-25,step_up_plan,16.99,Usage is outgrowing the plan (upgrade moment),1,0,1,0,0
+ACC-PERSONA-27,fix_first_callback,325.72,"Coverage complaints: fix the network issue first, no discount",0,0,0,0,0
+ACC-PERSONA-28,step_up_plan,13.6,Usage is outgrowing the plan (upgrade moment),1,0,0,1,0

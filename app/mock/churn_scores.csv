@@ -1,0 +1,49 @@
+account_id,p_churn_90d,risk_rank,risk_reason_1,risk_reason_2,risk_reason_3,stay_reason_1,stay_reason_2,stay_reason_3
+ACC-PERSONA-04,0.9563,1,Shopping competitors (research score 0.85),5 support contacts in 90 days,3 unresolved support issue(s),3 years with T-Mobile,Active in the T-Life app (7 sessions/30d),Not shopping competitors
+ACC-03684,0.9253,2,5 support contacts in 90 days,Shopping competitors (research score 0.55),2 unresolved support issue(s),Phone financing keeps them on (19 months left),Not shopping competitors,Active in the T-Life app (5 sessions/30d)
+ACC-PERSONA-23,0.9218,3,4 unresolved support issue(s),Shopping competitors (research score 0.75),4 coverage/network complaint(s),Steady bill (no recent jump),3 years with T-Mobile,Not shopping competitors
+ACC-02357,0.8354,4,Asked about cancelling,3 support contacts in 90 days,Promo credit expired recently,Not shopping competitors,Phone financing keeps them on (8 months left),Active in the T-Life app (8 sessions/30d)
+ACC-PERSONA-22,0.7484,5,Shopping competitors (research score 0.55),Bill up 16% vs prior 3 months,2 unresolved support issue(s),Not shopping competitors,Phone financing keeps them on (10 months left),Active in the T-Life app (11 sessions/30d)
+ACC-PERSONA-27,0.7043,6,3 unresolved support issue(s),Shopping competitors (research score 0.50),3 support contacts in 90 days,Steady bill (no recent jump),Phone financing keeps them on (18 months left),Not shopping competitors
+ACC-02618,0.5111,7,7 support contacts in 90 days,Shopping competitors (research score 0.56),1 coverage/network complaint(s),No unresolved support issues,Not shopping competitors,Active in the T-Life app (14 sessions/30d)
+ACC-04193,0.4671,8,Bill up 26% vs prior 3 months,3 support contacts in 90 days,Shopping competitors (research score 0.24),Phone financing keeps them on (22 months left),Not shopping competitors,Active in the T-Life app (13 sessions/30d)
+ACC-00626,0.3879,9,Shopping competitors (research score 0.59),Bill up 13% vs prior 3 months,Negative support sentiment,No unresolved support issues,Not shopping competitors,Active in the T-Life app (10 sessions/30d)
+ACC-02789,0.3802,10,3 support contacts in 90 days,Shopping competitors (research score 0.40),2 coverage/network complaint(s),Steady bill (no recent jump),Not shopping competitors,2 years with T-Mobile
+ACC-01723,0.3301,11,6 support contacts in 90 days,Shopping competitors (research score 0.24),1 unresolved support issue(s),Steady bill (no recent jump),7 years with T-Mobile,Not shopping competitors
+ACC-04022,0.3167,12,5 support contacts in 90 days,Shopping competitors (research score 0.55),,No unresolved support issues,Phone financing keeps them on (23 months left),Not shopping competitors
+ACC-00021,0.3024,13,Shopping competitors (research score 0.49),3 support contacts in 90 days,1 unresolved support issue(s),Steady bill (no recent jump),Not shopping competitors,Phone financing keeps them on (12 months left)
+ACC-03446,0.3011,14,4 support contacts in 90 days,Shopping competitors (research score 0.45),1 unresolved support issue(s),Steady bill (no recent jump),Not shopping competitors,2 years with T-Mobile
+ACC-04017,0.2708,15,4 support contacts in 90 days,Shopping competitors (research score 0.41),1 unresolved support issue(s),Steady bill (no recent jump),Not shopping competitors,2 years with T-Mobile
+ACC-PERSONA-21,0.2665,16,Shopping competitors (research score 0.85),Asked about porting out,,No unresolved support issues,Steady bill (no recent jump),5 years with T-Mobile
+ACC-04117,0.239,17,Bill up 28% vs prior 3 months,Promo credit expired recently,1 support contacts in 90 days,No unresolved support issues,Not shopping competitors,Positive support experiences
+ACC-00976,0.2387,18,4 support contacts in 90 days,2 unresolved support issue(s),Shopping competitors (research score 0.12),Steady bill (no recent jump),Not shopping competitors,Phone financing keeps them on (16 months left)
+ACC-04408,0.2381,19,Shopping competitors (research score 0.62),2 support contacts in 90 days,1 unresolved support issue(s),Steady bill (no recent jump),Active in the T-Life app (14 sessions/30d),Not shopping competitors
+ACC-03748,0.1991,20,Shopping competitors (research score 0.52),Asked about porting out,,No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-04208,0.1908,21,3 support contacts in 90 days,2 unresolved support issue(s),Shopping competitors (research score 0.26),Steady bill (no recent jump),7 years with T-Mobile,Not shopping competitors
+ACC-02394,0.1862,22,2 support contacts in 90 days,Bill up 9% vs prior 3 months,Shopping competitors (research score 0.21),Not shopping competitors,Phone financing keeps them on (16 months left),Active in the T-Life app (10 sessions/30d)
+ACC-00662,0.135,23,Shopping competitors (research score 0.50),1 support contacts in 90 days,Negative support sentiment,No unresolved support issues,Not shopping competitors,Active in the T-Life app (12 sessions/30d)
+ACC-00735,0.1145,24,2 support contacts in 90 days,1 coverage/network complaint(s),Shopping competitors (research score 0.13),No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-02061,0.1138,25,Shopping competitors (research score 0.28),1 unresolved support issue(s),1 support contacts in 90 days,Steady bill (no recent jump),Not shopping competitors,Active in the T-Life app (9 sessions/30d)
+ACC-PERSONA-25,0.0997,26,Shopping competitors (research score 0.40),1 support contacts in 90 days,Bill up 1% vs prior 3 months,No unresolved support issues,Steady bill (no recent jump),Phone financing keeps them on (20 months left)
+ACC-PERSONA-28,0.0982,27,Shopping competitors (research score 0.60),Bill up 1% vs prior 3 months,,No unresolved support issues,Steady bill (no recent jump),3 years with T-Mobile
+ACC-02575,0.0953,28,1 unresolved support issue(s),Shopping competitors (research score 0.17),1 support contacts in 90 days,Steady bill (no recent jump),Not shopping competitors,Phone financing keeps them on (12 months left)
+ACC-04691,0.0864,29,Asked about porting out,Shopping competitors (research score 0.02),Bill up 1% vs prior 3 months,No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-04924,0.0724,30,Shopping competitors (research score 0.37),1 support contacts in 90 days,Bill up 1% vs prior 3 months,Positive support experiences,No unresolved support issues,Steady bill (no recent jump)
+ACC-00804,0.0632,31,Bill up 13% vs prior 3 months,,,No unresolved support issues,Not shopping competitors,Active in the T-Life app (14 sessions/30d)
+ACC-04567,0.0567,32,1 coverage/network complaint(s),Bill up 2% vs prior 3 months,1 support contacts in 90 days,No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-02354,0.0565,33,Shopping competitors (research score 0.31),,,No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-03614,0.0539,34,Shopping competitors (research score 0.21),Bill up 1% vs prior 3 months,,No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-PERSONA-24,0.0534,35,6 support contacts in 90 days,Shopping competitors (research score 0.10),Bill up 2% vs prior 3 months,No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-02922,0.0531,36,1 coverage/network complaint(s),Shopping competitors (research score 0.08),1 support contacts in 90 days,No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-01966,0.0523,37,1 support contacts in 90 days,Shopping competitors (research score 0.11),,No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-04805,0.0485,38,1 support contacts in 90 days,Shopping competitors (research score 0.04),,No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-03255,0.048,39,Shopping competitors (research score 0.19),,,No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-00841,0.0435,40,1 support contacts in 90 days,,,No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-04560,0.0426,41,Shopping competitors (research score 0.08),Bill up 1% vs prior 3 months,,No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-03084,0.0424,42,Shopping competitors (research score 0.13),,,No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-02849,0.0389,43,Bill up 1% vs prior 3 months,Shopping competitors (research score 0.02),,No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-01830,0.0379,44,1 support contacts in 90 days,,,No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-00908,0.036,45,Shopping competitors (research score 0.09),Bill up 2% vs prior 3 months,,No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-00095,0.0339,46,Shopping competitors (research score 0.09),,,No unresolved support issues,Steady bill (no recent jump),Not shopping competitors
+ACC-04488,0.0317,47,Shopping competitors (research score 0.12),,,No unresolved support issues,Steady bill (no recent jump),7 years with T-Mobile
+ACC-PERSONA-10,0.0297,48,Shopping competitors (research score 0.15),,,10 years with T-Mobile,No unresolved support issues,Steady bill (no recent jump)
