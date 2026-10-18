@@ -184,7 +184,7 @@ def test_decision_column_if_present(offers):
 
 
 OUR_COLS = ["account_id", "decision", "channel", "decided_by_rule", "decision_reason", "offer_label", "offer_cost_usd",
-            "customer_saves_usd_mo", "receipt_line", "message_en", "message_es"]
+            "customer_saves_usd_mo", "receipt_line", "receipt_kind", "receipt_tradeoff_line", "message_en", "message_es"]
 
 
 def _decisions():
@@ -206,8 +206,20 @@ def test_decisions_file():
     assert (d.loc[d.decision == "receipt_only", "channel"] == "bill").all()
     assert (d.loc[d.decision == "silent", "channel"] == "none").all()
     assert (d.loc[~msg, "message_en"] == "").all() and (d.loc[msg, "message_en"] != "").all()
-    assert (d.loc[d.decision == "receipt_only", "receipt_line"] != "").all()
+    assert (d.loc[d.receipt_kind == "clean", "receipt_line"] != "").all()
+    assert (d.loc[d.receipt_kind == "tradeoff", "receipt_line"] == "").all()
+    assert (d.loc[d.receipt_kind == "tradeoff", "receipt_tradeoff_line"].str.contains("but you'd lose")).all()
+    assert set(d.loc[d.decision == "receipt_only", "receipt_kind"]) <= {"clean", "tradeoff"}
     assert set(d.decided_by_rule.astype(int)) <= {1, 2, 3, 4, 5, 6}
+    strict = set(pd.read_csv(dout.STRICT_RECEIPT).account_id)     # strict bill-line rule: 394 like-for-like, nothing lost
+    ro = set(d.account_id[d.decision == "receipt_only"])
+    trade = set(pd.read_csv(dout.TRADEOFF_RECEIPT).account_id)  # "cheaper but you'd lose X": 94, still on the bill
+    assert len(strict) == 394 and len(trade) == 94
+    assert ro == (strict | trade) - set(d.account_id[msg])
+    if "already_leaving_note" in d.columns:
+        al = msg & (d.already_leaving.astype(str) == "True")
+        assert (d.loc[al, "already_leaving_note"] == dout.AL_NOTE_OPEN).sum() >= al.sum() - 1
+    assert not d.loc[d.decision == "silent", "decision_reason"].str.contains("cheaper plan is on your bill").any()
     for c in dout.TEXT_COLS:
         assert not d[c].astype(str).str.contains(dout.FORBIDDEN).any(), c
     # channel vs promise: only agent-call rows may promise a call

@@ -68,7 +68,7 @@ FIX_ES = {
     "call": "Hola, le llamamos de T-Mobile por el problema abierto con {t}. Queremos resolverlo hoy. Sin ventas ni "
             "cambios de plan. Si prefiere no recibir llamadas como esta, podemos dejar de hacerlas.",
 }
-TEXT_COLS = ["decision_reason", "offer_label", "receipt_line", "message_en", "message_es"]
+TEXT_COLS = ["decision_reason", "offer_label", "receipt_line", "receipt_tradeoff_line", "message_en", "message_es"]
 FORBIDDEN = re.compile(r"(?i)flat \$?1,?478|synthetic|simulated|\btm-|grok|persona|stub|PROMO-|TMO-|/workspace|/tmp|\.csv|\bEV\b|"
                        r"model a\b|model b\b|david|sandbox|codename|anthropic|openai|claude")
 PERK = re.compile(r"(?i)perk|streaming|incluido con|included with")
@@ -180,6 +180,13 @@ def sandbox_facts():
     return acc, topic
 
 
+# Strict bill-line rule (agreed): like-for-like plan AND the customer loses nothing (value_ledger receipt.csv,
+# like_for_like & no_tradeoff; tm-offers-ledger c8f5224): 394 accounts, $4,600/mo. Snapshot committed here.
+STRICT_RECEIPT = Path(os.environ.get("TM_STRICT_RECEIPT", ROOT / "data/decisions/strict_receipt.csv"))
+# Trade-off bill lines (same locked ledger: like_for_like & not no_tradeoff = 94): a cheaper plan that gives something
+# up is still shown on the bill with an explicit "you'd lose" line. Nobody goes silent for losing something.
+TRADEOFF_RECEIPT = Path(os.environ.get("TM_TRADEOFF_RECEIPT", ROOT / "data/decisions/tradeoff_receipt.csv"))
+AL_NOTE_OPEN = "Asked us about moving their number. We still reach out because fixing their open issue is worth it."
 STALE_LEDGER = {"9e4d402", "f9629d6"}   # tm-models: money in these ledger commits is not the headline (27c2870 is)
 
 
@@ -196,6 +203,10 @@ def build(out: Path):
                  if rl is not None else pd.Series(dtype=str))
     names = dict(pd.read_sql("SELECT sku, name FROM plans", det.connect_ro()).values)
     C = cands.set_index(["account_id", "action_code"])
+    strict = pd.read_csv(STRICT_RECEIPT).set_index("account_id")
+    trade = pd.read_csv(TRADEOFF_RECEIPT).set_index("account_id")
+    lose_x = set(rl.account_id[rl.line_type == "plan_move_you_lose_x"]) if rl is not None else set()
+    plan_line = plan_line[plan_line.index.isin(strict.index)]   # only the strict like-for-like bill text
     lab = dict(eng.ACTION_LABEL)
 
     rows, opts, converted, new_text = [], [], [], []
@@ -205,7 +216,7 @@ def build(out: Path):
         open_t = aid in topic.index
         pol = gr.policy_action if isinstance(gr.policy_action, str) else ""
         chan = CHANNEL.get(str(acc.contact_preference.get(aid, "")), "text")
-        offer, line, msg_en, msg_es = "", "", "", ""
+        offer, line, tline, msg_en, msg_es = "", "", "", "", ""
         if ok:
             decision = "message"
             # open ticket: fix-first only; a perk reminder becomes a fix-first message with the perk dropped.
@@ -231,22 +242,34 @@ def build(out: Path):
                                    "every outreach rule.")
         else:
             br = gr.block_reason if isinstance(gr.block_reason, str) else "not_worth_contacting"
-            line = plan_line.get(aid, "")
-            if not line and str(r.get("receipt_action", "") or "") in eng.PLAN_MOVES:
-                sku = str(r.receipt_skus).split(";")[0]
-                save = float(r.receipt_monthly_saving or 0)
-                if save > 0:
-                    line = f"{names.get(sku, 'Another plan')} would cost ${save:.0f}/mo less for your lines."
-            if line and str(r.get("receipt_limited_time", "")) == "True" and "Limited-time" not in line:
-                line += " Limited-time plan: check it's still offered before switching."
-            decision = "receipt_only" if line else "silent"
-            chan = "bill" if line else "none"
+            line, other_plan, tline = "", "", ""
+            if aid in strict.index:     # strict rule only: same features, lower price, nothing lost
+                line = plan_line.get(aid, "") or f"Same features, lower price: {strict.savings_line[aid]}."
+                if str(r.get("receipt_limited_time", "")) == "True" and "Limited-time" not in line:
+                    line += " Limited-time plan: check it's still offered before switching."
+            elif aid in trade.index:
+                tr = trade.loc[aid]
+                lose = str(tr.tradeoff_line).split("you'd lose:", 1)[-1].strip().rstrip(".")
+                tline = f"Could pay ${float(tr.customer_saves_usd_mo):.0f}/mo less on {tr.best_plan}, but you'd lose {lose}."
+            elif aid in lose_x or str(r.get("receipt_action", "") or "") in eng.PLAN_MOVES:
+                other_plan = "lose_x" if aid in lose_x else "not_same"
+            decision = "receipt_only" if (line or tline) else "silent"
+            chan = "bill" if (line or tline) else "none"
             rule = {"bill_change_no_fix": 4, "contacted_this_quarter": 5}.get(
                 br, 1 if (r.action_code == "do_nothing" and br != "receipt_only_plan_move") else 2)
             if br == "bill_change_no_fix":
                 reason = clean(gr.why_line) or "Bill went up recently and nothing we have offsets it, so no message."
+                if not line and "cheaper plan is on your bill" in reason:   # no bill line under the strict rule
+                    reason = reason.split(". ")[0] + (". A cheaper plan exists but it isn't a like-for-like match, "
+                                                      "so we don't suggest it.")
+            elif decision == "receipt_only" and tline:
+                reason = "No message: a cheaper plan that gives something up is shown on the bill, with what they'd lose."
             elif decision == "receipt_only":
                 reason = "No message: the cheaper plan is shown on the bill and in the app only."
+            elif other_plan == "lose_x":
+                reason = "A cheaper plan exists but it isn't a like-for-like match, so we don't suggest it."
+            elif other_plan == "not_same":
+                reason = "A cheaper plan exists but it isn't a like-for-like match, so we don't suggest it."
             elif str(r.get("already_leaving_save_attempt", "")) == "True":
                 reason = ("No message: they asked us about moving their number, and a check-in isn't expected to "
                           "pay off at realistic save rates.")
@@ -262,7 +285,7 @@ def build(out: Path):
             elif offer == "fix_first":
                 cost = float(eng.CONFIG["FIX_FIRST_CALLBACK_COST"])
         elif decision == "receipt_only":
-            saves = float(r.get("receipt_monthly_saving", 0) or 0) if pd.notna(r.get("receipt_monthly_saving")) else 0.0
+            saves = float((strict if line else trade).customer_saves_usd_mo[aid])
         label = lab.get(offer, "") if offer else ""
         if offer in FIX and chan != "call":       # digital fix-first: no callback promised
             label = label.replace("fix-first callback", "fix-first message")
@@ -270,6 +293,8 @@ def build(out: Path):
                      "decision_reason": money_free(clean(reason)), "offer_label": label,
                      "offer_cost_usd": round(cost, 2), "customer_saves_usd_mo": round(saves, 2),
                      "receipt_line": clean(line) if decision == "receipt_only" else "",
+                     "receipt_kind": "clean" if line else ("tradeoff" if tline else ""),
+                     "receipt_tradeoff_line": clean(tline),
                      "message_en": clean(msg_en), "message_es": clean(msg_es), "_offer": offer})
         # ---- options weighed (do nothing first)
         opts.append({"account_id": aid, "option_label": "Do nothing",
@@ -295,7 +320,10 @@ def build(out: Path):
             if a == offer:
                 v, why, seen_pick = "picked", "Sent.", True
             elif a in eng.PLAN_MOVES:
-                v, why = "not_sent", "Plan changes are shown on the bill, never sent as a message."
+                v, why = "not_sent", ("Shown on the bill only: same features, lower price." if line
+                                      else "Shown on the bill with what they'd lose." if tline
+                                      else "Not suggested: not a like-for-like match." if aid not in strict.index
+                                      else "Plan changes are shown on the bill, never sent as a message.")
             elif open_t and a not in FIX:
                 v, why = "not_sent", "Open support issue: only a fix message is allowed."
             elif ev <= 0:
@@ -322,6 +350,9 @@ def build(out: Path):
             D = D.merge(E, on="account_id", how="left")
         D = D.set_index("account_id").loc[L.account_id].reset_index()   # keep tm-models' ids and order
         assert ((D.guardrail_result == "pass") == (D.decision == "message")).all(), "ledger pass != our message set"
+    if "already_leaving_note" in D.columns:      # Grok Bot's wording for messaged already-leaving accounts with an open issue
+        al = (D.decision == "message") & (D.already_leaving.astype(str) == "True")
+        D.loc[al & D.account_id.isin(topic.index), "already_leaving_note"] = AL_NOTE_OPEN
     offer_code = D.pop("_offer")              # popped after the reorder so it stays aligned
     # ---- checks
     assert len(D) == len(o) and D.account_id.is_unique
@@ -343,6 +374,15 @@ def build(out: Path):
     bad = O.reason.fillna("").map(company_money)
     assert not bad.any(), ("company money in options reason", O.loc[bad, "reason"].head(3).tolist())
     assert (O.groupby("account_id").head(1).option_label == "Do nothing").all()
+    sent = set(D.account_id[D.decision == "message"])
+    clean_ro = set(D.account_id[D.receipt_kind == "clean"])
+    trade_ro = set(D.account_id[D.receipt_kind == "tradeoff"])
+    assert clean_ro == set(strict.index) - sent, "strict set not fully on the bill"
+    assert trade_ro == set(trade.index) - sent - set(strict.index), "trade-off set not fully on the bill"
+    assert set(D.account_id[D.decision == "receipt_only"]) == clean_ro | trade_ro
+    assert (D.loc[D.receipt_kind == "tradeoff", "receipt_line"] == "").all()
+    assert (D.loc[D.receipt_kind == "tradeoff", "receipt_tradeoff_line"] != "").all()
+    assert (D.loc[D.receipt_kind != "tradeoff", "receipt_tradeoff_line"] == "").all()
     assert set(O.loc[O.verdict == "ruled_out", "net_mid_usd"].dropna()) == set()
     info = {"converted": converted, "new_text": new_text, "ledger": lf, "ledger_commit": lhash,
             "money_pending": lf is None or lhash.split(" ")[0] in STALE_LEDGER,
