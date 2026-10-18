@@ -1,0 +1,130 @@
+group,item,how_handled,source
+1. Signals used,Three signal types,"Every input is tagged commerce, customer or live, and the engine uses all three. The full input list follows in the three Inputs groups.",Offer engine drivers column
+1. Signals used,Commerce examples,"Plan, price, phone financing and payoff, device age, trade-in value, promotions, bill changes.","Account features; sandbox plan, promotion and device tables"
+1. Signals used,Customer examples,"Lines on the account, tenure, support history, segment label, contact preference, language.",Account features
+1. Signals used,Live examples,"Recent support contacts and how they went, app use going quiet, comparing carriers, asking about transferring a number, a promo just ending. Comparing carriers and number-transfer questions come from what the customer tells us; we do not track calls to competitors.",Account features; project write-up
+1. Signals used,"Simulated enrichment (job change, income, kid age band)","Listed for transparency but switched off permanently: no code path reads it for eligibility, value or wording.",Offer engine settings
+1. Signals used,Kid and teen lines,"Taken from the account's real line roles, never inferred; can shape an offer, but messages say 'your 4 lines', never 'your kids'.",Line roles; offer strategy
+1a. Inputs: commerce,Bill increase,"Last bill vs the prior average, floored at zero. Used by: risk model, offer engine.",Account features or sandbox tables
+1a. Inputs: commerce,Promo ended recently,"A promotion credit dropped off a recent bill. Used by: risk model, offer engine (no upsell for 90 days after).",Account features or sandbox tables
+1a. Inputs: commerce,Plan misfit,"Share of lines whose usage doesn't fit the plan. Used by: risk model, offer engine.",Account features or sandbox tables
+1a. Inputs: commerce,Phone age,"Age of the oldest phone on the account. Used by: risk model, offer engine (upgrade moments).",Account features or sandbox tables
+1a. Inputs: commerce,Bring-your-own-phone account,No financed or carrier phone on record. Used by: risk model.,Account features or sandbox tables
+1a. Inputs: commerce,Phone payoff within 3 months,"A financed phone finishes paying off soon. Used by: risk model, offer engine (upgrade moment), messages (no payoff-timing text).",Account features or sandbox tables
+1a. Inputs: commerce,Short billing history,Too few bills to compare against. Used by: risk model.,Account features or sandbox tables
+1a. Inputs: commerce,Home Internet on the account,"Whether the account already has Home Internet. Used by: risk model, offer engine.",Account features or sandbox tables
+1a. Inputs: commerce,"Plan, family and price","Current plan, its family and monthly price, checked against the sandbox plan table. Used by: offer engine, messages.",Account features or sandbox tables
+1a. Inputs: commerce,Last bill,"Latest monthly bill amount. Used by: offer engine (value of the account, credit sizing).",Account features or sandbox tables
+1a. Inputs: commerce,Bill change reason,"Why the bill moved in July to September: promo ended, new phone payment, payment ended, or stable. Used by: guardrail, messages.",Account features or sandbox tables
+1a. Inputs: commerce,Phone financing and trade-in value,"Per-line balance, months left, and trade-in value from the sandbox curve for paid-off phones. Used by: offer engine, bill/app lines.",Account features or sandbox tables
+1a. Inputs: commerce,Promotion rules,"Each promotion's own eligibility, including its credit-tier and contact-count rules. Used by: offer engine eligibility.",Account features or sandbox tables
+1a. Inputs: commerce,Price guarantee,"Years of price guarantee on the plan. Used by: messages, bill/app lines, 'you'd lose X' lines.",Account features or sandbox tables
+1a. Inputs: commerce,Add-ons and streaming perk,"Add-ons on the account and whether streaming is already included. Used by: offer engine (perk reminder), bill/app lines.",Account features or sandbox tables
+1a. Inputs: commerce,"Connected lines (watch, tablet)","Number of non-phone lines. Used by: offer engine (plan moves), bill/app lines.",Account features or sandbox tables
+1a. Inputs: commerce,AutoPay,Whether AutoPay is on. Used by: offer engine (dropped from the risk model: its fitted sign contradicted common sense).,Account features or sandbox tables
+1a. Inputs: commerce,Upgrade score,A simulated upgrade score from device age; only a gate for upgrade offers (top 15%). Used by: offer engine gate.,Account features or sandbox tables
+1b. Inputs: customer,Tenure,"Months with us, capped at 60, plus a flag for under 12 months. Used by: risk model, offer engine, messages ('Thanks for N years').",Account features or sandbox tables
+1b. Inputs: customer,Lines on the account,"Extra lines beyond the first. Used by: risk model, offer engine, messages ('your N-line account').",Account features or sandbox tables
+1b. Inputs: customer,Cancellation inquiries,Times the customer asked about cancelling in the last 270 days. Used by: risk model.,Account features or sandbox tables
+1b. Inputs: customer,Segment and discount group,"Sandbox labels such as senior or student, never ages. Used by: offer engine (only to unlock a real plan like 55+), fairness audit; never shown or used in wording.",Account features or sandbox tables
+1b. Inputs: customer,Credit tier,"Sandbox credit tier. Used by: offer engine, only where a promotion's own rules require it; kept out of the risk model.",Account features or sandbox tables
+1b. Inputs: customer,Language,"en, es or other. Used by: messages (Spanish for es); kept out of the risk model.",Account features or sandbox tables
+1b. Inputs: customer,Contact preference,"Text, app, email or call. Used by: channel choice.",Account features or sandbox tables
+1b. Inputs: customer,Total support contacts in 90 days,"Raw count, used only alongside how the contacts went. Used by: offer engine (care credit contact rule); raw counts kept out of the risk model so a happy frequent caller isn't flagged.",Account features or sandbox tables
+1c. Inputs: live,Unresolved support contacts (90 days),"Contacts still open. Used by: risk model, offer engine (fix first), messages.",Account features or sandbox tables
+1c. Inputs: live,Unhappy support contacts (90 days),Contacts with negative sentiment. Used by: risk model.,Account features or sandbox tables
+1c. Inputs: live,Negative sentiment,"Negative part of support sentiment, recent and overall. Used by: risk model, offer engine.",Account features or sandbox tables
+1c. Inputs: live,Troubled (4+ contacts and one bad),Four or more contacts in 90 days with at least one unresolved or unhappy. Used by: risk model.,Account features or sandbox tables
+1c. Inputs: live,Comparing carriers,"Competitor research score, from what the customer tells us. Used by: risk model, offer engine.",Account features or sandbox tables
+1c. Inputs: live,Asked about transferring their number,"Port-out inquiry flag. Used by: risk model, offer engine (always gets a check-in or fix); never cited in a message.",Account features or sandbox tables
+1c. Inputs: live,App use,"App sessions in the last 30 days, plus a flag for 3 or fewer. Used by: risk model, offer engine.",Account features or sandbox tables
+1c. Inputs: live,Recent usage,"Per-line data peaks and streaming hours over 3 months. Used by: offer engine (plan fit, right-sizing, near data cap).",Account features or sandbox tables
+1c. Inputs: live,Open issue topic,"What an open support contact is about (coverage, bill, phone). Used by: messages (fix-first wording names the topic).",Account features or sandbox tables
+2. How a customer is scored and explained,Churn score,A standardized logistic regression scores 90-day churn on 20 inputs; the 42 hand-built demo accounts are scored but never trained on.,Model card
+2. How a customer is scored and explained,How good it is (simulated),"Out-of-fold AUC 0.853; its riskiest 10% hold about 62% of leavers. This shows the pipeline works, not real accuracy.",Model card; project write-up
+2. How a customer is scored and explained,Who is flagged,"The riskiest 10% of the 5,000 regular accounts: 500 flagged (504 if the demo accounts are mixed in).",Churn scores
+2. How a customer is scored and explained,Why this score,"Each account gets up to 3 reasons to leave and 3 reasons to stay, written from its own fields, e.g. '6 unresolved support contacts in 90 days'.",Churn scores
+2. How a customer is scored and explained,How reasons are computed,"Each input's push on the score vs an average account, grouped; a reason must move the score by at least 0.05 and a risk-raising value is never shown as a stay reason.",Model card
+2. How a customer is scored and explained,Common-sense check on inputs,"Inputs whose effect pointed the wrong way were removed and the model refit (AutoPay, no financing).",Model card
+2. How a customer is scored and explained,Happy frequent callers,"Raw contact counts are left out, so someone with many resolved contacts isn't read as at risk.",Feature prep
+2. How a customer is scored and explained,Why this action,"Each card shows the pick, the runner-up, every option weighed with its value, and why each one lost (e.g. 'needs 3+ support contacts in 90 days').",Offer engine output
+2. How a customer is scored and explained,Why we're reaching out (or not),"One plain sentence per account that ends with the channel, or the do-not-contact reason.",Customer card file
+3. Offer or do nothing,Doing nothing is always an option,It is priced at $0 and every offer has to beat it.,Offer engine
+3. Offer or do nothing,Expected value,"Chance of churn x chance the action saves them x value of the account, minus the offer cost and a contact cost.",Offer engine; economics notes
+3. Offer or do nothing,"Value of a kept customer: $1,478","About $76.46 a month margin over 24 months, weighted for the chance they leave anyway (0.99% a month) and discounted 10% a year.","Research notes, public filing"
+3. Offer or do nothing,Save rate assumption,"The next version picks at a 10% save rate, scaling each action's rate down to match.",Guardrail summary
+3. Offer or do nothing,Contact costs,"A fix-first callback costs $15, a check-in $2, plus an annoyance cost of $2 to $6 per contact.",Offer engine settings
+3. Offer or do nothing,Retention picks,202 accounts are worth contacting at 10%; 184 remain after the do-not-contact rules.,Guardrail summary
+3. Offer or do nothing,What the 184 get,"Fix first 126, care credit plus fix 29, perk reminder 26, check-in 2, bill-shock credit 1.",Guardrail summary
+3. Offer or do nothing,No credits at low risk,No bill or goodwill credit below 5% churn risk.,Offer engine settings
+3. Offer or do nothing,"Same features, lower price wins",An eligible cheaper plan with the same features beats upsells and check-ins.,Offer engine settings
+3. Offer or do nothing,Prices checked,"Every dollar figure in a message is checked against the sandbox plan and promotion tables, or the run fails.",Outreach checks
+4. Do-not-contact rules and guardrails,Silence is the default,"4,858 of 5,042 accounts get no message; the reason is stored for each.",Outreach summary
+4. Do-not-contact rules and guardrails,Bill-increase guardrail,"Of 1,412 accounts whose bill rose for a real reason in July to September, a retention message goes only with a credit that offsets it; 18 of 202 picks blocked.",Guardrail notes
+4. Do-not-contact rules and guardrails,Exemption: fix-only calls,"A call to fix an open problem is always allowed, even after a bill rise.",Guardrail notes
+4. Do-not-contact rules and guardrails,Exemption: a new phone the customer chose,A bill rise that is only a new phone payment doesn't block (850 accounts); new phone plus a promo ending still blocks (71).,Guardrail notes
+4. Do-not-contact rules and guardrails,We don't use 'bill went up' alone,"That would flag 4,679 accounts, mostly cents of noise.",Outreach playbook
+4. Do-not-contact rules and guardrails,Fix first,"With an open support issue in the last 90 days, the only message allowed is a fix; 25 perk reminders became fix callbacks.",Outreach playbook
+4. Do-not-contact rules and guardrails,Phone payoff coming up (313 accounts),No payoff or upgrade-timing message; contacting them early is pure timing and loses money (-$156). 12 of them still get an unrelated fix call for an open issue.,Economics notes; outreach drafts
+4. Do-not-contact rules and guardrails,Trade-in nudge dropped,No trade-in messages: at a $0 device margin the nudge never adds money at any take rate. Trade-in value shows only as a bill/app line.,Economics notes
+4. Do-not-contact rules and guardrails,Cheaper plans are never a message,They go on the bill as tap-to-confirm; unprompted plan recommendations raised churn from about 6% to 10% in a field test.,Guardrail notes
+4. Do-not-contact rules and guardrails,No upsell after a bill shock,Plan step-ups and phone upgrades are blocked for 90 days after a promo ends or the bill jumps 15% or more.,Offer engine settings
+4. Do-not-contact rules and guardrails,Affordability cap on upsells,An upsell is blocked if it raises the bill by more than 25% (40% when a line is already over its data cap); never based on income.,Offer engine settings
+4. Do-not-contact rules and guardrails,Once a quarter at most,"At most one proactive contact per account per quarter; the sandbox has no outreach log, so this is a hook, and each run sends at most one message.",Guardrail notes
+4. Do-not-contact rules and guardrails,Marketing opt-out,"Opted-out accounts get no marketing; the sandbox has no opt-out field, so this is a hook.",Outreach playbook
+4. Do-not-contact rules and guardrails,Reply STOP,"Every text ends with 'Reply STOP to opt out'; in-app, email and calls each carry their own opt-out. The run fails if one is missing.",Outreach playbook
+4. Do-not-contact rules and guardrails,Send hours,Only 8 a.m. to 8 p.m. local time (a send-time rule; the sandbox has no time zone).,Outreach playbook
+5. Channel and language,184 messages,"Each goes by the customer's own stated preference, not a ranking: 74 in-app, 64 texts, 32 emails, 14 calls.",Outreach summary
+5. Channel and language,Same set of accounts,"Over the 5,000 regular accounts: 5,000 scored, 500 flagged, 182 messaged, 64 by text (2 messages go to demo accounts).",Outreach drafts (recounted)
+5. Channel and language,Wording per channel,Texts start 'T-Mobile:' and say Reply YES/STOP; in-app says 'Tap to...'; email says 'Use the link below...'; calls are a short script.,Outreach playbook
+5. Channel and language,Spanish,"18 messages are in Spanish (usted); 166 in English, and every row also carries a Spanish version.",Outreach summary
+5. Channel and language,Length limits,"Texts at most 320 characters (longest 257 English, 293 Spanish); other channels at most 420.",Outreach summary
+5. Channel and language,No claim one channel works better,No telecom study compares channels on the same offer.,Outreach playbook
+5. Channel and language,Same text everywhere,Fixed templates; two runs give byte-identical files.,Outreach summary
+6. Money honesty (simulated),Result at a 10% save rate,"184 messages come out $4,109 ahead (simulated).",Economics headline
+6. Money honesty (simulated),Break-even about 4.8%,"Below a 4.80% save rate it loses money; at 5% it is $161 ahead, a coin flip.",Economics headline
+6. Money honesty (simulated),Measured campaigns run 2% to 11%,"Published retention results run about 2% to 11% relative, so this pays in the stronger campaigns and loses in the weakest.",Project write-up (Ascarza 2018; Verhelst et al. 2023; Marketing Science 2018)
+6. Money honesty (simulated),Bootstrap,"2,000 account resamples (seed 2026): at 10% it comes out ahead 82% of the time (mean $3,953, range -$2,805 to $13,292); at 5%, 44%.",Economics headline
+6. Money honesty (simulated),Do saves stick?,"If each saved customer stays as risky as before, only 58 are worth contacting, break-even rises to 7.6%, and it is ahead only 43% of the time at 10%. A holdout test is the only way to know.",Economics notes
+6. Money honesty (simulated),The shipped demo engine,"The earlier engine contacts 1,314 accounts and is -$71,838 at a 10% save rate in full dollars. That is why the next version contacts far fewer.",Chart check
+6. Money honesty (simulated),Blanket discount rule,"A $25 credit to the top 10% by risk is -$4,116 at 10%.",Chart check
+6. Money honesty (simulated),Not statistically proven,"At about 5,000 accounts, no 5% result is distinguishable from zero.",Economics notes
+6. Money honesty (simulated),Cheaper plans cost money,"Shown as money back to customers, never as profit.",Project brief
+7. Savings line on the bill,"394 accounts, give up nothing","Could pay $4,600 a month less in total for the same features; shown on the bill or app as a tap-to-confirm line, never a text.",Receipt file
+7. Savings line on the bill,"Cheaper, but you'd lose X","94 more accounts get a line that names what they'd give up (price guarantee, hotspot, perks, data cap).",Receipt file
+7. Savings line on the bill,Other bill/app lines,"Price guarantee 2,862, trade-in value 2,212, streaming included 695, watch line 66.",Outreach summary
+7. Savings line on the bill,Not proven to keep anyone,A customer-first choice with no public field evidence that savings receipts retain; it costs T-Mobile money.,Outreach playbook
+8. Fairness audit (simulated),Final wording,"In our test on simulated data, at the same churn risk, accounts labeled senior or student were about 2.7 points less likely to get a retention message, roughly 10 and 16 accounts. Counting the cheaper-plan savings on the bill, they were shown a savings line more often than others, about 8 and 5 points. This is the audit we'd run weekly on real data.",Project write-up
+8. Fairness audit (simulated),Method,"5,000 regular accounts, matched on risk deciles, gap vs everyone else with 1,000 bootstrap resamples.",Fairness audit
+8. Fairness audit (simulated),Small counts,Only 4 of 370 senior-labeled and 7 of 611 student-labeled accounts get a message.,Fairness audit
+8. Fairness audit (simulated),"Labels, not ages",Segment labels never appear in wording or change it; they matter only to unlock a real plan such as 55+.,Outreach playbook
+8. Fairness audit (simulated),Kept out of the risk model,Language and credit tier are not risk inputs.,Feature prep
+9. Privacy and compliance,No AI text generation,Every message is a fixed template filled from account fields; our own model decides.,Outreach playbook; message code
+9. Privacy and compliance,Only facts the customer would recognize,"Messages cite only their bill, plan, lines, phone and own support contacts; never income, job, kids, location, comparing carriers or number transfers. A forbidden-word check fails the run.",Outreach playbook
+9. Privacy and compliance,Number-transfer data: open question,The risk score and the always-contact rule read the port-out question; messages never cite it. Whether the engine should use it at all is an open product decision.,Outreach playbook
+9. Privacy and compliance,Only services they already have,"No Home Internet cross-sell, which would need separate customer-data consent.",Outreach playbook
+9. Privacy and compliance,No lock-in language,"No contracts, $0 early termination fee; any text with lock, contract, contrato or permanencia fails the run.",Outreach playbook
+9. Privacy and compliance,Demo phone send,"Dry run by default: nothing leaves the machine unless the presenter arms it, and the only destination is one private chat set in local config. The app can't pass a number.",Send-to-phone code
+9. Privacy and compliance,Judge data is read-only,The sandbox database is opened read-only.,Guardrail notes
+9. Privacy and compliance,Simulated data only,Every account is from the hackathon sandbox; no real T-Mobile customer data.,Project write-up
+10. Left out on purpose,"Income, job and kid-age guesses",Never used in decisions or wording; too creepy and unsourced.,Offer engine settings
+10. Left out on purpose,Upsells in outreach,No plan step-ups or phone upgrades in the 184; the retention-only policy picks neither.,Outreach playbook
+10. Left out on purpose,Home Internet,"Never picked at realistic 1-4% take rates, and would need consent.",Project brief; playbook
+10. Left out on purpose,Student credit,Switched off.,Outreach playbook
+10. Left out on purpose,Add-a-line pitch,No claim that adding a line lowers churn; multi-line customers self-select.,Outreach playbook
+10. Left out on purpose,Trade-in and payoff texts,Dropped: they lose money at a $0 device margin or are pure timing.,Economics notes
+10. Left out on purpose,Different pitch per person,"In the Hillstrom test, picking a message per customer didn't beat one good message.",Outreach playbook
+10. Left out on purpose,Event-triggered texting,Would add 413 extra texts for 197 of the picks; one message per run instead.,Economics notes
+10. Left out on purpose,A model for who gets pushed away,"On a real randomized test, our uplift model's 'pushed away' group actually responded well, so we use rules.",Guardrail notes
+10. Left out on purpose,Win-back,Out of scope: we act before they leave.,Project brief
+10. Left out on purpose,Claims about pending FCC rules,None made; the one checked is not in force.,Outreach playbook
+11. Known limits,No real churn outcomes,"Labels are simulated from a formula we wrote, so the model's accuracy is partly by construction.",Model card; economics notes
+11. Known limits,Save rate unknown,Every dollar figure rests on an assumed save rate; only a holdout test can measure it.,Economics notes
+11. Known limits,Holdout size,"A reliable read needs about 12,800 accounts per group; at our ~5,000 only very large effects show.",Project write-up
+11. Known limits,Contacts lean on bill changes,"Only 35 of the 184 have no recent bill change, because bill changes are churn terms in our own generator.",Economics notes
+11. Known limits,"No outreach log, opt-out field or time zone","Quarterly cap, opt-out and send hours are hooks, untested on this data.",Outreach playbook
+11. Known limits,Promo ends already happened,"In the sandbox, promo-end messages explain a past increase; in production they'd go 10-40 days before.",Outreach playbook
+11. Known limits,Trade-in flag on financed lines,"The sandbox marks 6,575 financed lines trade-in eligible; real T-Mobile requires payoff, so we only value paid-off phones.",Device research
+11. Known limits,Demo still runs the earlier engine,"The live app's engine is the 1,314-contact version until the next version is wired in.",Project brief
+11. Known limits,Bill-shock credit override,"Relaxing the care credit's 3-contact rule after a bill shock is our policy choice, not a sandbox rule, and still an open decision.",Offer engine settings
+11. Known limits,Fairness counts are tiny,The message gap rests on 4 seniors and 7 students.,Fairness audit
