@@ -222,15 +222,58 @@
   ]
  },
  "learning": {
-  "file": "learning_curve_long.csv",
+  "file": "/workspace/tmobile/TM-Dubhacks26/harness/bench/out/learning_curve_long.csv",
   "metric": "auc",
-  "last": {
-   "hgb_sigmoid (real_5k)": 0.8223,
-   "hgb_sigmoid (synthetic_50k)": 0.8627,
-   "logreg_core22 (real_5k)": 0.8438,
-   "logreg_core22 (synthetic_50k)": 0.8652,
-   "logreg_unweighted (real_5k)": 0.8107,
-   "logreg_unweighted (synthetic_50k)": 0.869
+  "ceiling": 0.8639,
+  "series": {
+   "hgb_sigmoid|real_5k": {
+    "n_min": 250,
+    "auc_min_n": 0.7389,
+    "sd_min_n": 0.1221,
+    "n_max": 3750,
+    "auc_max_n": 0.8223,
+    "sd_max_n": 0.0345
+   },
+   "hgb_sigmoid|synthetic_50k": {
+    "n_min": 1000,
+    "auc_min_n": 0.7524,
+    "sd_min_n": 0.1189,
+    "n_max": 50000,
+    "auc_max_n": 0.8627,
+    "sd_max_n": 0.0012
+   },
+   "logreg_unweighted|real_5k": {
+    "n_min": 250,
+    "auc_min_n": 0.7503,
+    "sd_min_n": 0.0718,
+    "n_max": 3750,
+    "auc_max_n": 0.8107,
+    "sd_max_n": 0.0308
+   },
+   "logreg_unweighted|synthetic_50k": {
+    "n_min": 1000,
+    "auc_min_n": 0.7274,
+    "sd_min_n": 0.0897,
+    "n_max": 50000,
+    "auc_max_n": 0.869,
+    "sd_max_n": 0.0
+   },
+   "logreg_core22|real_5k": {
+    "n_min": 250,
+    "auc_min_n": 0.771,
+    "sd_min_n": 0.0594,
+    "n_max": 3750,
+    "auc_max_n": 0.8438,
+    "sd_max_n": 0.0315
+   },
+   "logreg_core22|synthetic_50k": {
+    "n_min": 1000,
+    "auc_min_n": 0.77,
+    "sd_min_n": 0.0987,
+    "n_max": 50000,
+    "auc_max_n": 0.8652,
+    "sd_max_n": 0.0
+   }
   }
  }
 }

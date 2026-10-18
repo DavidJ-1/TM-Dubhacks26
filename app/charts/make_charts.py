@@ -459,35 +459,72 @@ def chart_policy():
 
 
 # ------------------------------------------------------------------ 06 learning curve
+LC_LABELS = {"logreg_core22": "Logistic regression, 22 core features (Model A)",
+             "logreg_unweighted": "Logistic regression, all 58 features", "hgb_sigmoid": "Gradient-boosted trees"}
+LC_COLORS = {"logreg_core22": MAGENTA, "logreg_unweighted": "#4A4A4A", "hgb_sigmoid": "#A0A0A0"}
+LC_SOURCE = {"real_5k": "trained on real 5k", "synthetic_50k": "trained on synthetic 50k"}
+
+
 def _plot_learning(t: pd.DataFrame, src: str):
-    met_pref = ["auc", "roc_auc"]
-    met = next((m for m in met_pref if m in set(t.metric)), t.metric.iloc[0])
+    from matplotlib.lines import Line2D
+    met = next((m for m in ["auc", "roc_auc"] if m in set(t.metric)), t.metric.iloc[0])
     s = t[t.metric == met].copy()
-    if "train_source" in s and s.train_source.nunique() > 1:
-        s["series"] = s.model.astype(str) + " (" + s.train_source.astype(str) + ")"
-    else:
-        s["series"] = s.model.astype(str)
+    if "train_source" not in s:
+        s["train_source"] = "real_5k"
+    models = [m for m in LC_LABELS if m in set(s.model)] or sorted(s.model.unique())[:3]
+    s = s[s.model.isin(models)]
     f, ax = fig()
-    pal = [MAGENTA, DARK, "#1F77B4", "#FF9F1C", "#2CA58D", "#F27BB5", "#7A0041"]
-    i = 0
-    for name, g in s.groupby("series"):
-        g = g.groupby("n_train").agg(value=("value", "mean"), sd=("sd", "mean") if "sd" in g else ("value", "std")).reset_index()
-        is_ref = any(k in name.lower() for k in ("rule", "oracle"))
-        col = GREY if is_ref else pal[i % len(pal)]
-        i += 0 if is_ref else 1
-        ax.plot(g.n_train, g.value, marker="o", ms=4, lw=1.5 if is_ref else 2.5, ls="--" if is_ref else "-", color=col, label=name)
-        if "sd" in g and g.sd.notna().any() and not is_ref:
-            ax.fill_between(g.n_train, g.value - g.sd.fillna(0), g.value + g.sd.fillna(0), color=col, alpha=0.12, lw=0)
-    if s.n_train.max() / max(s.n_train.min(), 1) > 20:
-        ax.set_xscale("log")
-        ax.xaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter("{x:,.0f}"))
-    ax.set_xlabel("Training accounts")
-    ax.set_ylabel({"auc": "ROC AUC", "roc_auc": "ROC AUC", "prauc": "PR AUC"}.get(met, met.replace("_", " ")))
-    ax.set_title("Benchmark: how much data do the models need?")
-    ax.legend(frameon=False, loc="lower right", fontsize=9)
-    f.subplots_adjust(left=0.1, top=0.88)
-    save(f, "06_learning_curve.png", f"Source: {src} (tm-bench), target churn_90d, metric {met}; band = ±1 sd.")
-    return {"file": src, "metric": met, "last": s.sort_values("n_train").groupby("series").value.last().round(4).to_dict()}
+    out = {}
+    for m in models[::-1]:  # lead model drawn last (on top)
+        col = LC_COLORS.get(m, GREY)
+        lead = m == "logreg_core22"
+        for srcname, g in s[s.model == m].groupby("train_source"):
+            g = g.groupby("n_train").agg(value=("value", "mean"), sd=("sd", "mean") if "sd" in g else ("value", "std")).reset_index()
+            ls = "--" if "synth" in srcname else "-"
+            ax.plot(g.n_train, g.value, color=col, lw=2.8 if lead else 1.6, ls=ls, marker="o", ms=4 if lead else 3,
+                    zorder=6 if lead else 4)
+            if lead and g.sd.notna().any():
+                ax.fill_between(g.n_train, g.value - g.sd.fillna(0), g.value + g.sd.fillna(0), color=col,
+                                alpha=0.14, lw=0, zorder=2)
+            out[f"{m}|{srcname}"] = {"n_min": int(g.n_train.iloc[0]), "auc_min_n": round(float(g.value.iloc[0]), 4),
+                                     "sd_min_n": round(float(g.sd.iloc[0]), 4),
+                                     "n_max": int(g.n_train.iloc[-1]), "auc_max_n": round(float(g.value.iloc[-1]), 4),
+                                     "sd_max_n": round(float(g.sd.iloc[-1]), 4)}
+    ceiling = None
+    cp = Path(src).parent / "ceilings.csv" if Path(src).is_absolute() else REPO / "harness" / "bench" / "out" / "ceilings.csv"
+    if cp.exists():
+        c = pd.read_csv(cp)
+        c = c[c.target == "churn_90d"]
+        if len(c):
+            ceiling = float(c.oracle_auc.iloc[0])
+            ax.axhline(ceiling, color=DARK, lw=1, ls=":", zorder=3)
+            ax.text(s.n_train.min(), ceiling + 0.004, f"Ceiling: oracle AUC {ceiling:.3f} (true simulated probabilities)",
+                    fontsize=9, color=DARK, va="bottom", ha="left")
+    ax.set_xscale("log")
+    ticks = [250, 500, 1000, 2500, 5000, 10000, 25000, 50000]
+    ax.set_xticks([x for x in ticks if s.n_train.min() <= x <= s.n_train.max()])
+    ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v / 1000:g}k" if v >= 1000 else f"{v:g}"))
+    ax.xaxis.set_minor_locator(matplotlib.ticker.NullLocator())
+    ld = s[s.model == "logreg_core22"]
+    lo = max(0.55, min(s.value.min(), (ld.value - ld.get("sd", 0)).min() if len(ld) else 1) - 0.04)
+    ax.set_ylim(lo, max(ceiling or 0, s.value.max()) + 0.03)
+    ax.grid(axis="y", color=LIGHT, lw=0.6, alpha=0.7)
+    ax.set_xlabel("Training accounts (log scale)")
+    ax.set_ylabel("ROC AUC, 90-day churn")
+    ax.set_title("How much data do the models need?")
+    h1 = [Line2D([], [], color=LC_COLORS.get(m, GREY), lw=2.8 if m == "logreg_core22" else 1.6, label=LC_LABELS.get(m, m))
+          for m in models]
+    h2 = [Line2D([], [], color=DARK, lw=1.6, ls="-", label="Trained on 5k sandbox accounts"),
+          Line2D([], [], color=DARK, lw=1.6, ls="--", label="Trained on synthetic 50k (tested on real 5k)")]
+    leg = ax.legend(handles=h1, frameon=False, loc="lower right", fontsize=8.6)
+    ax.add_artist(leg)
+    ax.legend(handles=h2, frameon=False, loc="lower left", fontsize=8.6)
+    f.subplots_adjust(left=0.1, right=0.97, top=0.9)
+    save(f, "06_learning_curve.png",
+         f"Real 5k: trained on n sandbox accounts, scored on a 25% holdout (10 seeds). Synthetic 50k: trained on n of tm-data's "
+         f"Gaussian-copula synthetic accounts, scored on all 5,000 sandbox accounts (3-10 seeds). Labels in both come from our "
+         f"own simulated recipe, so this is a pipeline check, not real-world accuracy. Pink band = +/-1 sd for the Model A logistic regression. Source: {Path(src).name} (tm-bench).")
+    return {"file": str(src), "metric": met, "ceiling": ceiling, "series": out}
 
 
 def chart_learning():
@@ -509,7 +546,7 @@ def chart_learning():
         if "metric" not in t:
             t["metric"] = "score"
         if len(t):
-            return _plot_learning(t, c.name)
+            return _plot_learning(t, str(c))
     return placeholder("06_learning_curve.png", "Benchmark learning curve", "Waiting on tm-bench", expects)
 
 
