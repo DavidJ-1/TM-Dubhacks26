@@ -406,3 +406,69 @@ Researched 2026-10-17 (PDT). Full notes: `research-notes/notes_channels.md`. **D
 **Engine implications.** (1) Per-channel cost: sms $0.02 (≤2 segments, list-price upper bound), email ~$0, app $0, call $8–13.50, with `ANNOYANCE` carrying the real cost. (2) Call `REACH` 0.5. App reach = push opt-in (unknown; sensitivity 0.3–0.7). (3) Gates with no $: marketing opt-out, CPNI approval for cross-category offers (Home Internet), 08:00–20:00 local, ≤1 marketing message per account per 24 h, ≤2 touches per offer. (4) Schedule term-end/payoff offers 10–40 days **before** the date. (5) Template copy: name + their own numbers, a normal account-message tone, "already yours" wording. No loss framing, and no overpaying salience for volatile/declining-usage accounts.
 
 **Do not claim:** that SMS beats email (or any channel ranking) for telecom retention; vendor open/click rates as outcomes; a bill-date timing effect; that savings receipts are proven; that the 8–9 p.m. rule definitely applies to a carrier's own texts, or that the carrier exception definitely exempts them (both unsettled); that FCC 26-67 is already in force; Becker's 7× as a US wireless figure (it's European DSL).
+
+## 15. Family plans and multi-line accounts
+Researched 2026-10-17 (PDT). Full notes: `research-notes/notes_family.md`. **D** = my arithmetic on the cited inputs. Engine data stays synthetic. Builds on §4c (converged churn, Verizon 2.95 connections/account, T-Mobile's selection-bias remark) without repeating it.
+
+### 15a. Churn by number of lines
+| Claim | Number | Source (date) | Strength | Maps to |
+|---|---|---|---|---|
+| Single- vs multi-line churn | **No US carrier publishes it** | TMUS / VZ / AT&T filings and transcripts checked | gap | don't quote a gap |
+| Share of T-Mobile postpaid **phone lines** on multi-line accounts | **"over 90%"** (CFO); CEO: multi-line accounts are "the thing that's most correlated with CLV" | [TMUS Q4'25 call transcript](https://www.fool.com/earnings/call-transcripts/2026/02/11/t-mobile-tmus-q4-2025-earnings-call-transcript/) (2026-02-11) | medium | account-level scoring (already done) |
+| Whole-account vs single-line loss | CEO: a whole account leaving "truly hurts CLV"; someone dropping an idle line "doesn't cause any value loss" | same | medium | value = account, not line |
+| T-Mobile 2025 account vs phone churn | account 0.94 / 0.92 / 0.97 / 1.04%; phone 0.91 / 0.90 / 0.89 / 1.02%. Mixed with partial-line drops and broadband-only accounts, so **no line-count gap can be backed out** (D) | [TMUS Q4'25 Ex 99.2](https://www.sec.gov/Archives/edgar/data/1283699/000128369926000007/tmus12312025ex992.htm); [Q2'26 Ex 99.2](https://www.sec.gov/Archives/edgar/data/1283699/000128369926000100/tmus06302026ex992.htm) | strong inputs / D | context |
+| "Multiple-line accounts generally have lower churn" (no number). Sievert: most single-line phone customers "tend to buy prepaid" | qualitative | [Fierce Wireless](https://www.fierce-network.com/wireless/carriers-sharpen-focus-family-plans-as-single-line-users-look-to-prepaid) (2017-01-17) | weak (old) / medium (exec quote) | selection warning |
+| Verizon tracks ARPA by line-count cohort; has "historically under-indexed" in 1-2-line accounts | no churn number | [VZ at Citi TMT](https://www.verizon.com/about/sites/default/files/2026-09/vz-citi_transcript_2026-09-09.pdf) (2026-09-09) | medium | — |
+| **Our sandbox (synthetic, D)** | 40% of 5,042 accounts single-line → ~17% of lines on single-line accounts vs T-Mobile < 10%. `labels.py` gives each extra line −0.15 log-odds (~14% lower odds, exp(−0.15) ≈ 0.86): **an assumption in our data, not a finding** | read-only `lines` table; `harness/labels.py` | D | reweight sensitivity; no circular claims |
+
+### 15b. Value of adding a line
+| Claim | Number | Source (date) | Strength | Maps to |
+|---|---|---|---|---|
+| T-Mobile list price, no AutoPay (Broadband Facts) | More 2.0 **$90 / 150 / 185 / 220 / 255** (1-5 lines); Beyond 2.0 **$105 / 180 / 230 / 280 / 330**; Essentials 2.0 $65 / 100 / 120 / 140 / 160; Essentials 4 Line Offer $120 for 4. **Early termination fee $0** | [t-mobile.com/cell-phone-plans](https://www.t-mobile.com/cell-phone-plans); [Broadband Facts (military page)](https://www.t-mobile.com/cell-phone-plans/military-discount-plans) (accessed 2026-10-17) | strong | sandbox `plans` **match exactly** (checked read-only) |
+| Marginal line (D) | More: 2nd +$60, 3rd-5th **+$35**; Beyond +$75, then **+$50**; Essentials +$35, then +$20. More per-line price: $90 → $51 at 5 lines | arithmetic | D | add-a-line value |
+| ARPA trend and drivers | $146.22 → **$152.91** (Q1'25 → Q2'26); +2% YoY "primarily" from fee revenue **and "an increase in customers per account"**, partly offset by fiber/UScellular accounts and promotions | [TMUS Q2'26 Ex 99.1](https://www.sec.gov/Archives/edgar/data/1283699/000128369926000100/tmus06302026ex991.htm), Ex 99.2 (2026-07-23) | strong | context |
+| Lines per account (D) | Q4'25: 85,594K phones ÷ 34,240K accounts = **2.50 phones/account**; 3.40 connections/account (Q4'24: 2.56 / 3.37). Phone ARPU $50.71 vs ARPA $150.17 | TMUS Q4'25 Ex 99.2 (2026-02-11) | strong inputs / D | calibration |
+| Value of one added line (D) | $35 × 0.50 × 19.34 (survival + discount, 24 mo; §13b) ≈ **$338** (More); $50 Beyond line ≈ **$484**. Before promos: 8 of 11 sandbox device credits need a new line ($301-$1,200 over 24-36 mo), which can make the line net negative over 24 months | arithmetic; read-only `promotions` | D | new add-a-line action, if built |
+
+### 15c. Does a line lower churn, or are multi-line customers different?
+| Claim | Number | Source (date) | Strength |
+|---|---|---|---|
+| Causal "add a line → lower churn" estimate | **none public** | — | gap |
+| Households coordinate carrier choice: other members' choice outweighs total network size | econometric (UK) | [Birke & Swann, *J. Evol. Econ.* 16(1):65-84](https://ideas.repec.org/a/spr/joevec/v16y2006i1p65-84.html) (2006) | strong (on-net pricing era) |
+| Churn is contagious: a defecting contact → **+80% defection hazard** (1M cellular customers, with controls) | +80% | [Nitzan & Libai, *J. Marketing* 75(6):24-38](https://doi.org/10.1509/jm.10.0209) (2011-11) | strong (observational; call network, not households) |
+| Retention spillover: randomized campaign (~6,000 prepaid mobile customers); untargeted connections churned less; their effect = **28% of the targets'** (multiplier 1.28) | 1.28 | [Ascarza, Ebbes, Netzer & Danielson, *JMR* 54(3)](https://doi.org/10.1509/jmr.15.0442) ([PDF](https://evaascarza.com/papers/ascarza_ebbes_netzer_danielson_17.pdf)) (2017) | strong (RCT) |
+| Selection: financing picks "the young, multi-line, high-income postpaid household" (financing share 37% under $50K → nearly half over $100K) | survey, ~337K interviews | [Recon Analytics, "Demanded and Hated"](https://www.reconanalytics.com/demanded-and-hated/) (2026-07-25) | medium |
+| T-Mobile's own selection-bias caution; cross-buying follows loyalty | qualitative | §4c; §5 (Reinartz 2008) | medium / medium-strong |
+
+**Read:** the stickiness mechanism is real (coordination, contagion), but the observed multi-line gap is confounded by who picks family plans. Treat it as correlation. Don't give an add-a-line offer a churn cut unless it's a labelled assumption.
+
+### 15d. Family-plan risks
+| Claim | Number | Source (date) | Strength |
+|---|---|---|---|
+| Account holder leaves → every line goes | qualitative | 15a; §1 #6 | medium/strong |
+| A departing member can keep their number at T-Mobile (**Change of Responsibility**) | line active 90 days; new owner 18+, credit check/deposit possible; **service promotions don't transfer**; add-a-line promos break if the line count no longer qualifies; EIP moves once | [T-Mobile Support](https://www.t-mobile.com/support/account/transfer-account-or-line-ownership) (accessed 2026-10-17) | strong |
+| T-Mobile's product for the kid going solo: **Student Perks, $30/mo** single line | $30 | [T-Mobile newsroom](https://www.t-mobile.com/news/un-carrier/eip-flex-36) (2026-08-04) | strong (price) |
+| When kids leave | 57% of 18-24s live in a parental home (dorms count) vs **16%** of 25-34s | [Census CB24-TPS-110](https://www.census.gov/newsroom/press-releases/2024/families-and-living-arrangements.html) (2024-11-12) | strong |
+| Divorce base rate | 2.4 per 1,000 population (672,502; provisional 2023, 45 states + DC) | [CDC/NCHS FastStats](https://www.cdc.gov/nchs/fastats/marriage-divorce.htm) (reviewed 2025-03-17) | strong |
+| Partial-line churn rate | **no public number** (T-Mobile stopped reporting line churn in 2026) | — | gap |
+
+**Read:** the risky moment is a line departure: promos tied to line count can break, and contagion raises the others' risk. Our engine has no line-departure signal. The customer-friendly play is "keep them at T-Mobile on their own line," never a hard save.
+
+### 15e. Phone upgrade vs plan upgrade (lock-in only)
+David's question: an upgraded **phone** buys lock-in; an upgraded **plan** buys margin.
+| Claim | Number | Source (date) | Strength |
+|---|---|---|---|
+| No contract: ETF $0; the 5-year price guarantee is a price promise, not a lock | $0 | 15b Broadband Facts | strong |
+| Phone lock = device plan + monthly promo credits lost on leaving; EIP now 24 or **36** months (EIP Standard 36 / Flex 36 from 2026-08-06); phones sold below cost (−43%, §13a) | 24/36 mo | [newsroom 2026-08-04](https://www.t-mobile.com/news/un-carrier/eip-flex-36); §4d; §13a | strong |
+| Churn while paying vs not | financing **~0.7%/mo** while the balance runs; BYOD **~1.4%/mo**; financed blended **0.95%**; ~$1,450 device cost per subsidized customer over life; net LTV ~$1,900 vs $1,516 | Recon Analytics (2026-07-25) | medium (selection-biased) |
+| Term-end spike (DSL) and payoff cliff (US exec remarks) | month 25 > 7× average | §14b (Becker 2015); §1 #7 | strong (not US wireless) / strong exec |
+| Upward plan switchers churn less (Chinese operator; observational) | direction | [Jin, *JRCS* 66 (2022)](https://ideas.repec.org/a/eee/joreco/v66y2022ics0969698922000078.html) | medium (selection) |
+
+**Lock-in ledger (D; $76.46/mo margin, 0.99%/mo hazard, 10%/yr discount):**
+- **Phone upgrade.** Halving hazard over the device term (`LOCK_CUT` 0.50) = **+$89 (24 mo) / +$176 (36 mo)** per accepted upgrade. At Recon's 0.7% rate: +$52 / +$90-101. At 3%/mo risk: +$217 / +$386. T-Mobile pays $150-$1,200 in device credits and sells the phone below cost. It pays only on high-risk accounts with small credits.
+- **Plan step-up** (50% margin × 19.34): More→Beyond **+$15/mo (1 line) ≈ $145; +$45 (3 lines) ≈ $435; +$60 (4 lines) ≈ $580**; Essentials→More, 4 lines (+$80) ≈ $774. No device cost, no lock, and affordability risk (§13b).
+- **`LOCK_CUT` anchor:** 0.7 vs 1.4 is 50% below a self-selected BYOD group; vs the financed blended 0.95% it's ≈ **26%** (D). Use 0.25 base, 0.50 upper.
+
+**Engine implications (synthetic).** (1) No add-a-line action exists; the 4 Line Offer appears only as a cheaper-variant / right-size target. If one is built: value = marginal line price × 0.50 × 19.34 − promo credit − contact cost, churn effect **0** base. (2) `STEP_UP_MARGIN` 0.80 → 0.50 base (0.80 sensitivity); replace `delta × margin × 24 × (1 − p)` with the survival-and-discount factor (~19.3 at average risk). (3) `P_ACCEPT` `step_up` 0.25 / `family_upgrade` 0.20 and `SAVE_RATE` `step_up` 0.15 / `family_upgrade` 0.18 are unsourced. Suggest ~0.03 acceptance (0.01-0.06, per §11) and ~0 save rate (§5), labelled. (4) `LOCK_CUT` 0.50 → 0.25. (5) Account value already scales with lines (`margin_mo` uses account service revenue); keep it. (6) Add a simulated line-departure / Change-of-Responsibility trigger → "own line at T-Mobile" offer.
+
+**Do not claim:** any "multi-line churns X% less" figure, or that adding a line *causes* lower churn; Recon's 0.7% vs 1.4% as a causal financing effect; that the price guarantee locks customers in; that phone upgrades profit per sale; "90% of **accounts** are multi-line" (it's phone lines); Compete's 2005 "20% churn cut → +30% NPV"; Nitzan & Libai's +80% as a family-plan or causal number; T-Mobile's "two-thirds of students" marketing line.
