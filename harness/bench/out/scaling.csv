@@ -1,0 +1,16 @@
+synthetic,target,model,train_source,n_train,test,auc,prauc,top10_capture,oracle_auc_same_rows,oracle_prauc_same_rows,oracle_top10_same_rows,auc_minus_oracle,diff_ci95_lo,diff_ci95_hi,above_ceiling,fit_secs,auc_fold_sd,n_dropped_synthetic_cols
+1,churn_90d,logreg_core22,real_5k (5-fold OOF),4000,real 5k,0.8411,0.2376,0.5766,0.8639,0.2909,0.6423,-0.0228,-0.0367,-0.0099,False,0.2000,0.0706,
+1,churn_90d,logreg_unweighted,real_5k (5-fold OOF),4000,real 5k,0.8218,0.2165,0.5401,0.8639,0.2909,0.6423,-0.0421,-0.0678,-0.0171,False,0.2000,0.0517,
+1,churn_90d,hgb_sigmoid,real_5k (5-fold OOF),4000,real 5k,0.8241,0.1884,0.5839,0.8639,0.2909,0.6423,-0.0398,-0.0624,-0.0201,False,1.4000,0.0295,
+1,upgrade_90d,logreg_unweighted,real_5k (5-fold OOF),4000,real 5k,0.7400,0.1845,0.2981,0.8077,0.2662,0.3758,-0.0677,-0.0852,-0.0505,False,0.2000,0.0367,
+1,upgrade_90d,hgb_sigmoid,real_5k (5-fold OOF),4000,real 5k,0.7471,0.1725,0.3075,0.8077,0.2662,0.3758,-0.0606,-0.0776,-0.0437,False,1.5000,0.0263,
+1,churn_90d,logreg_core22,synthetic_50k,50000,real 5k,0.8652,0.2896,0.6204,0.8639,0.2909,0.6423,0.0013,-0.0031,0.0061,True,0.3000,,9.0000
+1,churn_90d,logreg_unweighted,synthetic_50k,50000,real 5k,0.8690,0.2917,0.6204,0.8639,0.2909,0.6423,0.0051,-0.0034,0.0153,True,0.3000,,9.0000
+1,churn_90d,hgb_sigmoid,synthetic_50k,50000,real 5k,0.8608,0.2577,0.6058,0.8639,0.2909,0.6423,-0.0031,-0.0117,0.0054,False,2.3000,,9.0000
+1,upgrade_90d,logreg_unweighted,synthetic_50k,50000,real 5k,0.7623,0.1930,0.3261,0.8077,0.2662,0.3758,-0.0454,-0.0596,-0.0314,False,0.3000,,9.0000
+1,upgrade_90d,hgb_sigmoid,synthetic_50k,50000,real 5k,0.7686,0.2100,0.3230,0.8077,0.2662,0.3758,-0.0391,-0.0531,-0.0258,False,3.7000,,9.0000
+1,churn_90d,logreg_core22,synthetic_250k,250000,real 5k,0.8625,0.2858,0.6350,0.8639,0.2909,0.6423,-0.0013,-0.0038,0.0013,False,0.6000,,15.0000
+1,churn_90d,logreg_unweighted,synthetic_250k,250000,real 5k,0.8642,0.2914,0.6350,0.8639,0.2909,0.6423,0.0004,-0.0038,0.0050,True,1.7000,,15.0000
+1,churn_90d,hgb_sigmoid,synthetic_250k,250000,real 5k,0.8641,0.2662,0.6131,0.8639,0.2909,0.6423,0.0002,-0.0065,0.0077,True,19.7000,,15.0000
+1,upgrade_90d,logreg_unweighted,synthetic_250k,250000,real 5k,0.7648,0.1968,0.3168,0.8077,0.2662,0.3758,-0.0428,-0.0567,-0.0292,False,1.9000,,15.0000
+1,upgrade_90d,hgb_sigmoid,synthetic_250k,250000,real 5k,0.7695,0.2272,0.3168,0.8077,0.2662,0.3758,-0.0381,-0.0513,-0.0253,False,20.4000,,15.0000

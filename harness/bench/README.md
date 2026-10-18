@@ -25,14 +25,12 @@ Out-of-fold scores (no account is scored by a model that saw its label). Binary-
   fails persona 24, the happy frequent caller (2/6 personas pass vs 5/6 for the LRs), and it gives no reasons.
   tm-data is checking whether contact counts are too tied to the label drivers.
 
-### Dollars (PROVISIONAL, from tm-offers, not modelled here)
-Dollar figures come from tm-offers' committed `harness/model_c_artifacts/policy_eval.csv`. It is a simulated
-randomized trial on a 1,513-account test split, with self-normalized IPW and doubly-robust estimates. The truth there
-rests on our own save-rate assumptions (partly circular), so this is not measured lift. **PROVISIONAL: the test split
-is too small to rank policies (SE ~0.03 vs gains ~0.006-0.011); David is deciding whether to enlarge the simulated
-trial.** As of 6705fb9, DR net 24-month margin is: Model B EV chooser +$24.3k retention-only, +$52.1k with upsell,
-~$348 per save; offer-to-everyone -$12.4k retention-only; 3+ rule -> $25 care credit about +$0.7k (~$0). The bench
-does not compute its own dollars, so there is only one dollar model in the project.
+### Dollars (not modelled here)
+Dollar figures live in tm-offers' [`harness/model_c_artifacts/policy_eval.csv`](../model_c_artifacts/policy_eval.csv).
+They come from the simulated 50k randomized trial, use IPW and doubly-robust estimates, and rest on our own save-rate
+assumptions, which are partly circular. They are simulated, not measured lift, and **may change as offer rules are
+added**, so this README deliberately quotes no dollar values. The bench reports lift and churners caught only, so
+the project has only one dollar model.
 
 ## The ceiling (read this before quoting AUCs)
 Labels are drawn from a known probability (`p_true_90d`, `p_upgrade_90d`). Scoring with that probability is the best
@@ -108,6 +106,79 @@ What the curve says: on 5k real accounts the LRs are still climbing at 3,750 (da
 training), and the curated 22-feature LR beats the 58-feature LR at every size. With more (synthetic) data both LRs
 saturate at the ceiling by ~10-25k rows. HGB gains nothing over LR at any size.
 
+## Scaling: real 5k vs synthetic 50k vs synthetic 250k, always tested on the real 5k (`out/scaling.md/.csv`, `out/scaling_check.png`)
+Synthetic inputs are cut to the features.csv columns and prepared in one `prepare()` call with the real rows. The
+oracle is computed on the same 5,000 real rows, and every row carries a paired stratified bootstrap 95% CI of
+(AUC minus oracle).
+
+| target | model | real 5k (5-fold OOF) | synthetic 50k | synthetic 250k | oracle |
+|---|---|---|---|---|---|
+| churn_90d | logreg_core22 | 0.841 (sd 0.071) | 0.865 [+0.001, CI -0.003/+0.006] | 0.863 | 0.864 |
+| churn_90d | logreg all-58 | 0.822 (sd 0.052) | 0.869 [+0.005, CI -0.003/+0.015] | 0.864 [+0.000, CI -0.004/+0.005] | 0.864 |
+| churn_90d | hgb_sigmoid | 0.824 (sd 0.030) | 0.861 | 0.864 [+0.000, CI -0.007/+0.008] | 0.864 |
+| upgrade_90d | logreg all-58 | 0.740 (sd 0.037) | 0.762 | 0.765 | 0.808 |
+| upgrade_90d | hgb_sigmoid | 0.747 (sd 0.026) | 0.769 | 0.770 | 0.808 |
+
+- Churn: every point above the ceiling has a CI that spans 0, so it is noise. Churn saturates at the ceiling by 50k,
+  and 250k only cuts variance. This matches tm-churn's Model A scaling run (`harness/out/churn_scaled_eval.csv`,
+  0473c4f: 0.853 / 0.863 / 0.863 at 5k / 50k / 250k) and tm-data's TSTR table (0.820 / 0.860 / 0.863).
+- Synthetic-trained churn models rank well but are miscalibrated on the real 5k: mean predicted 3.9% vs actual
+  2.74%. A 5-fold CV Platt recalibration fitted on the real 5k fixes it (mean 2.74%, ECE 0.012 -> 0.003; see
+  `out/upgrade_best.md`).
+- Top-10% capture at 250k: churn LR 63.5%, upgrade 31.7% (features.csv only; the oracle is 37.6%).
+- `learning_curve*.csv` now also has `train_source=synthetic_250k` (1k ... 50k subsamples of the 250k set, plus the
+  full 250k), with the same schema. Same-rows check: `out/tstr_leak_check_synthetic_250k.json`.
+- **Known data issue:** in the 50k set, ~36% of single-segment accounts have 2+ lines (a segment/line-count
+  mismatch). tm-data fixed it in the 250k set, so prefer the 250k rows.
+- tm-data's upgrade TSTR (0.778 / 0.799 / 0.801) is higher than our features.csv-only 0.765. Our tier b2/c numbers
+  reproduce it (0.799 / 0.805 at 250k), which suggests their run included the enrichment columns (income).
+
+## Upgrade improvement (`out/upgrade_improve.md/.csv`, `out/upgrade_improve_check.png`, `out/upgrade_best.md`)
+The upgrade recipe (`harness/labels.py` UPGRADE_COEFS) is a logistic function of these terms:
+- plan tier, capped plan, top/premium family
+- over-cap share, near cap (utilisation >= 80%), usage growth, heavy hotspot use
+- device age, a phone paid off recently, tenure, student
+- bill shock
+- **step-up cost as a share of income** and **log(income / national median)**, both from enrichment.csv
+- churn risk
+
+Three of the inputs exist only in enrichment.csv, so tiers matter:
+
+| tier | what is added | real 5k OOF: best AUC (fold sd) | trained on 250k synthetic -> real 5k |
+|---|---|---|---|
+| a0 | prepare() only (old baseline) | 0.747 HGB+sig (0.026); LR 0.736 | LR 0.765, HGB 0.767 |
+| a | + domain features from features.csv (per-line cap utilisation, over-cap share, hotspot/line, tier dummies, device age past 12 months) | 0.753 HGB+sig (0.025); LR 0.747 | **LR 0.775**, HGB 0.772 |
+| b1 | + recent_job_change (in no label) | 0.753 HGB+sig; LR 0.746 | LR 0.775, HGB 0.776 |
+| b2 | + income_band (a coarsened version of the income driver) | 0.772 HGB+sig; LR 0.771 | LR 0.800 |
+| b3 | + household (family, kids, promo months; in no label) | 0.773; LR 0.770 | LR 0.799 |
+| c | + RECIPE-REVEALING drivers (step_up_cost_pct_income, log income ratio, on_top_plan) | 0.777 LR (0.034) | LR 0.805 |
+| | oracle (same rows) | 0.808 | 0.808 |
+
+- **Interactions** (degree-2 `interaction_only` on 10-13 usage/plan/device/bill/affordability terms, C tuned by inner
+  CV) gain nothing: 0.749 vs 0.747 on tier a. **Tuned HGB** (RandomizedSearchCV over learning_rate, max_leaf_nodes,
+  min_samples_leaf, l2, max_iter, nested in the outer folds) is no better than the bench HGB, at 0.740-0.766 vs
+  0.747-0.775. The search overfits with ~260 positives per training fold.
+- **Recipe-revealing columns.** `step_up_cost_pct_income` is the recipe's affordability term itself (the label
+  clips it to [0, 10]). `log(household_income_usd / area_median_income_usd)` is the recipe's income term exactly.
+  `on_top_plan` duplicates the recipe's top-tier term, which is also already in features.csv via plan_family.
+  `income_band` is a coarsened copy of the income driver and accounts for most of the enrichment gain (b1 -> b2:
+  +0.025). `area_median_income_usd` is a constant. `recent_job_change` and the household fields are in no label and
+  add nothing (b1 ~ a, b3 ~ b2), which is a useful negative control. None of these columns is a label-derived
+  probability or a label: they are inputs to the formula, generated before the labels, so they are not leaks. But
+  the gain from b2/c means the model is **recovering our own synthetic upgrade formula**, not learning real
+  customer behaviour. The honest "what a model learns" numbers are tiers a/b1: **0.753 on the real 5k and 0.775
+  trained on 250k synthetic**, vs the old 0.740.
+- **Best honest upgrade model:** tier-a/b1 LR (C tuned) trained on the 250k synthetic set, then Platt-recalibrated
+  on the real 5k. AUC 0.775 (+0.035 vs 0.740). Top-10% capture 36.3%, top-15% 44.1-44.4%, top-20% 52%. Mean
+  predicted 6.09% raw vs 6.44% actual; after Platt 6.44% (ECE 0.010 -> 0.007). Trained on the real 5k only, the
+  best is HGB+sigmoid at 0.753 (top-10% 33.2%, top-15% 41.6%), within fold noise of LR at 0.746. With income band
+  (b2, partly recipe-revealing), 250k LR reaches 0.799 (top-10% 38.5%, top-15% 50.0%).
+- **Personas** (upgrade: 25/28 must be >= 90th pct, 22/24/27 below the median; `out/upgrade_persona_check.csv`,
+  `out/upgrade_best_personas.csv`): LR passes 5/5 in every tier. Tuned HGB passes 4/5, failing persona 24 at the
+  53rd-63rd pct. Synthetic-trained models do the same (`out/upgrade_best.md`): HGB+sig at 250k (b1) and LR at 50k pass 5/5. LR at 250k
+  (a/b1) passes 4/5, with persona 24 at the 50.6th pct, just over the cut. Persona 24 sits right at the median for
+  upgrade, so it is fragile for any model.
+
 ## Recommendation
 **Unweighted logistic regression on Model A's curated features (that is Model A).** It is tied with HGB within noise,
 reaches ~99% of the oracle ceiling OOF, is the most data-efficient at 5k, has exact additive reasons, and is
@@ -136,6 +207,11 @@ python3 -m harness.bench.learning_curve        # real_5k curve, ceilings.csv
 python3 -m harness.bench.learning_curve --train-features harness/out/scaled/features_scaled.csv \
         --train-labels harness/out/scaled/labels_scaled.csv          # synthetic_50k curve (test = real 5k)
 python3 -m harness.bench.compare               # how_we_compare.*, lift_catch.*, calibration_check.png
+python3 -m harness.bench.learning_curve --train-features harness/out/scaled_250k/features_scaled.csv \
+        --train-labels harness/out/scaled_250k/labels_scaled.csv --train-source synthetic_250k
+python3 -m harness.bench.scaling               # real 5k vs 50k vs 250k -> real 5k (~4 min)
+python3 -m harness.bench.upgrade_improve       # upgrade feature tiers x models (~7 min)
+python3 -m harness.bench.upgrade_best          # upgrade capture top5-20%, calibration + CV Platt, personas
 ```
 `--features/--labels` (or `TM_BENCH_FEATURES`/`TM_BENCH_LABELS`) point at other data, and `--n-max N` caps the
 regular accounts (stratified). Charts need matplotlib (in requirements.txt as of 5da5d78).
