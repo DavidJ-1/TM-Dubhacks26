@@ -48,6 +48,7 @@ LABEL_CANDIDATES = ["churn_90d", "churned_90d", "churn_label_90d", "churn_label"
 CONTRACT = ["account_id", "p_churn_90d", "risk_rank", "risk_reason_1", "risk_reason_2", "risk_reason_3",
             "stay_reason_1", "stay_reason_2", "stay_reason_3"]
 SEED = 2026
+FLIP_Z = 0.5  # sd on the churn-raising side that bars a feature group from being a stay reason
 MIN_REASON_LOGIT = 0.05  # contributions smaller than this are not shown as reasons
 
 # domain sign priors (+1 raises churn, -1 lowers). Fitted coefs with the opposite sign are dropped.
@@ -56,7 +57,8 @@ SIGN_PRIOR = {
                       "cancel_inquiries_270d", "cancellation_inquiry_contacts_90d", "bill_increase_pct",
                       "promo_expired_recent", "competitor_research_score", "port_out_inquiry", "early_tenure",
                       "low_app_use", "no_financing", "no_autopay", "plan_misfit_share", "short_history",
-                      "max_device_age_months", "mean_device_age_months", "n_lines_device_36m_plus"]},
+                      "max_device_age_months", "mean_device_age_months", "n_lines_device_36m_plus",
+                      "bill_change_3m_pct", "n_lines_over_cap_3m", "n_lines_light_on_premium"]},
     **{c: -1 for c in ["tenure_capped60", "tenure_months", "app_sessions_30d", "avg_sentiment", "avg_sentiment_90d",
                        "min_sentiment_270d", "extra_lines", "n_lines", "autopay", "n_financed_lines"]},
 }
@@ -128,11 +130,28 @@ class ModelA(_Base):
                 raw = None
         raw = raw if raw is not None else X
         raw = raw.set_index("account_id") if "account_id" in raw.columns else raw
+        # direction guard: a group is never shown as a STAY reason if any of its sign-known features sits on the
+        # churn-raising side for this account (> FLIP_Z sd), and never as a RISK reason if none of its sign-known
+        # features is on the churn-raising side. Prevents collinearity from flipping a reason's direction.
+        Z = self._z(X)
+        prior = pd.Series({c: SIGN_PRIOR[c] for c in Z.columns if c in SIGN_PRIOR}, dtype=float)
+        risky = Z[prior.index] * prior  # >0 = churn-raising side
+        grp_of = {c: reason_group(c) for c in prior.index}
+        self.flips_blocked_ = 0
         rows = []
         for acc, g in G.iterrows():
             r = raw.loc[acc] if acc in raw.index else pd.Series(dtype=float)
-            up = [phrase(n, r, True) for n, v in g.sort_values(ascending=False).items() if v > MIN_REASON_LOGIT][:k]
-            dn = [phrase(n, r, False) for n, v in g.sort_values().items() if v < -MIN_REASON_LOGIT][:k]
+            ra = risky.loc[acc]
+            bad_stay = {grp_of[c] for c in ra.index if ra[c] > FLIP_Z}
+            has_prior = set(grp_of.values())
+            some_risky = {grp_of[c] for c in ra.index if ra[c] > 0}
+            up_c = [n for n, v in g.sort_values(ascending=False).items() if v > MIN_REASON_LOGIT]
+            dn_c = [n for n, v in g.sort_values().items() if v < -MIN_REASON_LOGIT]
+            up_ok = [n for n in up_c if n not in has_prior or n in some_risky]
+            dn_ok = [n for n in dn_c if n not in bad_stay]
+            self.flips_blocked_ += (len(up_c) - len(up_ok)) + (len(dn_c) - len(dn_ok))
+            up = [phrase(n, r, True) for n in up_ok][:k]
+            dn = [phrase(n, r, False) for n in dn_ok][:k]
             up, dn = up + [""] * (k - len(up)), dn + [""] * (k - len(dn))
             rows.append([acc, *up, *dn])
         return pd.DataFrame(rows, columns=["account_id", *[f"risk_reason_{i}" for i in range(1, k + 1)],
@@ -270,6 +289,7 @@ def main(argv=None):
         expl = model.explain(X, k=3, raw=feats)
     except TypeError:
         expl = model.explain(X, k=3)
+    print(f"[SYNTHETIC] reason-direction guard blocked {getattr(model, 'flips_blocked_', 0)} candidate reasons")
     sc = pd.DataFrame({"account_id": X.index, "p_churn_90d": np.round(p, 6)})
     sc["risk_rank"] = sc["p_churn_90d"].rank(ascending=False, method="first").astype(int)
     sc = sc.merge(expl, on="account_id", how="left").sort_values("risk_rank")[CONTRACT]
@@ -304,7 +324,8 @@ formula over these same features, so a high AUC and LR ~ p_true_90d are expected
   log loss). Probabilities calibrated by maximum likelihood to the label base rate
   {'(intercept shifted to target ' + str(a.target_90d_rate) + ')' if a.target_90d_rate else ''}.
   Reasons: per-account logit contribution vs the average account, summed per reason group; top 3 up = risk,
-  top 3 down = stay (blank if no group moves the logit by >= {MIN_REASON_LOGIT}).
+  top 3 down = stay (blank if no group moves the logit by >= {MIN_REASON_LOGIT}). Direction guard: a group with a
+  churn-raising value (> {FLIP_Z} sd) is never a stay reason; blocked {getattr(model, 'flips_blocked_', 0)} candidate reasons.
 - Synthetic metrics: holdout AUC **{auc:.3f}** (stratified 25%, n={len(i_te)}, {int(ytr.iloc[i_te].sum())} churners);
   {'; '.join(f'{k} {v:.3f}' for k, v in extra.items()) or ''}.
   Label base rate {rate:.4f} per 90 days (~{1 - (1 - rate) ** (1 / 3):.4%}/month); mean scored p (regular) {reg_p.mean():.4f}.

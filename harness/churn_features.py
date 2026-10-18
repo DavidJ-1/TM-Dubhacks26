@@ -40,6 +40,21 @@ NON_REASON_GROUPS = {"segment", "contact_preference", "discount_group", "plan_fa
                      "streaming_hours_3m_avg", "data_gb_3m_avg", "n_lines_usage_up_30pct", "has_streaming_addon"}
 LEAK_PATTERN = re.compile(r"(churn|label|p_true|hazard|^toy_|_toy$|^y$|^target$|driver)", re.I)
 MAX_CATEGORY_LEVELS = 20
+# exact duplicates / overlapping pairs (tm-bench results.md); keep the more interpretable member:
+#   n_lines == extra_lines + 1 -> keep extra_lines; monthly installment ~ financing balance -> keep balance (what
+#   they still owe = lock-in); plan_is_unlimited == is_unlimited; n_byod_lines overlaps is_byod -> keep flag;
+#   cancellation_inquiry_contacts_90d is a subset of cancel_inquiries_270d; tenure_months -> tenure_capped60 +
+#   early_tenure; unresolved_270d overlaps unresolved_90d (keep the recent one)
+#   autopay == 1 - no_autopay; n_line_addons == n_protection_addons (r=1.0); voice minutes ~ extra_lines (r=0.97);
+#   streaming hours ~ data GB (0.97); plan price ~ last bill (0.93); mean ~ max device age (0.90);
+#   min ~ max financing months left (0.83)
+REDUNDANT_DROP = ["n_lines", "monthly_installment_total_cents", "plan_is_unlimited", "n_byod_lines",
+                  "cancellation_inquiry_contacts_90d", "tenure_months", "unresolved_270d", "autopay",
+                  "n_line_addons", "voice_min_3m_avg", "streaming_hours_3m_avg", "plan_price_cents",
+                  "mean_device_age_months", "min_financing_months_left_financed", "plan_tier"]
+# one-hot overlaps: discount_group=55_plus ~ segment=senior, discount_group=student ~ segment=student (keep segment);
+# plan_family=essentials == 1 - is_unlimited (keep the flag); plan_tier dropped above (duplicates family/unlimited)
+REDUNDANT_DUMMIES = ["discount_group=55_plus", "discount_group=student", "plan_family=essentials"]
 # curated, interpretable subset used by Model A by default (prepare() still returns everything for the bench)
 CORE_FEATURES = ["unresolved_90d", "negative_contacts_90d", "neg_sentiment", "troubled_4plus", "cancel_inquiries_270d",
                  "bill_increase_pct", "promo_expired_recent", "competitor_research_score", "port_out_inquiry",
@@ -89,16 +104,22 @@ def prepare(features: pd.DataFrame, drop_raw_contacts: bool = True) -> pd.DataFr
         out["no_autopay"] = (f["autopay"] == 0).astype(float)
     if "app_sessions_30d" in f.columns:
         out["low_app_use"] = (f["app_sessions_30d"] <= 3).astype(float)
-    if "avg_sentiment" in f.columns:
-        out["neg_sentiment"] = (-col("avg_sentiment").fillna(0)).clip(lower=0)
     if "n_lines" in f.columns:
         out["extra_lines"] = (col("n_lines") - 1).clip(lower=0)
     if "support_90d" in f.columns and ("unresolved_90d" in f.columns or "negative_contacts_90d" in f.columns):
         bad = (col("unresolved_90d").fillna(0) > 0) | (col("negative_contacts_90d").fillna(0) > 0)
         out["troubled_4plus"] = ((col("support_90d").fillna(0) >= 4) & bad).astype(float)
 
-    # --- drop ids, leaks, raw counts
-    drop = set(ALWAYS_DROP) | set(FAIRNESS_DROP) | set(leak_columns(f.columns)) | set(out.columns)
+    # --- one sentiment column instead of 3 overlapping ones (tm-bench: collinearity flipped persona 22's
+    #     -0.73 avg sentiment into a STAY reason). neg_sentiment = mean of the negative parts of
+    #     avg (all contacts), avg (90d) and worst (270d) sentiment; 0 = no contacts or all neutral/positive.
+    sent = [c for c in ("avg_sentiment", "avg_sentiment_90d", "min_sentiment_270d") if c in f.columns]
+    if sent:
+        out["neg_sentiment"] = pd.concat([(-col(c).fillna(0)).clip(lower=0) for c in sent], axis=1).mean(axis=1)
+
+    # --- drop ids, leaks, raw counts, duplicates/overlaps
+    drop = (set(ALWAYS_DROP) | set(FAIRNESS_DROP) | set(REDUNDANT_DROP) | set(sent) | set(leak_columns(f.columns))
+            | set(out.columns))
     if drop_raw_contacts:
         drop |= set(RAW_CONTACT_COUNTS)
     f = f.drop(columns=[c for c in f.columns if c in drop])
@@ -116,6 +137,7 @@ def prepare(features: pd.DataFrame, drop_raw_contacts: bool = True) -> pd.DataFr
     if cat:
         d = pd.get_dummies(f[cat].astype("string").fillna("unknown"), prefix=cat, prefix_sep="=", dtype=float)
         out = out.join(d)
+    out = out.drop(columns=[c for c in REDUNDANT_DUMMIES if c in out.columns])
     out = out.loc[:, out.std(ddof=0) > 0]  # drop constant columns
     return out.astype(float)
 
