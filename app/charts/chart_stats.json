@@ -225,9 +225,12 @@
   "file": "learning_curve_long.csv",
   "metric": "auc",
   "last": {
-   "hgb_sigmoid": 0.8223,
-   "logreg_core22": 0.8438,
-   "logreg_unweighted": 0.8107
+   "hgb_sigmoid (real_5k)": 0.8223,
+   "hgb_sigmoid (synthetic_50k)": 0.8627,
+   "logreg_core22 (real_5k)": 0.8438,
+   "logreg_core22 (synthetic_50k)": 0.8652,
+   "logreg_unweighted (real_5k)": 0.8107,
+   "logreg_unweighted (synthetic_50k)": 0.869
   }
  }
 }

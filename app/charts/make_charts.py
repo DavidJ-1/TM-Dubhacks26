@@ -294,7 +294,7 @@ def chart_calibration(df):
 import os  # noqa: E402
 MODEL_C_FORCE_PLACEHOLDER = os.environ.get("TM_MODELC_PLACEHOLDER") == "1"
 MODELB_PINK, MODELC_COL, MODELA_COL, RULE_COL = MAGENTA, "#1F5FAD", "#9A9A9A", "#3A3A3A"
-CIRC_NOTE = ("Simulated randomized trial on the test split: effects are grounded in our own save-rate assumptions "
+CIRC_NOTE = ("PROVISIONAL: test split too small to rank policies reliably; figures may change. Simulated randomized trial on the test split: effects are grounded in our own save-rate assumptions "
              "(partly circular), not measured lift.")
 POLICY_ORDER = ["Model B EV chooser", "Model C T-learner", "Offer to everyone", "3+ calls rule", "Random", "Do nothing",
                 "Oracle (reference)"]
@@ -377,7 +377,7 @@ def chart_qini():
     ax.xaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1.0))
     ax.set_xlabel("Share of test accounts targeted (each policy's own ranking)")
     ax.set_ylabel("Cumulative incremental saves\n(IPW estimate, simulated trial)")
-    ax.set_title("Who is persuadable? Incremental saves by share targeted")
+    ax.set_title("Who is persuadable? Incremental saves by share targeted (provisional)")
     ax.legend(frameon=False, loc="lower right", fontsize=9)
     f.subplots_adjust(left=0.11, right=0.97, top=0.88)
     save(f, "04_modelC_qini.png", esc(f"{CIRC_NOTE} Qini area = IPW, from uplift_auuc.csv. Source: {p.parent.name}/{p.name} (tm-offers)."))
@@ -445,7 +445,7 @@ def chart_policy():
     ax.set_xticks([v for v in ax.get_xticks() if lo - span * 0.04 <= v <= hi * 1.001])
     ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: _money(v, plus=False) if v else "$0"))
     ax.set_xlabel("Net value, 24-month margin minus offer cost (doubly-robust estimate)")
-    ax.set_title("Targeted offers beat blanket policies")
+    ax.set_title("Targeted offers vs blanket policies (provisional)")
     from matplotlib.patches import Patch
     ax.legend(handles=[Patch(color="#7A7A7A", label="Retention only"), Patch(color="#7A7A7A", alpha=0.35, label="With upsell")],
               frameon=False, loc="lower left", fontsize=8, handlelength=1.2, borderaxespad=0.2)
