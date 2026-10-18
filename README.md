@@ -24,6 +24,8 @@ Open **Targeting playbook** in the sidebar. It places every account on a risk-by
 
 The playbook lives in `harness/playbook/`. Rules and the assumption credit are in `harness/playbook/rules.py`. The drafted English and Spanish messages stay on the on-screen phone mockup.
 
+Open **Upgrades & life moments** for plan, line, and device offers. The toggle defaults to real sandbox data. `make life-signals` regenerates `harness/out/life_signals.csv`. The seeded share is `SYNTHETIC_SHARE` in `harness/upsell/config.py`. It is labeled synthetic, and the screen shows counts of seeded accounts rather than that share.
+
 ```bash
 make test
 ```
@@ -77,6 +79,7 @@ The sandbox has no observed churn outcomes. Judges score a private model that is
 ```
 app/console_app.py       Retention Console (make run): sandbox.db, Model A, offers, projections, targeting playbook
 harness/playbook/        Risk-by-value grid, if-then rules, on-screen draft
+harness/upsell/          Life-moment offers. Tier 2 signals regenerate with make life-signals
 app/streamlit_app.py     Teammate demo UI (make run-ui): insights, at-risk list, customer card, charts
 harness/                 Both lanes: console engine plus tm-data, tm-churn, tm-offers, tm-harness, bench
 tests/                   console checks against sandbox.db, plus the harness tests
