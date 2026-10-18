@@ -66,8 +66,17 @@ from sklearn.preprocessing import StandardScaler
 
 HERE = Path(__file__).resolve().parent
 
+
+def _default_data_dir() -> str:
+    """harness/out/ if the pipeline has been run here, else the tracked demo_data/ copies (fresh clone), else out/."""
+    out, demo = HERE / "out", HERE.parent / "demo_data"
+    if not (out / "features.csv").exists() and (demo / "features.csv").exists():
+        return str(demo)
+    return str(out)
+
+
 CONFIG = {
-    "data_dir": os.environ.get("MH_DATA_DIR", str(HERE / "out")),
+    "data_dir": os.environ.get("MH_DATA_DIR") or _default_data_dir(),
     "out_dir": os.environ.get("MH_OUT_DIR", str(HERE / "out")),
     "label": os.environ.get("MH_LABEL", "churn_90d"),   # switch to "toy_churn" in one change
     "data": os.environ.get("MH_DATA", "real"),           # "real" (5,042 sandbox accounts) | "scaled" (50k SYN-*)

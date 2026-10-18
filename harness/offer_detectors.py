@@ -18,11 +18,11 @@ import pandas as pd
 
 # --- where the read-only sandbox lives ------------------------------------------------------
 _SANDBOX_CANDIDATES = [
-    os.environ.get("TM_SANDBOX_DB"),
-    os.environ.get("DUBHACKS_DB"),
+    os.environ.get("DUBHACKS_DB"),       # project-wide name (top-level README + Makefile)
+    os.environ.get("TM_SANDBOX_DB"),     # legacy names, still accepted
+    os.environ.get("SANDBOX_DB"),
     str(Path(__file__).resolve().parents[1] / "vendor" / "dubhacks" / "data" / "sandbox.db"),  # repo Makefile
-    str(Path(__file__).resolve().parents[2] / "dubhacks" / "data" / "sandbox.db"),  # /workspace/tmobile/dubhacks
-    "/workspace/tmobile/dubhacks/data/sandbox.db",
+    str(Path(__file__).resolve().parents[2] / "dubhacks" / "data" / "sandbox.db"),  # sibling clone <repo>/../dubhacks
     "/tmp/dubhacks-ro/data/sandbox.db",
 ]
 
@@ -47,7 +47,7 @@ def find_sandbox_db() -> str:
     for cand in _SANDBOX_CANDIDATES:
         if cand and Path(cand).is_file():
             return cand
-    raise FileNotFoundError("sandbox.db not found; set TM_SANDBOX_DB or clone the sandbox read-only")
+    raise FileNotFoundError("sandbox.db not found; run `make setup` or set DUBHACKS_DB=/path/to/sandbox.db")
 
 
 def connect_ro(path: str | None = None) -> sqlite3.Connection:
