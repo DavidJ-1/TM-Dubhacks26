@@ -148,6 +148,62 @@ def toy_probabilities() -> pd.Series:
     return pd.Series(out, name="toy_p")
 
 
+# ---------------------------------------------------------------- upgrade target (SYNTHETIC)
+# upgrade_90d: would accept a plan step-up or device upgrade within 90 days. Independent of --recipe.
+# Target mean p_upgrade_90d over the 5,000 regular accounts: plan doc v2 uses 2.0%/account-month upgrades
+# (Verizon 2.6%/quarter phone upgrade rate x 2.37 lines/account) -> 1 - (1 - 0.020)^3 = 5.88% ~ 6.0%/90d.
+UPGRADE_TARGET_90D = 0.060
+SEED_UPGRADE = "tm-upgrade-2026"
+UPGRADE_COEFS = [
+    ("tier_basic", 1.00, "plan_tier = basic (most headroom)"),
+    ("tier_standard", 0.50, "plan_tier = standard"),
+    ("capped_plan", 0.50, "plan has a data cap"),
+    ("top_tier", -1.00, "already on experience_beyond (top) family"),
+    ("over_cap_share", 1.50, "share of lines over plan cap (last 3 months)"),
+    ("near_cap", 0.60, "capped plan and avg data per line >= 80% of cap (last 3 months)"),
+    ("usage_growth", 0.80, "data_growth_pct clipped to [-0.5, 1.0] (last 3 vs prior 3 months)"),
+    ("hotspot_heavy", 0.40, "hotspot >= 5 GB per line per month (last 3 months)"),
+    ("device_age_years", 0.45, "years of max device age beyond the first 12 months: max(0, months - 12) / 12 (0 if no dated device)"),
+    ("old_device_36m", 0.30, "any line with a device >= 36 months old"),
+    ("installment_ended_recent", 0.50, "phone paid off in last 3 bill months (freed budget)"),
+    ("tenure_years_capped5", 0.10, "min(tenure_months, 60) / 12 (moderate positive)"),
+    ("student", 0.70, "segment or discount_group = student (life-stage step-up, e.g. graduation; doc lists student as an upgrade moment)"),
+    ("bill_increase_pct", -4.00, "bill shock: max(0, last / prior avg - 1)"),
+    ("promo_expired_recent", -1.00, "bill shock: promo expired in last 3 bill months"),
+    ("churn_risk_z", -0.25, "max(0, z-score of logit(tuned monthly churn hazard)): mild negative for above-average risk only; tuned recipe always"),
+]
+
+
+def upgrade_terms(f: pd.DataFrame, churn_logit: np.ndarray, regular: np.ndarray) -> pd.DataFrame:
+    t = pd.DataFrame(index=f.index)
+    t["tier_basic"] = (f["plan_tier"] == "basic").astype(float)
+    t["tier_standard"] = (f["plan_tier"] == "standard").astype(float)
+    t["capped_plan"] = f["plan_data_cap_gb"].notna().astype(float)
+    t["top_tier"] = (f["plan_family"] == "experience_beyond").astype(float)
+    t["over_cap_share"] = f["n_lines_over_cap_3m"] / f["n_lines"]
+    util = (f["data_gb_3m_avg"] / f["n_lines"]) / f["plan_data_cap_gb"]
+    t["near_cap"] = (util >= 0.8).astype(float)  # NaN cap (unlimited) -> False
+    t["usage_growth"] = f["data_growth_pct"].fillna(0).clip(-0.5, 1.0)
+    t["hotspot_heavy"] = ((f["hotspot_gb_3m_avg"] / f["n_lines"]) >= 5).astype(float)
+    t["device_age_years"] = (f["max_device_age_months"].fillna(0) - 12).clip(lower=0) / 12
+    t["old_device_36m"] = (f["n_lines_device_36m_plus"] > 0).astype(float)
+    t["installment_ended_recent"] = f["installment_ended_recent"].astype(float)
+    t["tenure_years_capped5"] = f["tenure_months"].clip(upper=60) / 12
+    t["student"] = ((f["segment"] == "student") | (f["discount_group"] == "student")).astype(float)
+    t["bill_increase_pct"] = f["bill_increase_pct"].fillna(0)
+    t["promo_expired_recent"] = f["promo_expired_recent"].astype(float)
+    mu, sd = churn_logit[regular].mean(), churn_logit[regular].std()
+    t["churn_risk_z"] = ((churn_logit - mu) / sd).clip(min=0)
+    return t[[c for c, _, _ in UPGRADE_COEFS]].astype(float)
+
+
+def top_drivers(T: pd.DataFrame, w: np.ndarray, k: int = 3) -> list[list[str]]:
+    contrib = T.values * w
+    names = np.array(T.columns)
+    order = np.argsort(-contrib, axis=1)[:, :k]
+    return [[names[i] if contrib[r, i] > 0 else "" for r, i in enumerate(order[:, j])] for j in range(k)]
+
+
 def fit(T: pd.DataFrame, coefs, shrink: float, regular: np.ndarray):
     w = shrink * np.array([c for _, c, _ in coefs])
     score = T[[c for c, _, _ in coefs]].values @ w
@@ -184,6 +240,18 @@ def build(recipe: str = "tuned"):
     top = np.argsort(-contrib, axis=1)[:, :3]
     for k in range(3):
         lab[f"label_driver_{k + 1}"] = [names[i] if contrib[r, i] > 0 else "" for r, i in enumerate(top[:, k])]
+    # upgrade target: always uses the TUNED churn hazard so --recipe affects churn columns only
+    _, _, h_tuned = fit(terms(f)[[c for c, _, _ in COEFS_TUNED]], COEFS_TUNED, SHRINK, regular)
+    U = upgrade_terms(f, np.log(h_tuned / (1 - h_tuned)), regular)
+    wu = np.array([c for _, c, _ in UPGRADE_COEFS])
+    su = U.values @ wu
+    bu = solve_b0(su[regular], UPGRADE_TARGET_90D)
+    pu = sigmoid(bu + su)
+    lab["upgrade_90d"] = (uniform(SEED_UPGRADE, f["account_id"]) < pu).astype(int)
+    lab["p_upgrade_90d"] = pu.round(6)
+    for j, col in enumerate(top_drivers(U, wu)):
+        lab[f"upgrade_driver_{j + 1}"] = col
+    lab.attrs["b0_upgrade"] = bu
     return lab, b0, shrink
 
 
@@ -191,14 +259,18 @@ PERSONAS = {"04": "high", "21": "high", "22": "high", "27": "high", "10": "low",
             "23": "", "25": "", "26": "", "28": ""}
 
 
-def persona_report(lab: pd.DataFrame) -> str:
-    r = lab.loc[lab["is_persona"] == 0, "p_true_90d"]
+UPGRADE_PERSONAS = {"25": "high", "28": "high", "22": "low", "27": "low", "24": "low",
+                    "04": "", "10": "", "21": "", "23": "", "26": ""}
+
+
+def persona_report(lab: pd.DataFrame, col: str = "p_true_90d", personas: dict = PERSONAS) -> str:
+    r = lab.loc[lab["is_persona"] == 0, col]
     out = []
-    for k, exp in PERSONAS.items():
-        p = lab.loc[lab["account_id"] == f"ACC-PERSONA-{k}", "p_true_90d"].iloc[0]
+    for k, exp in personas.items():
+        p = lab.loc[lab["account_id"] == f"ACC-PERSONA-{k}", col].iloc[0]
         pct = (r < p).mean() * 100
         ok = "" if not exp else (" OK" if (exp == "high" and pct >= 90) or (exp == "low" and pct <= 50) else " MISS")
-        out.append(f"  persona {k} ({exp or '-'}): p_true_90d={p:.4f} pct={pct:.1f}{ok}")
+        out.append(f"  persona {k} ({exp or '-'}): {col}={p:.4f} pct={pct:.1f}{ok}")
     return "\n".join(out)
 
 
@@ -218,6 +290,10 @@ def main():
           f"toy_churn={r.toy_churn.sum()}  max_h={r.monthly_hazard.max():.3f}  [ALL SYNTHETIC]")
     print("persona percentiles among 5,000 regular accounts (high OK if >=90th, low OK if <=50th):")
     print(persona_report(lab))
+    print(f"upgrade: b0={lab.attrs['b0_upgrade']:.4f} mean p_upgrade_90d={r.p_upgrade_90d.mean():.4f} "
+          f"upgrade_90d positives={r.upgrade_90d.sum()} ({r.upgrade_90d.mean():.4f}) "
+          f"spearman(p_upgrade, p_true)={r.p_upgrade_90d.corr(r.p_true_90d, method='spearman'):.3f} [SYNTHETIC]")
+    print(persona_report(lab, "p_upgrade_90d", UPGRADE_PERSONAS))
 
 
 if __name__ == "__main__":

@@ -47,7 +47,12 @@ Accounts: 5,000 regular + 42 `ACC-PERSONA-xx`. Persona NN maps to account_id `AC
 | `monthly_hazard` | **SYNTHETIC** monthly churn hazard from the logistic below |
 | `toy_p` | exact reproduction of the sandbox's public toy `datagen/reference_model.py`, run on the sandbox's own feature SQL (`datagen/labels.py`). **Native horizon is 90 days**, so it is not converted. Mean is about 14.6% per 90 days (≈5%/month, unrealistic). **Use for ranking checks only, never on charts.** |
 | `toy_churn` | **OUR** seeded draw of toy_p (seed "tm-churn-2026-toy"). The judges' draws use a private salt and can't be reproduced. Ranking checks only. |
+| `upgrade_90d` | **SYNTHETIC** 0/1: would accept a plan step-up or device upgrade within 90 days (seed "tm-upgrade-2026") |
+| `p_upgrade_90d` | **SYNTHETIC** true 90-day upgrade probability (**leak column**) |
+| `upgrade_driver_1..3` | the three largest positive upgrade-logit contributions (**leak columns**) |
 | `label_driver_1..3` | the three largest positive logit contributions for the account (debug and sanity aid; tm-churn should derive its own reasons) |
+
+**Leak columns.** Never use these as model features: `p_true_90d, monthly_hazard, label_driver_*, p_upgrade_90d, upgrade_driver_*, toy_p, toy_churn`. Train on features.csv against `churn_90d` / `upgrade_90d` only. The upgrade columns come after the churn columns, and the churn columns keep their original order.
 
 ### Label recipe (plan doc "Calibration" line, adapted)
 `logit(monthly_hazard) = b0 + SHRINK × Σ coef × term`, where SHRINK = 0.5. b0 is solved by bisection so that the **mean monthly hazard over the 5,000 regular accounts = 0.990%** (T-Mobile postpaid account churn, Q2 2026, TMUS Investor Factbook). Result: b0 = −6.3538.
@@ -117,3 +122,30 @@ Both recipes print persona percentiles after each run.
 - toy_p mean 14.65% per 90 days. toy_churn positives 781 / 5,000.
 - Spearman(p_true_90d, toy_p) = 0.879. AUC of p_true_90d against toy_churn = 0.807 (toy_p itself scores 0.827). AUC of p_true_90d against churn_90d = 0.864 (the oracle ceiling for tm-churn).
 - Personas: p_true_90d, then percentile among the 5,000 regular accounts. Expected high: 04 0.173 (97th), 21 0.061 (92nd), 22 0.051 (90th), 27 0.072 (93rd). Expected low: 10 0.004 (2nd), 24 0.005 (11th). Others: 23 0.089 (94th), 25 0.019 (74th), 26 0.006 (13th), 28 0.009 (42nd).
+
+## Upgrade target (`upgrade_90d`): SYNTHETIC
+**ALL UPGRADE LABELS AND RATES ARE SYNTHETIC.** The target is "would accept a plan step-up or device upgrade within 90 days". It is independent of `--recipe`: the churn-risk term always uses the tuned churn hazard.
+`logit(p_upgrade_90d) = b0 + Σ coef × term`. b0 is solved so the mean p_upgrade_90d over the 5,000 regular accounts = **6.0%**. Source: the plan doc's v2 assumes 2.0% upgrades per account-month (Verizon's 2.6%/quarter phone upgrade rate × 2.37 lines per account), and 1 − (1 − 0.020)³ = 5.88%, rounded to 6.0%. This is a synthetic assumption; T-Mobile does not publish a per-account upgrade rate. b0 = -3.9492.
+
+| term | coef | definition |
+|---|---|---|
+| `tier_basic` | +1.00 | plan_tier = basic (most headroom) |
+| `tier_standard` | +0.50 | plan_tier = standard |
+| `capped_plan` | +0.50 | plan has a data cap |
+| `top_tier` | -1.00 | already on experience_beyond (top) family |
+| `over_cap_share` | +1.50 | share of lines over plan cap (last 3 months) |
+| `near_cap` | +0.60 | capped plan and avg data per line >= 80% of cap (last 3 months) |
+| `usage_growth` | +0.80 | data_growth_pct clipped to [-0.5, 1.0] (last 3 vs prior 3 months) |
+| `hotspot_heavy` | +0.40 | hotspot >= 5 GB per line per month (last 3 months) |
+| `device_age_years` | +0.45 | years of max device age beyond the first 12 months: max(0, months - 12) / 12 (0 if no dated device) |
+| `old_device_36m` | +0.30 | any line with a device >= 36 months old |
+| `installment_ended_recent` | +0.50 | phone paid off in last 3 bill months (freed budget) |
+| `tenure_years_capped5` | +0.10 | min(tenure_months, 60) / 12 (moderate positive) |
+| `student` | +0.70 | segment or discount_group = student (life-stage step-up, e.g. graduation; doc lists student as an upgrade moment) |
+| `bill_increase_pct` | -4.00 | bill shock: max(0, last / prior avg - 1) |
+| `promo_expired_recent` | -1.00 | bill shock: promo expired in last 3 bill months |
+| `churn_risk_z` | -0.25 | max(0, z-score of logit(tuned monthly churn hazard)): mild negative for above-average risk only; tuned recipe always |
+
+Results (synthetic, 5,000 regular accounts): mean p_upgrade_90d 6.00%; upgrade_90d positives 300 (6.00%); median 3.6%, max 0.71. Correlation with p_true_90d: Spearman −0.28, Pearson −0.16 (bill shock and risk push the two apart). Most common top driver: device age beyond 12 months (1,397 accounts), then tenure, standard tier, basic tier, student.
+Persona upgrade percentiles: 25 (upsell) 95.8 · 28 (graduating student) 93.8 · 22 (bill shock) 3.3 · 27 (bill shock) 3.9 · 24 (do nothing) **50.7, about the median** (p = 3.7%, below the 6% mean; premium plan, 55-month tenure). Others: 04 5.7 · 10 24.2 · 21 53.3 · 23 38.5 · 26 21.7.
+Tuning steps taken to reach these persona ranks, each a judgement call: churn-risk penalty applies only above average risk; tenure weight 0.10 per year; student weight 0.70; device age counts only after the first 12 months.
