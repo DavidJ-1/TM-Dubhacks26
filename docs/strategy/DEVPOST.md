@@ -28,13 +28,13 @@ For every customer, it picks one priced action: a better-fitting plan, a fix plu
 **How it's different:** past T-Mobile hackathon winners built sentiment-score screens with LLM-written suggestions for staff. The closest earlier idea, [The Un-Churner](https://devpost.com/software/the-un-churner) (2019), paired a churn score with a plan pop-up and didn't win. Ours makes one priced decision per customer, where doing nothing is allowed. Every offer is checked against real promotion and eligibility rules, a cheaper plan counts as retention, there's no LLM in the product, and it writes the exact text in English or Spanish.
 
 ## How we pick the deal
-For every customer, the engine lists 15 possible moves and scores **doing nothing** first, at $0. Every other move has to beat it, and for 4,858 of 5,042 customers none does (simulated).
+For every customer, the engine lists 15 possible moves and scores **doing nothing** first, at $0. Every other move has to beat it, and for 4,858 of 5,042 customers none does (simulated): 4,361 get nothing at all, and 497 just get a bill line.
 
 - **Real rules first.** Most of the 15 moves are ruled out before any math, about 13 for a typical customer, by the sandbox's real plan and promotion eligibility rules (line counts, discount groups, the care credit's three-contact rule) and by our guardrails.
 - **Expected profit for what's left.** Each remaining move is priced as chance of leaving × chance it keeps them × what a saved account is worth, minus the offer's cost, agent time (about $15 for each fix-first contact) and an annoyance charge of $2 to $6 per contact (team estimate).
 - **An open issue comes first.** If a customer has an unresolved support contact, the only message allowed is a fix. Of the 184 messages, 151 are fix-first, 29 are a $25 care credit plus a fix, 2 are check-ins, 1 is a bill-shock credit and 1 is a perk reminder. Only the 14 calls promise a call.
 - **Their channel, their language.** 64 texts, 74 in-app notes, 32 emails and 14 calls, each by the customer's own preference, written in English and Spanish.
-- **Cheaper plans go on the bill, not in a text.** 394 customers get a bill line for a plan with the same features at a lower price, and 94 more get a "cheaper, but you'd lose X" line that names what they'd give up.
+- **Cheaper plans go on the bill, not in a text.** 390 customers get a bill line for a plan with the same features at a lower price, and 107 more get a "cheaper, but you'd lose X" line that names what they'd give up.
 
 Grounded in Ascarza 2018, ["Retention Futility"](https://doi.org/10.1509/jmr.16.0163) (JMR); Ascarza, Iyengar & Schleicher 2016, ["The Perils of Proactive Churn Prevention Using Plan Recommendations"](https://doi.org/10.1509/jmr.13.0483) (JMR); Godinho de Matos, Ferreira & Belo 2018, ["Target the Ego or Target the Group"](https://doi.org/10.1287/mksc.2018.1099) (Marketing Science); and Gupta, Lehmann & Stuart 2004, ["Valuing Customers"](https://doi.org/10.1509/jmkr.41.1.7.25084) (JMR).
 
