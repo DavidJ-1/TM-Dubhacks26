@@ -295,6 +295,15 @@ def main():
            "## Flags (direction mismatches, >3x strength gaps, missing effects)",
            "Rule: sign differs from a unanimous public sign, or |ours| is more than 3x or less than 1/3 of the public median |effect|.", ""]
     md += [f"- {x}" for x in flags] or ["- none"]
+    md += ["", "## Reading the flags (interpretation, written against the 2026-10-17 run)",
+           "- **Care calls:** Larose agrees strongly with us (+0.58 per SD; 4+ calls ≈ 46-64% churn). Cell2Cell is slightly *negative* (-0.07 multivariate, 0.79x univariate), probably because care calls track overall usage and heavy users churn less there. The sign question is open, not settled against us. Our ~x10 univariate ratio is far steeper than any public set (x0.8 to x1.9). That's partly by design: the sandbox's hidden 'unhappiness' drives support contacts.",
+           "- **Tenure:** Telco shows a strong negative (-0.91; x0.16), matching us in sign; ours is much weaker. Cell2Cell's univariate ratio is >1 (churn peaks around contract-end months), and Larose is flat. Our weak tenure effect sits between them.",
+           "- **Lock-in:** Telco contracts cut churn sharply (-0.63; x0.16). Our financing effect points the same way but is about 6x weaker. If David wants 'locked in' to matter more (persona 27), raise `no_financing` (currently 0.6 doc-scale). The toy formula has no lock-in term at all.",
+           "- **Device age:** Cell2Cell older equipment +0.29 (x1.5). Ours (+0.07) is the same direction but weak. The toy formula is slightly negative: it has no device term, and the -0.04 comes from correlated fields.",
+           "- **Bill level:** public charges are strongly positive in Telco and Larose (+0.8), but those reflect service type and usage minutes, not a price for the same service. We use bill *change*, not level. This is a deliberate gap and the main candidate if a 'pays a lot' driver is wanted.",
+           "- **Lines:** public data shows slightly more churn with more lines/subs (+0.09 to +0.13); ours is negative (-0.15 per extra line, from the plan doc). This is a real direction mismatch. Industry lore holds that multi-line accounts are stickier, but these datasets don't show it.",
+           "- **Engagement:** matches (more usage, less churn) in Cell2Cell and our recipes.",
+           ]
     md += ["", "## Upgrade target (`upgrade_90d`, synthetic): what public data can and can't say",
            "None of these public datasets has an upgrade or plan step-up outcome, so the upgrade recipe **can't be validated on public data**. "
            "The only indirect check: older equipment raises churn in Cell2Cell (see device_age above), which matches treating an old phone as a 'moment' where the customer will either upgrade or leave. "
