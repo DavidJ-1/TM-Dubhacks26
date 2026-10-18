@@ -174,3 +174,65 @@ Persona golden tests: `tests/test_persona_golden.py` (42 personas).
 - Tests: golden pins (exact action + SKU) for personas 04, 06, 10, 19, 21, 24, 28, 37, 38; persona 38's -$40/mo;
   persona 24's reason; wait personas 29/31/33; open-ticket wording; offer_api toggles for persona 21. Golden tests read
   `demo_data/` when `harness/out/` is missing.
+
+## v2 #3: honest acceptance + upsell guardrails (Sat 10/17 ~10:45 PM PDT; branch tm-offers-v2; all numbers synthetic)
+- **Honest upsell acceptance.** `P_ACCEPT` step_up / device_upgrade / family_upgrade 0.25 / 0.15 / 0.20 -> **0.04**.
+  No carrier publishes offer-acceptance rates; the closest real figures are overall postpaid upgrade rates (AT&T
+  3.0-4.7%/quarter, Verizon 2.6% 2Q26), which include organic upgrades, so 4% is a **ceiling**, not a measured
+  effect. right_size 0.45 -> **0.03** (cited trials 1-13%: Ascarza 2016 Table 4, Ofgem CMOL/CMOC; range 0.02-0.13).
+  variant_switch 0.70 -> **0.10** (customer has to act; Ascarza 2016 1.5%, Ofgem 2017 3.4%, Ofgem 2018 collective
+  switch 27% upper; range 0.03-0.27; still forced by SAME_COVERAGE_RULE). home_internet_bundle 0.04 stays uncited.
+  Effect: chosen-upsell gain $24.9k -> $4.5k; the action mix does not change (upsells cost nothing but annoyance).
+- **Upsell risk guardrail** (`UPSELL_RISK_GUARDRAIL`, default ON; env `TM_UPSELL_RISK_GUARDRAIL=0`): no step-up,
+  device / family upgrade or Home Internet bundle for the top churn decile (by p_churn_90d) or 3+ support contacts in
+  90 days. why_not: "upsell guardrail: they are in our highest-risk 10% ..." / "... contacted support N times ...".
+- **Right-size backfire** (`RIGHT_SIZE_BACKFIRE`): Ascarza, Iyengar & Schleicher 2016 (JMR 53(1):46-60; churn 6% ->
+  10% after proactive cheaper-plan outreach) as a relative +66.7% churn penalty netted into right_size's save rate
+  (net -0.37 on target). Accounts with volatile (CV > 0.25) or declining (last 3 mo < 0.8x first 3) monthly data use
+  are excluded outright (14 accounts in the sandbox). Result: right-size never beats silence at scale >= ~0.45;
+  held accounts get do_nothing_reason `plan_fit_held` ("They could save $X/month ... we'll show it if they ask").
+  `scale` is the sensitivity knob (0.25 keeps 120 right-sizes). SAME_COVERAGE_RULE, PORT_OUT_ALWAYS_CONTACT,
+  fix-first and BILL_SHOCK_RELIEF_OVERRIDE are unchanged.
+
+## v2: field save rate, profit gate, receipt-only plan moves (Sat 10/17 ~11 PM PDT; all numbers synthetic)
+- `FIELD_SAVE_RATE` 0.10 (env `TM_FIELD_SAVE_RATE`): SAVE_RATE = SAVE_RATE_BASE x 0.10 / 0.45 (anchor = risk-weighted
+  mean save rate of the engine's contacts under the base table). Per-action ratios preserved; the right-size
+  backfire is not scaled. Field evidence 5-15% (Ascarza et al. Marketing Science 2018; Verhelst et al. 2023).
+- `PROFIT_GATE` (default ON): no non-forced contact with EV <= 0 ("Stay silent: expected to cost more than it
+  saves."). pick() already enforces EV > 0, so the gate is a defensive check; forced EV <= 0 contacts are the
+  port-out check-ins / fix-firsts (pick_override = port_out).
+- `PLAN_MOVES_RECEIPT_ONLY` (default ON): right_size / variant_switch are never texted; they are computed and put on
+  the receipt (`receipt_action`, `receipt_skus`, `receipt_monthly_saving`, `receipt_expected_revenue_given_up_mo`,
+  `receipt_reason`; `channel` = sms / none). SAME_COVERAGE_RULE forces the variant onto the receipt.
+- perk reminder: save 2% / 1% (field units, unscaled), cost $0.50 (RESEARCH.md s12). SERVICE_MARGIN 0.50 = upper bound.
+- `scripts/overpaying_accounts.py` reproduces the household optimizer's 682 accounts / $14,830/mo.
+
+## v2 merge round (SYNTHETIC)
+- `KEPT_VALUE_MONTHS` 19.338 (default): kept-account value = monthly margin x 19.338 (survival-discounted 24 months,
+  tm-research s13; tm-models' $1,478). Env `TM_KEPT_VALUE_MONTHS=24` restores the old undiscounted value. Upsell and
+  lock horizons stay at `VALUE_HORIZON_MONTHS` 24.
+- `PORT_OUT_CONTACT` off | self_initiated_only | all (default all: the signal is the customer's own inquiry). Sandbox signal
+  `account_signals.port_out_inquiry` = the customer asked about porting away (self-initiated inquiry), not a carrier
+  port request (FCC 2008, 47 U.S.C. 222(b)). Port-out rows are never `in_headline`; when allowed they appear in
+  `already_leaving_save_attempt` / channel `save_attempt`.
+- `FIX_FIRST_FORCE` ev_positive (default) | all_open: an open ticket (unresolved_90d >= 1) allows only fix-first / care credit + fix-first; ev_positive contacts only when that EV > 0, else silent (`open_ticket_ev_le0`); all_open forces it (`open_ticket`). Env `TM_FIX_FIRST_FORCE`.
+- Receipt: `receipt_limited_time` / `receipt_plan_end_date` (blank: neither plans nor promotions has an end-date
+  field); limited-time target plans (plans.status) get a "check it's still offered" line.
+- `harness/one_decision.py`: one `decision` column {text_now, wait_until <date>, receipt_only, silent}, tm-models'
+  bill-change rule on our picks, `retention_net`, `tmm_*` guardrail join columns (`harness/guardrail_join.py`).
+- `harness/moment_replay.py`: the only windowed wait allowed is a care credit gated by min_tenure_months, with the
+  90-day support window re-counted from dated contacts.
+
+## decisions.csv + options.csv (v2, tm-design spec; synthetic numbers)
+`harness/decisions_out.py` (run by the engine-rules hook in `offers.py`, or `TM_OUT_DIR=<dir> python harness/decisions_out.py`)
+writes `decisions.csv` (5,042 rows, outreach_card order) and `options.csv` (do nothing first, then every option weighed).
+- Our columns: account_id, decision {message, receipt_only, silent}, channel {text, in_app, email, call, bill, none},
+  decided_by_rule (`harness/RULEBOOK.md`), decision_reason, offer_label, offer_cost_usd, customer_saves_usd_mo,
+  receipt_line, message_en, message_es.
+- Contact set = the policy guardrail's 184 (`experiments/engine_rules/out/demo/guardrail_detail.csv`, env
+  `TM_POLICY_GUARDRAIL`). Open ticket: perk reminder becomes fix-first (25). Message text = the outreach card's wording,
+  with any call promise removed unless the channel is call (env `TM_OUTREACH_DIR`).
+- tm-models' ledger (guardrail_result/note, save_rate_*, net_*, why_*, already_leaving(+note), in_holdout, timing,
+  wait_until, newest event) is joined from the v2 working tree at build time
+  (`/workspace/tmobile/v2-efficacy/experiments/ledger/ledger.csv`, env `TM_LEDGER_DIR`), never computed here.
+- `fix_first_digital.csv`: fix-first accounts whose channel is not call (for rebooking the callback cost).

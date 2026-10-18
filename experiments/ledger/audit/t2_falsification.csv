@@ -1,0 +1,8 @@
+test,draws,ours_true_p,placebo_mean,placebo_p95,placebo_max,p_placebo_ge_ours_expected,p_placebo_realised_ge_ours_realised,ours_minus_placebo_realised_lo95,contacts,graded_true_p,net_on_own_score,overlap_with_184,auc,breakeven,contacts_mean,contacts_max,net_on_own_score_mean
+"random accounts, same offers",2000.0,3896.0,-2311.0,-1878.0,-1229.0,0.0,0.076,-2345.0,,,,,,,,,
+"random top-10%-risk accounts, same offers",2000.0,3896.0,-366.0,97.0,582.0,0.0,0.188,-5103.0,,,,,,,,,
+"refit LR, in-sample (sanity)",,,,,,,,,185.0,3947.0,,,,,,,
+"cross-fit LR (fit 4 folds, score 5th)",,,,,,,,,179.0,3856.0,4600.0,161.0,0.843,0.0465,,,
+harness OOF score (churn_oof_pred.csv),,,,,,,,,180.0,4036.0,3955.0,174.0,0.847,0.0493,,,
+label permutation (200 refits on shuffled labels),200.0,,50.0,,582.0,0.0,,,,,,,,,9.9,37.0,17.0
+"score permutation (shipped scores shuffled across accounts, 500x)",500.0,,-518.0,-213.0,263.0,0.0,,,,,,,,,62.9,,1241.0

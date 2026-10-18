@@ -1,0 +1,41 @@
+Guardrail summary. ALL NUMBERS SYNTHETIC (stub accounts, simulated labels; not T-Mobile customer data).
+Accounts: 5,042   as_of 2026-10-01   bill-change window 2026-07..2026-09
+Policy: retention-only, re-picked at 10% save rate (scale 0.2254 = 10% / 0.4437): 246 selected, policy EV $6,211
+Rule 1 swaps: 56 bill-change accounts moved from a non-offsetting action to their best positive-EV offsetting credit (EV after swaps $5,834)
+
+contact_ok True: 154   False: 4,888
+contacted EV kept $5,100 of $6,211 (blocked selected accounts carried $735)
+
+block_reason counts:
+  not_worth_contacting     3,293
+  bill_change_no_fix       1,173
+  receipt_only_plan_move   422
+  (contact ok)             154
+
+The 1,412 bill-change accounts (non-'stable' reason, increase > 0):
+  contacted 107   blocked 1,305
+    bill_change_no_fix       1,173
+    not_worth_contacting     123
+    (contact ok)             107
+    receipt_only_plan_move   9
+  by bill-change reason (contacted / total):
+    device_installment     20 / 892
+    installment_ended       1 / 9
+    promo_expired          86 / 511
+
+Selected by the policy but blocked: bill_change_no_fix: 92
+Contacted, by action: care_credit_fix_first: 106, fix_first: 24, perk_reminder: 20, check_in: 2, care_credit: 1, bill_shock_price_lock: 1
+Contacted accounts that also get a receipt plan line: 4
+Fatigue hook: no proactive-contact log in the data; rule blocks nobody
+why_line length: max 134, mean 90
+
+10 example rows:
+  ACC-00037  ok=True  -                        Your bill went up $49 when a promo ended. We'll call to fix your open billing issue and add a one-time $25 credit.
+  ACC-00106  ok=True  -                        Your bill went up $29 when a promo ended. We'll call to fix your open billing issue and add a one-time $25 credit.
+  ACC-00172  ok=True  -                        Your bill went up $24 with a new phone payment. We'll call to fix your open coverage issue and add a one-time $25 credit.
+  ACC-00002  ok=False bill_change_no_fix       Your bill went up $21 when a promo ended. We have no offer that lowers it right now, so we won't message you about it.
+  ACC-00005  ok=False bill_change_no_fix       Your bill went up $32 when a promo ended. We have no offer that lowers it right now, so we won't message you about it.
+  ACC-00010  ok=False receipt_only_plan_move   A plan with the same features for $10/mo less is on your bill. Switch only if you want to.
+  ACC-00030  ok=False receipt_only_plan_move   A plan with the same features for $10/mo less is on your bill. Switch only if you want to.
+  ACC-00001  ok=False not_worth_contacting     Nothing we'd offer right now beats leaving your account as is. Your open plan change issue stays with support.
+  ACC-00003  ok=False not_worth_contacting     Nothing we'd offer right now beats leaving your account as is.
