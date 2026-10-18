@@ -482,7 +482,7 @@ def prewarm() -> bool:
 
 
 def _demo_phone():
-    """harness.phone_push (ntfy via notify.py; dry run unless TM_SEND_LIVE=1 + NTFY_TOPIC), or None."""
+    """harness.phone_push (private bot, ntfy fallback; dry run unless TM_SEND_LIVE=1 + a configured backend), or None."""
     if str(REPO) not in sys.path:
         sys.path.insert(0, str(REPO))
     try:
@@ -652,7 +652,7 @@ def score_panel(acc: str, p_now: float, kp: str = ""):
 
 def send_button(body: str, key: str):
     """'Send to my phone': one click = one call. Body is the exact engine text shown on the phone mockup.
-    harness.phone_push dry-runs unless TM_SEND_LIVE=1 and NTFY_TOPIC are set; topic is masked on screen.
+    harness.phone_push dry-runs unless TM_SEND_LIVE=1 and a backend is configured; secrets are masked on screen.
     The app never passes a customer number, address or topic."""
     dp = _demo_phone()
     if dp is None:
@@ -676,7 +676,7 @@ def send_button(body: str, key: str):
     pv = res.get("preview")
     if pv:
         with st.expander("What goes to the phone", expanded=not res.get("sent")):
-            st.markdown(f"**To:** ntfy push, topic {pv['topic_masked']} (demo phone only)  \n"
+            st.markdown(f"**To:** {pv.get('to') or 'demo phone only'}  \n"
                         f"**Length:** {pv['chars']} chars, plain text")
             st.code(pv["text"], language=None, wrap_lines=True)
             st.caption(str(res.get("detail", "")))
