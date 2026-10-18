@@ -1,0 +1,5 @@
+strategy,pool,targeted,upgraders_hit,capture_of_all_upgraders,precision,expected_upgrades_from_score,churners_targeted,support3plus_targeted,churn_top10_targeted
+Unguarded: top 10% (500) by upgrade score,5000,500,112,0.348,0.224,120.5,4,126,13
+Guarded: top 500 by upgrade score among eligible,3514,500,103,0.32,0.206,107.7,3,0,0
+Guarded: all eligible accounts above unguarded top-10% score threshold,374,374,85,0.264,0.227,90.4,2,0,0
+Guarded: whole eligible pool (no score cut),3514,3514,235,0.73,0.067,238.6,31,0,0
