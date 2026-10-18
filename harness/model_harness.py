@@ -77,7 +77,8 @@ CONFIG = {
     "cv_k": 5,
     "top_frac": 0.10,
     "rule_threshold": 3,             # '3+ support calls in 90d'
-    "persona_high_pct": 90.0,        # persona 'high' = top decile: at/above the 90th percentile of regular accounts
+    "persona_high_pct": 90.0,        # persona 'high' = top 10%: at/above the 90th percentile of regular accounts
+                                     # (per David, 2026-10-17). Personas 21/22 are borderline by label design.
     "persona_low_pct": 50.0,         # persona 'low'  = scores at/below the median of regular accounts
 }
 
@@ -1089,7 +1090,7 @@ def persona_check(model, label: Optional[str] = None, fitted: Optional[ChurnMode
                   high_pct: Optional[float] = None, low_pct: Optional[float] = None,
                   target: Optional[str] = None) -> pd.DataFrame:
     """PROVISIONAL. Model fitted on all regular accounts; each persona's score is placed as a percentile of the
-    regular accounts' scores. high = pct >= high_pct (default CONFIG persona_high_pct = 90, top decile);
+    regular accounts' scores. high = pct >= high_pct (default CONFIG persona_high_pct = 90, top 10%);
     low = pct <= low_pct (default CONFIG persona_low_pct = 50, at/below median).
     churn: 04/21/22/27 high, 10/24 low.  upgrade: 25/28 high, 22/24/27 low.
     Persona ids map 1:1 to accounts (sandbox personas.persona_id == account_id == ACC-PERSONA-xx)."""

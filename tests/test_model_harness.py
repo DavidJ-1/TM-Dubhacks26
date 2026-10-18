@@ -340,3 +340,8 @@ def test_upgrade_direction_guard():
     assert r.attrs.get("direction_blocked", 0) >= 4
     assert mh.upgrade_direction_ok("unresolved_90d", False, pd.Series({"unresolved_90d": 2}))
     assert not mh.upgrade_direction_ok("unresolved_90d", True, pd.Series({"unresolved_90d": 2}))
+
+
+def test_persona_bar_defaults():
+    """Per David, 2026-10-17: persona 'high' bar = 90th percentile (top 10%); 'low' bar = the median."""
+    assert mh.CONFIG["persona_high_pct"] == 90.0 and mh.CONFIG["persona_low_pct"] == 50.0
